@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: quel-canvas-server
+    env: go
+    buildCommand: go build -o main .
+    startCommand: ./main
+    plan: free
+    envVars:
+      - key: PORT
+        generateValue: true
