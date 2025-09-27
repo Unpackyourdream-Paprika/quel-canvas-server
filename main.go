@@ -76,6 +76,17 @@ type Message struct {
 	SectionId   string                 `json:"sectionId,omitempty"`
 	Label       string                 `json:"label,omitempty"`
 	Title       string                 `json:"title,omitempty"`
+
+	// 새로운 필드들
+	CanvasItems []interface{}          `json:"canvasItems,omitempty"`    // 캔버스 아이템들
+	Sections    []interface{}          `json:"sections,omitempty"`       // 섹션들
+	CursorX     float64                `json:"cursorX,omitempty"`        // 마우스 커서 X
+	CursorY     float64                `json:"cursorY,omitempty"`        // 마우스 커서 Y
+	IsHost      bool                   `json:"isHost,omitempty"`         // 호스트 여부
+
+	// Creation History 관련 필드들
+	ShowCreationHistory bool          `json:"showCreationHistory,omitempty"` // 히스토리 표시 여부
+	HostProductions     []interface{} `json:"hostProductions,omitempty"`     // 호스트의 프로덕션 데이터
 }
 
 // 세션 가져오기 또는 생성
@@ -112,9 +123,10 @@ func (sm *SessionManager) getOrCreateSession(sessionId string) *Session {
 // 클라이언트를 세션에 추가
 func (s *Session) addClient(client *Client) {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	s.clients[client.userId] = client
 	s.lastActivity = time.Now()
+	clientCount := len(s.clients)
+	s.mutex.Unlock()
 
 	// 메트릭 업데이트
 	sessionManager.metrics.mutex.Lock()
@@ -122,7 +134,17 @@ func (s *Session) addClient(client *Client) {
 	sessionManager.metrics.mutex.Unlock()
 
 	log.Printf("👤 Client %s joined session %s (Clients: %d, Total Connections: %d)",
-		client.userId, s.id, len(s.clients), sessionManager.metrics.TotalConnections)
+		client.userId, s.id, clientCount, sessionManager.metrics.TotalConnections)
+
+	// user_joined 메시지를 모든 클라이언트에게 브로드캐스트 (mutex 해제 후)
+	joinMessage := Message{
+		Type:      "user_joined",
+		UserId:    client.userId,
+		UserInfo:  client.userInfo,
+		SessionId: s.id,
+	}
+	s.broadcastToAll(joinMessage)
+	log.Printf("📢 Broadcasted user_joined for %s to all clients in session %s", client.userId, s.id)
 }
 
 // 클라이언트를 세션에서 제거
@@ -169,6 +191,33 @@ func (s *Session) broadcastToOthers(senderUserId string, message Message) {
 				close(client.send)
 				delete(s.clients, userId)
 			}
+		}
+	}
+}
+
+// 모든 클라이언트에게 메시지 브로드캐스트 (자신 포함)
+func (s *Session) broadcastToAll(message Message) {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	messageBytes, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("Error marshaling message: %v", err)
+		return
+	}
+
+	for userId, client := range s.clients {
+		select {
+		case client.send <- messageBytes:
+			if message.Type == "history_visibility_update" {
+				log.Printf("📤 Sent history_visibility_update to user %s (showCreationHistory: %v, productions: %d)",
+					userId, message.ShowCreationHistory, len(message.HostProductions))
+			} else {
+				log.Printf("Sent message type '%s' to user %s", message.Type, userId)
+			}
+		default:
+			close(client.send)
+			delete(s.clients, userId)
 		}
 	}
 }
@@ -301,8 +350,18 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		send:      make(chan []byte, 256),
 	}
 
+	log.Printf("🔍 New WebSocket connection - Session: %s, User: %s", sessionId, userId)
+
 	// 세션에 클라이언트 추가
 	session := sessionManager.getOrCreateSession(sessionId)
+
+	// 현재 세션의 사용자 수 확인
+	session.mutex.RLock()
+	existingUsers := len(session.clients)
+	session.mutex.RUnlock()
+
+	log.Printf("📊 Session %s has %d existing users before adding new user", sessionId, existingUsers)
+
 	session.addClient(client)
 
 	// 고루틴으로 읽기/쓰기 처리
@@ -330,8 +389,7 @@ func (c *Client) readPump(session *Session) {
 		// 메시지 타입에 따른 처리
 		switch message.Type {
 		case "user_selection":
-			log.Printf("User %s selection update: items=%v, sections=%v",
-				c.userId, message.ItemIds, message.SectionIds)
+			// 선택 업데이트는 로깅하지 않음 (성능 최적화)
 
 		case "item_position_update":
 			log.Printf("User %s updated item positions", c.userId)
@@ -341,10 +399,42 @@ func (c *Client) readPump(session *Session) {
 
 		case "label_update":
 			log.Printf("User %s updated label", c.userId)
+
+		case "cursor_move":
+			// 커서 움직임은 로깅하지 않음 (성능 최적화)
+
+		case "request_canvas_state":
+			log.Printf("User %s requested canvas state", c.userId)
+			// 호스트에게 캔버스 상태 요청 전달 - 모든 사용자에게 브로드캐스트
+			message.UserId = c.userId // 요청자 ID 설정
+
+		case "canvas_state_response":
+			log.Printf("Host %s sent canvas state with %d items, %d sections",
+				c.userId, len(message.CanvasItems), len(message.Sections))
+
+		case "canvas_items_update":
+			log.Printf("User %s updated canvas items (count: %d)", c.userId, len(message.CanvasItems))
+
+		case "sections_update":
+			log.Printf("User %s updated sections (count: %d)", c.userId, len(message.Sections))
+
+		case "history_visibility_update":
+			log.Printf("📊 Host %s updated history visibility to: %v (productions: %d)",
+				c.userId, message.ShowCreationHistory, len(message.HostProductions))
+
+		case "user_joined":
+			log.Printf("User %s joined session %s", c.userId, message.SessionId)
 		}
 
-		// 다른 클라이언트들에게 브로드캐스트
-		session.broadcastToOthers(c.userId, message)
+		// 메시지 타입에 따라 브로드캐스트 방식 결정
+		switch message.Type {
+		case "user_joined", "request_canvas_state", "user_left":
+			// 이 메시지들은 모든 사용자에게 전송 (호스트 포함)
+			session.broadcastToAll(message)
+		default:
+			// 나머지는 자신을 제외한 다른 사용자에게만 전송
+			session.broadcastToOthers(c.userId, message)
+		}
 	}
 }
 
