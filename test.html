@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Canvas Collaboration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #messages { border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; margin: 10px 0; }
+        input, button { margin: 5px; padding: 5px; }
+        .message { margin: 5px 0; padding: 5px; background-color: #f0f0f0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Canvas Collaboration WebSocket Test</h1>
+
+    <div>
+        <input type="text" id="sessionId" placeholder="Session ID" value="test-session">
+        <input type="text" id="userId" placeholder="User ID" value="user-1">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+
+    <div>
+        <button onclick="sendSelection()">Send Selection</button>
+        <button onclick="sendPositionUpdate()">Send Position Update</button>
+        <button onclick="sendLabelUpdate()">Send Label Update</button>
+    </div>
+
+    <div id="status">Disconnected</div>
+    <div id="messages"></div>
+
+    <script>
+        let ws = null;
+        let sessionId = '';
+        let userId = '';
+
+        function connect() {
+            sessionId = document.getElementById('sessionId').value;
+            userId = document.getElementById('userId').value;
+
+            if (!sessionId || !userId) {
+                alert('Please enter both Session ID and User ID');
+                return;
+            }
+
+            // 로컬 테스트용 - 실제로는 render.com URL로 변경
+            const wsUrl = `ws://localhost:8080/ws?session=${sessionId}&user=${userId}`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                document.getElementById('status').textContent = 'Connected';
+                addMessage('Connected to server');
+            };
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                addMessage(`Received: ${JSON.stringify(data, null, 2)}`);
+            };
+
+            ws.onclose = function() {
+                document.getElementById('status').textContent = 'Disconnected';
+                addMessage('Disconnected from server');
+            };
+
+            ws.onerror = function(error) {
+                addMessage(`Error: ${error}`);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendSelection() {
+            if (!ws) return;
+
+            const message = {
+                type: 'user_selection',
+                sessionId: sessionId,
+                userId: userId,
+                userInfo: {
+                    name: `User ${userId}`,
+                    email: `${userId}@example.com`
+                },
+                itemIds: ['item1', 'item2'],
+                sectionIds: ['section1']
+            };
+
+            ws.send(JSON.stringify(message));
+            addMessage(`Sent: ${JSON.stringify(message, null, 2)}`);
+        }
+
+        function sendPositionUpdate() {
+            if (!ws) return;
+
+            const message = {
+                type: 'item_position_update',
+                sessionId: sessionId,
+                userId: userId,
+                itemUpdates: {
+                    'item1': { position: { x: Math.random() * 500, y: Math.random() * 300 } }
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            addMessage(`Sent: ${JSON.stringify(message, null, 2)}`);
+        }
+
+        function sendLabelUpdate() {
+            if (!ws) return;
+
+            const message = {
+                type: 'label_update',
+                sessionId: sessionId,
+                userId: userId,
+                itemId: 'item1',
+                label: `Updated at ${new Date().toLocaleTimeString()}`
+            };
+
+            ws.send(JSON.stringify(message));
+            addMessage(`Sent: ${JSON.stringify(message, null, 2)}`);
+        }
+
+        function addMessage(message) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('messages').appendChild(div);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+    </script>
+</body>
+</html>
