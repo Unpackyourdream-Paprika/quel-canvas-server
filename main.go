@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	generateimage "quel-canvas-server/modules/generate-image"
 )
 
 // WebSocket upgrader
@@ -583,6 +584,11 @@ func main() {
 	// 정리 루틴 시작
 	sessionManager.startCleanupRoutine()
 
+   // Generate Image 모듈 초기화
+      generateImageHandler := generateimage.NewGenerateImageHandler()  
+
+
+
 	// 라우터 설정
 	r := mux.NewRouter()
 
@@ -596,6 +602,14 @@ func main() {
 	r.HandleFunc("/session/{sessionId}", getSessionInfo).Methods("GET")
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/admin/cleanup", forceCleanupSessions).Methods("POST")
+
+
+
+	    // Generate Image 라우트
+      r.HandleFunc("/api/generate-image", generateImageHandler.GenerateImage).Methods("POST")    
+      r.HandleFunc("/api/image-status", generateImageHandler.GetImageStatus).Methods("GET") 
+
+
 
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
