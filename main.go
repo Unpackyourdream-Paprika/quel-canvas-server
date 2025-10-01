@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	generateimage "quel-canvas-server/modules/generate-image"
+
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -580,8 +582,21 @@ func forceCleanupSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// 환경변수 로드
+	if _, err := generateimage.LoadConfig(); err != nil {
+		log.Fatalf("❌ Failed to load config: %v", err)
+	}
+
 	// 정리 루틴 시작
 	sessionManager.startCleanupRoutine()
+
+	// Redis Queue Worker 시작 (백그라운드)
+	go generateimage.StartWorker()
+
+   // Generate Image 모듈 초기화
+
+
+
 
 	// 라우터 설정
 	r := mux.NewRouter()
@@ -596,6 +611,11 @@ func main() {
 	r.HandleFunc("/session/{sessionId}", getSessionInfo).Methods("GET")
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/admin/cleanup", forceCleanupSessions).Methods("POST")
+
+
+
+
+
 
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
