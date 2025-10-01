@@ -1,12 +1,14 @@
+# Environment variables
+.env
+
 # Go build artifacts
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-quel-canvas-server
 
-# Test binary, built with `go test -c`
+# Test binary
 *.test
 
 # Output of the go coverage tool
@@ -18,21 +20,13 @@ vendor/
 # Go workspace file
 go.work
 
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# Logs
-*.log
