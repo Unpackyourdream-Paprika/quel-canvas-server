@@ -93,6 +93,15 @@ func processJob(ctx context.Context, service *Service, jobID string) {
 	case "pipeline_stage":
 		log.Printf("📌 Pipeline Stage Mode - Processing stage %v", job.StageIndex)
 		processPipelineStage(ctx, service, job)
+
+	case "simple_general":
+		log.Printf("📌 Simple General Mode - Processing %d images with multiple input images", job.TotalImages)
+		processSimpleGeneral(ctx, service, job)
+
+	case "simple_portrait":
+		log.Printf("📌 Simple Portrait Mode - Processing %d images with merged images", job.TotalImages)
+		processSimplePortrait(ctx, service, job)
+
 	default:
 		log.Printf("⚠️  Unknown job_type: %s, using default single_batch mode", job.JobType)
 		processSingleBatch(ctx, service, job)
@@ -490,6 +499,315 @@ func connectRedis(config *Config) *redis.Client {
 	return rdb
 }
 
-// TODO: 나중에 구현할 함수들
-// func generateImageWithGemini(...) { ... }
-// func saveResultToSupabase(...) { ... }
+// processSimpleGeneral - Simple General 모드 처리 (여러 입력 이미지 기반)
+func processSimpleGeneral(ctx context.Context, service *Service, job *ProductionJob) {
+	log.Printf("🚀 Starting Simple General processing for job: %s", job.JobID)
+
+	// Phase 1: Input Data 추출
+	uploadedAttachIds, ok := job.JobInputData["uploadedAttachIds"].([]interface{})
+	if !ok || len(uploadedAttachIds) == 0 {
+		log.Printf("❌ Failed to get uploadedAttachIds or empty array")
+		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
+		return
+	}
+
+	prompt, ok := job.JobInputData["prompt"].(string)
+	if !ok {
+		log.Printf("❌ Failed to get prompt")
+		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
+		return
+	}
+
+	quantity := job.TotalImages
+	userID, _ := job.JobInputData["userId"].(string)
+
+	log.Printf("📦 Input Data: UploadedImages=%d, Prompt=%s, Quantity=%d, UserID=%s",
+		len(uploadedAttachIds), prompt, quantity, userID)
+
+	// Phase 2: Status 업데이트 - Job & Production → "processing"
+	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
+		log.Printf("❌ Failed to update job status: %v", err)
+		return
+	}
+
+	if job.ProductionID != nil {
+		if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, StatusProcessing); err != nil {
+			log.Printf("⚠️  Failed to update production status: %v", err)
+		}
+	}
+
+	// Phase 3: 모든 입력 이미지 다운로드 및 Base64 변환
+	var base64Images []string
+
+	for i, attachObj := range uploadedAttachIds {
+		attachMap, ok := attachObj.(map[string]interface{})
+		if !ok {
+			log.Printf("⚠️  Invalid attach object at index %d", i)
+			continue
+		}
+
+		attachIDFloat, ok := attachMap["attachId"].(float64)
+		if !ok {
+			log.Printf("⚠️  Invalid attachId at index %d", i)
+			continue
+		}
+		attachID := int(attachIDFloat)
+
+		attachType, _ := attachMap["type"].(string)
+		log.Printf("📥 Downloading input image %d/%d: AttachID=%d, Type=%s",
+			i+1, len(uploadedAttachIds), attachID, attachType)
+
+		imageData, err := service.DownloadImageFromStorage(attachID)
+		if err != nil {
+			log.Printf("❌ Failed to download image %d: %v", attachID, err)
+			continue
+		}
+
+		base64Image := service.ConvertImageToBase64(imageData)
+		base64Images = append(base64Images, base64Image)
+		log.Printf("✅ Input image %d prepared (Base64 length: %d)", i+1, len(base64Image))
+	}
+
+	if len(base64Images) == 0 {
+		log.Printf("❌ No input images downloaded successfully")
+		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
+		return
+	}
+
+	log.Printf("✅ All %d input images prepared", len(base64Images))
+
+	// Phase 4: 이미지 생성 루프
+	generatedAttachIds := []int{}
+	completedCount := 0
+
+	for i := 0; i < quantity; i++ {
+		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)
+
+		// 4.1: Gemini API 호출 (여러 이미지 전달)
+		generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, base64Images, prompt)
+		if err != nil {
+			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
+			continue
+		}
+
+		// 4.2: Base64 → []byte 변환
+		generatedImageData, err := base64DecodeString(generatedBase64)
+		if err != nil {
+			log.Printf("❌ Failed to decode generated image %d: %v", i+1, err)
+			continue
+		}
+
+		// 4.3: Storage 업로드
+		filePath, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		if err != nil {
+			log.Printf("❌ Failed to upload image %d: %v", i+1, err)
+			continue
+		}
+
+		// 4.4: Attach 레코드 생성
+		attachID, err := service.CreateAttachRecord(ctx, filePath, int64(len(generatedImageData)))
+		if err != nil {
+			log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
+			continue
+		}
+
+		// 4.5: 크레딧 차감 (Attach 성공 직후 즉시 처리)
+		if job.ProductionID != nil && userID != "" {
+			go func(attachID int, prodID string) {
+				if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
+				}
+			}(attachID, *job.ProductionID)
+		}
+
+		// 4.6: 성공 카운트 및 ID 수집
+		generatedAttachIds = append(generatedAttachIds, attachID)
+		completedCount++
+
+		log.Printf("✅ Image %d/%d completed: AttachID=%d", i+1, quantity, attachID)
+
+		// 4.7: 진행 상황 업데이트
+		if err := service.UpdateJobProgress(ctx, job.JobID, completedCount, generatedAttachIds); err != nil {
+			log.Printf("⚠️  Failed to update progress: %v", err)
+		}
+	}
+
+	// Phase 5: 최종 완료 처리
+	finalStatus := StatusCompleted
+	if completedCount == 0 {
+		finalStatus = StatusFailed
+	}
+
+	log.Printf("🏁 Job %s finished: %d/%d images completed", job.JobID, completedCount, quantity)
+
+	// Job 상태 업데이트
+	if err := service.UpdateJobStatus(ctx, job.JobID, finalStatus); err != nil {
+		log.Printf("❌ Failed to update final job status: %v", err)
+	}
+
+	// Production 업데이트 (상태 + attach_ids 배열)
+	if job.ProductionID != nil {
+		// Production 상태 업데이트
+		if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, finalStatus); err != nil {
+			log.Printf("⚠️  Failed to update final production status: %v", err)
+		}
+
+		// Production attach_ids 배열에 생성된 이미지 ID 추가
+		if len(generatedAttachIds) > 0 {
+			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, generatedAttachIds); err != nil {
+				log.Printf("⚠️  Failed to update production attach_ids: %v", err)
+			}
+		}
+	}
+
+	log.Printf("✅ Simple General processing completed for job: %s", job.JobID)
+}
+
+// processSimplePortrait - Simple Portrait 모드 처리 (mergedImages 기반)
+func processSimplePortrait(ctx context.Context, service *Service, job *ProductionJob) {
+	log.Printf("🚀 Starting Simple Portrait processing for job: %s", job.JobID)
+
+	// Phase 1: Input Data 추출
+	mergedImages, ok := job.JobInputData["mergedImages"].([]interface{})
+	if !ok || len(mergedImages) == 0 {
+		log.Printf("❌ Failed to get mergedImages or empty array")
+		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
+		return
+	}
+
+	userID, _ := job.JobInputData["userId"].(string)
+
+	log.Printf("📦 Input Data: MergedImages=%d, UserID=%s", len(mergedImages), userID)
+
+	// Phase 2: Status 업데이트 - Job & Production → "processing"
+	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
+		log.Printf("❌ Failed to update job status: %v", err)
+		return
+	}
+
+	if job.ProductionID != nil {
+		if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, StatusProcessing); err != nil {
+			log.Printf("⚠️  Failed to update production status: %v", err)
+		}
+	}
+
+	// Phase 3: 이미지 생성 루프 (각 mergedImage마다 처리)
+	generatedAttachIds := []int{}
+	completedCount := 0
+
+	for i, mergedImageObj := range mergedImages {
+		mergedImageMap, ok := mergedImageObj.(map[string]interface{})
+		if !ok {
+			log.Printf("⚠️  Invalid mergedImage object at index %d", i)
+			continue
+		}
+
+		// mergedAttachId 추출
+		mergedAttachIDFloat, ok := mergedImageMap["mergedAttachId"].(float64)
+		if !ok {
+			log.Printf("⚠️  Invalid mergedAttachId at index %d", i)
+			continue
+		}
+		mergedAttachID := int(mergedAttachIDFloat)
+
+		// wrappingPrompt 추출
+		wrappingPrompt, ok := mergedImageMap["wrappingPrompt"].(string)
+		if !ok {
+			log.Printf("⚠️  Invalid wrappingPrompt at index %d", i)
+			continue
+		}
+
+		photoIndex, _ := mergedImageMap["photoIndex"].(float64)
+
+		log.Printf("🎨 Generating image %d/%d (PhotoIndex=%d, MergedAttachID=%d)...",
+			i+1, len(mergedImages), int(photoIndex), mergedAttachID)
+
+		// 3.1: 입력 이미지 다운로드
+		imageData, err := service.DownloadImageFromStorage(mergedAttachID)
+		if err != nil {
+			log.Printf("❌ Failed to download merged image %d: %v", mergedAttachID, err)
+			continue
+		}
+
+		base64Image := service.ConvertImageToBase64(imageData)
+		log.Printf("✅ Merged image prepared (Base64 length: %d)", len(base64Image))
+
+		// 3.2: Gemini API 호출 (단일 이미지 + wrappingPrompt)
+		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, wrappingPrompt)
+		if err != nil {
+			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
+			continue
+		}
+
+		// 3.3: Base64 → []byte 변환
+		generatedImageData, err := base64DecodeString(generatedBase64)
+		if err != nil {
+			log.Printf("❌ Failed to decode generated image %d: %v", i+1, err)
+			continue
+		}
+
+		// 3.4: Storage 업로드
+		filePath, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		if err != nil {
+			log.Printf("❌ Failed to upload image %d: %v", i+1, err)
+			continue
+		}
+
+		// 3.5: Attach 레코드 생성
+		attachID, err := service.CreateAttachRecord(ctx, filePath, int64(len(generatedImageData)))
+		if err != nil {
+			log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
+			continue
+		}
+
+		// 3.6: 크레딧 차감 (Attach 성공 직후 즉시 처리)
+		if job.ProductionID != nil && userID != "" {
+			go func(attachID int, prodID string) {
+				if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
+				}
+			}(attachID, *job.ProductionID)
+		}
+
+		// 3.7: 성공 카운트 및 ID 수집
+		generatedAttachIds = append(generatedAttachIds, attachID)
+		completedCount++
+
+		log.Printf("✅ Image %d/%d completed: AttachID=%d", i+1, len(mergedImages), attachID)
+
+		// 3.8: 진행 상황 업데이트
+		if err := service.UpdateJobProgress(ctx, job.JobID, completedCount, generatedAttachIds); err != nil {
+			log.Printf("⚠️  Failed to update progress: %v", err)
+		}
+	}
+
+	// Phase 4: 최종 완료 처리
+	finalStatus := StatusCompleted
+	if completedCount == 0 {
+		finalStatus = StatusFailed
+	}
+
+	log.Printf("🏁 Job %s finished: %d/%d images completed", job.JobID, completedCount, len(mergedImages))
+
+	// Job 상태 업데이트
+	if err := service.UpdateJobStatus(ctx, job.JobID, finalStatus); err != nil {
+		log.Printf("❌ Failed to update final job status: %v", err)
+	}
+
+	// Production 업데이트 (상태 + attach_ids 배열)
+	if job.ProductionID != nil {
+		// Production 상태 업데이트
+		if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, finalStatus); err != nil {
+			log.Printf("⚠️  Failed to update final production status: %v", err)
+		}
+
+		// Production attach_ids 배열에 생성된 이미지 ID 추가
+		if len(generatedAttachIds) > 0 {
+			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, generatedAttachIds); err != nil {
+				log.Printf("⚠️  Failed to update production attach_ids: %v", err)
+			}
+		}
+	}
+
+	log.Printf("✅ Simple Portrait processing completed for job: %s", job.JobID)
+}
