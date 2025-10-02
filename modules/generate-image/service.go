@@ -162,19 +162,32 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 		return nil, fmt.Errorf("no file path found for attach_id: %d", attachID)
 	}
 
+	// 2.5. uploads/ 폴더가 누락된 경우 자동 추가 (upload-로 시작하는 경우)
+	if len(filePath) > 0 && filePath[0] != '/' &&
+	   len(filePath) >= 7 && filePath[:7] == "upload-" {
+		filePath = "uploads/" + filePath
+		log.Printf("🔧 Auto-fixed path to include uploads/ folder: %s", filePath)
+	}
+
 	// 3. Full URL 생성
 	fullURL := config.SupabaseStorageBaseURL + filePath
 	log.Printf("📥 Downloading image from: %s", fullURL)
+	log.Printf("   🔗 Base URL: %s", config.SupabaseStorageBaseURL)
+	log.Printf("   📁 File Path: %s", filePath)
 
 	// 4. HTTP GET으로 직접 다운로드
 	httpResp, err := http.Get(fullURL)
 	if err != nil {
+		log.Printf("❌ HTTP GET failed: %v", err)
 		return nil, fmt.Errorf("failed to download image: %w", err)
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to download image: status %d", httpResp.StatusCode)
+		body, _ := io.ReadAll(httpResp.Body)
+		log.Printf("❌ Download failed - Status: %d, URL: %s", httpResp.StatusCode, fullURL)
+		log.Printf("❌ Response body: %s", string(body))
+		return nil, fmt.Errorf("failed to download image: status %d, body: %s", httpResp.StatusCode, string(body))
 	}
 
 	// 5. 이미지 데이터 읽기
@@ -255,6 +268,69 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 
 	// API 호출
 	log.Printf("📤 Sending request to Gemini API...")
+	resp, err := model.GenerateContent(ctx, parts...)
+	if err != nil {
+		return "", fmt.Errorf("Gemini API call failed: %w", err)
+	}
+
+	// 응답 처리
+	if len(resp.Candidates) == 0 {
+		return "", fmt.Errorf("no candidates in response")
+	}
+
+	for _, candidate := range resp.Candidates {
+		if candidate.Content == nil {
+			continue
+		}
+
+		for _, part := range candidate.Content.Parts {
+			// 이미지 데이터 찾기
+			if blob, ok := part.(genai.Blob); ok {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(blob.Data))
+				// Base64로 인코딩하여 반환
+				return base64.StdEncoding.EncodeToString(blob.Data), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no image data in response")
+}
+
+// GenerateImageWithGeminiMultiple - Gemini API로 여러 입력 이미지 기반 이미지 생성
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Images []string, prompt string) (string, error) {
+	config := GetConfig()
+
+	log.Printf("🎨 Calling Gemini API with %d input images and prompt length: %d", len(base64Images), len(prompt))
+
+	// Gemini 클라이언트 생성
+	client, err := genai.NewClient(ctx, option.WithAPIKey(config.GeminiAPIKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to create Gemini client: %w", err)
+	}
+	defer client.Close()
+
+	// 모델 선택
+	model := client.GenerativeModel(config.GeminiModel)
+
+	// Content Parts 생성 - 프롬프트 먼저, 그 다음 여러 이미지
+	parts := []genai.Part{
+		genai.Text(prompt + "\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
+	}
+
+	// 모든 입력 이미지를 Parts에 추가
+	for i, base64Image := range base64Images {
+		imageData, err := base64.StdEncoding.DecodeString(base64Image)
+		if err != nil {
+			log.Printf("⚠️  Failed to decode base64 image %d: %v", i, err)
+			continue
+		}
+
+		parts = append(parts, genai.ImageData("png", imageData))
+		log.Printf("📎 Added input image %d to request (%d bytes)", i+1, len(imageData))
+	}
+
+	// API 호출
+	log.Printf("📤 Sending request to Gemini API with %d parts (1 text + %d images)...", len(parts), len(base64Images))
 	resp, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		return "", fmt.Errorf("Gemini API call failed: %w", err)
