@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"io"
 	"log"
 	"math/rand"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/kolesa-team/go-webp/encoder"
+	"github.com/kolesa-team/go-webp/webp"
 	"github.com/supabase-community/supabase-go"
 	"google.golang.org/api/option"
 )
@@ -217,6 +220,38 @@ func min(a, b int) int {
 	return b
 }
 
+// ConvertPNGToWebP - PNG 바이너리를 WebP로 변환
+func (s *Service) ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, error) {
+	log.Printf("🔄 Converting PNG to WebP (quality: %.1f)", quality)
+
+	// PNG 디코딩
+	pngReader := bytes.NewReader(pngData)
+	img, err := png.Decode(pngReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PNG: %w", err)
+	}
+
+	// WebP 인코딩
+	options, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, quality)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create WebP encoder options: %w", err)
+	}
+
+	var webpBuffer bytes.Buffer
+	err = webp.Encode(&webpBuffer, img, options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode WebP: %w", err)
+	}
+
+	webpData := webpBuffer.Bytes()
+
+	log.Printf("✅ PNG converted to WebP: %d bytes → %d bytes (%.1f%% reduction)", 
+		len(pngData), len(webpData), 
+		float64(len(pngData)-len(webpData))/float64(len(pngData))*100)
+
+	return webpData, nil
+}
+
 // UpdateProductionPhotoStatus - Production Photo 상태 업데이트
 func (s *Service) UpdateProductionPhotoStatus(ctx context.Context, productionID string, status string) error {
 	log.Printf("📝 Updating production %s status to: %s", productionID, status)
@@ -359,48 +394,55 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 	return "", fmt.Errorf("no image data in response")
 }
 
-// UploadImageToStorage - Supabase Storage에 이미지 업로드
-func (s *Service) UploadImageToStorage(ctx context.Context, imageData []byte, userID string) (string, error) {
+// UploadImageToStorage - Supabase Storage에 이미지 업로드 (WebP 변환 포함)
+func (s *Service) UploadImageToStorage(ctx context.Context, imageData []byte, userID string) (string, int64, error) {
 	config := GetConfig()
 
-	// 파일명 생성
+	// PNG를 WebP로 변환 (quality: 90)
+	webpData, err := s.ConvertPNGToWebP(imageData, 90.0)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to convert PNG to WebP: %w", err)
+	}
+
+	// 파일명 생성 (WebP 확장자)
 	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
 	randomID := rand.Intn(999999)
-	fileName := fmt.Sprintf("generated_%d_%d.png", timestamp, randomID)
+	fileName := fmt.Sprintf("generated_%d_%d.webp", timestamp, randomID)
 
 	// 파일 경로 생성
 	filePath := fmt.Sprintf("generated-images/user-%s/%s", userID, fileName)
 
-	log.Printf("📤 Uploading image to storage: %s", filePath)
+	log.Printf("📤 Uploading WebP image to storage: %s", filePath)
 
 	// Supabase Storage API URL
 	uploadURL := fmt.Sprintf("%s/storage/v1/object/attachments/%s",
 		config.SupabaseURL, filePath)
 
-	// HTTP Request 생성
-	req, err := http.NewRequestWithContext(ctx, "POST", uploadURL, bytes.NewReader(imageData))
+	// HTTP Request 생성 (WebP 데이터 사용)
+	req, err := http.NewRequestWithContext(ctx, "POST", uploadURL, bytes.NewReader(webpData))
 	if err != nil {
-		return "", fmt.Errorf("failed to create upload request: %w", err)
+		return "", 0, fmt.Errorf("failed to create upload request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+config.SupabaseServiceKey)
-	req.Header.Set("Content-Type", "image/png")
+	req.Header.Set("Content-Type", "image/webp")
 
 	// 업로드 실행
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload image: %w", err)
+		return "", 0, fmt.Errorf("failed to upload image: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+		return "", 0, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	log.Printf("✅ Image uploaded successfully: %s", filePath)
-	return filePath, nil
+	webpSize := int64(len(webpData))
+	log.Printf("✅ WebP image uploaded successfully: %s (%d bytes)", filePath, webpSize)
+	return filePath, webpSize, nil
 }
 
 // CreateAttachRecord - quel_attach 테이블에 레코드 생성
@@ -423,7 +465,7 @@ func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileS
 		"attach_file_name":     fileName,
 		"attach_file_path":     filePath,
 		"attach_file_size":     fileSize,
-		"attach_file_type":     "image/png",
+		"attach_file_type":     "image/webp",
 		"attach_directory":     filePath,
 		"attach_storage_type":  "supabase",
 	}
