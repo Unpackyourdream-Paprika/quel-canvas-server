@@ -6,12 +6,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"time"
 
+	"github.com/chai2010/webp"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/supabase-community/supabase-go"
 	"google.golang.org/api/option"
@@ -217,6 +220,42 @@ func min(a, b int) int {
 	return b
 }
 
+// convertPNGToWebP - PNG 이미지 데이터를 WebP로 변환
+func convertPNGToWebP(pngData []byte) ([]byte, error) {
+	// PNG 디코딩
+	img, err := png.Decode(bytes.NewReader(pngData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PNG: %w", err)
+	}
+
+	// WebP 인코딩
+	var buf bytes.Buffer
+	if err := webp.Encode(&buf, img, &webp.Options{Lossless: false, Quality: 90}); err != nil {
+		return nil, fmt.Errorf("failed to encode WebP: %w", err)
+	}
+
+	log.Printf("🔄 Converted PNG (%d bytes) to WebP (%d bytes)", len(pngData), buf.Len())
+	return buf.Bytes(), nil
+}
+
+// convertAnyImageToWebP - 임의의 이미지 데이터를 WebP로 변환
+func convertAnyImageToWebP(imageData []byte) ([]byte, error) {
+	// 이미지 디코딩 (자동 포맷 감지)
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	// WebP 인코딩
+	var buf bytes.Buffer
+	if err := webp.Encode(&buf, img, &webp.Options{Lossless: false, Quality: 90}); err != nil {
+		return nil, fmt.Errorf("failed to encode WebP: %w", err)
+	}
+
+	log.Printf("🔄 Converted image (%d bytes) to WebP (%d bytes)", len(imageData), buf.Len())
+	return buf.Bytes(), nil
+}
+
 // UpdateProductionPhotoStatus - Production Photo 상태 업데이트
 func (s *Service) UpdateProductionPhotoStatus(ctx context.Context, productionID string, status string) error {
 	log.Printf("📝 Updating production %s status to: %s", productionID, status)
@@ -287,8 +326,16 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 			// 이미지 데이터 찾기
 			if blob, ok := part.(genai.Blob); ok {
 				log.Printf("✅ Received image from Gemini: %d bytes", len(blob.Data))
-				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(blob.Data), nil
+
+				// PNG를 WebP로 변환
+				webpData, err := convertAnyImageToWebP(blob.Data)
+				if err != nil {
+					log.Printf("⚠️  Failed to convert to WebP, using original: %v", err)
+					return base64.StdEncoding.EncodeToString(blob.Data), nil
+				}
+
+				// WebP를 Base64로 인코딩하여 반환
+				return base64.StdEncoding.EncodeToString(webpData), nil
 			}
 		}
 	}
@@ -350,8 +397,16 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 			// 이미지 데이터 찾기
 			if blob, ok := part.(genai.Blob); ok {
 				log.Printf("✅ Received image from Gemini: %d bytes", len(blob.Data))
-				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(blob.Data), nil
+
+				// PNG를 WebP로 변환
+				webpData, err := convertAnyImageToWebP(blob.Data)
+				if err != nil {
+					log.Printf("⚠️  Failed to convert to WebP, using original: %v", err)
+					return base64.StdEncoding.EncodeToString(blob.Data), nil
+				}
+
+				// WebP를 Base64로 인코딩하여 반환
+				return base64.StdEncoding.EncodeToString(webpData), nil
 			}
 		}
 	}
@@ -363,10 +418,10 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 func (s *Service) UploadImageToStorage(ctx context.Context, imageData []byte, userID string) (string, error) {
 	config := GetConfig()
 
-	// 파일명 생성
+	// 파일명 생성 (WebP 확장자)
 	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
 	randomID := rand.Intn(999999)
-	fileName := fmt.Sprintf("generated_%d_%d.png", timestamp, randomID)
+	fileName := fmt.Sprintf("generated_%d_%d.webp", timestamp, randomID)
 
 	// 파일 경로 생성
 	filePath := fmt.Sprintf("generated-images/user-%s/%s", userID, fileName)
@@ -384,7 +439,7 @@ func (s *Service) UploadImageToStorage(ctx context.Context, imageData []byte, us
 	}
 
 	req.Header.Set("Authorization", "Bearer "+config.SupabaseServiceKey)
-	req.Header.Set("Content-Type", "image/png")
+	req.Header.Set("Content-Type", "image/webp")
 
 	// 업로드 실행
 	client := &http.Client{}
@@ -423,7 +478,7 @@ func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileS
 		"attach_file_name":     fileName,
 		"attach_file_path":     filePath,
 		"attach_file_size":     fileSize,
-		"attach_file_type":     "image/png",
+		"attach_file_type":     "image/webp",
 		"attach_directory":     filePath,
 		"attach_storage_type":  "supabase",
 	}
