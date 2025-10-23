@@ -469,7 +469,7 @@ if (job.job_status === "completed") {
 ### 환경변수
 ```env
 GEMINI_API_KEY=AIzaSyBpa5PYipzap9DhseRQ1GWLBvc8DtW0Ev8
-GEMINI_MODEL=gemini-2.5-flash-image-preview
+GEMINI_MODEL=gemini-2.5-flash-image
 SUPABASE_STORAGE_BASE_URL=https://lmhyvrgijwckxthuskxx.supabase.co/storage/v1/object/public/attachments/
 ```
 
