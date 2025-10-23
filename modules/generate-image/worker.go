@@ -108,7 +108,7 @@ func processJob(ctx context.Context, service *Service, jobID string) {
 	}
 }
 
-// processSingleBatch - Single Batch 모드 처리
+// processSingleBatch - Single Batch 모드 처리 (다중 조합 지원)
 func processSingleBatch(ctx context.Context, service *Service, job *ProductionJob) {
 	log.Printf("🚀 Starting Single Batch processing for job: %s", job.JobID)
 
@@ -120,20 +120,27 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 		return
 	}
 
-	prompt, ok := job.JobInputData["prompt"].(string)
+	basePrompt, ok := job.JobInputData["basePrompt"].(string)
 	if !ok {
-		log.Printf("❌ Failed to get prompt")
+		log.Printf("❌ Failed to get basePrompt")
 		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
 		return
 	}
 
-	quantity := job.TotalImages
+	// Combinations 배열 추출
+	combinationsRaw, ok := job.JobInputData["combinations"].([]interface{})
+	if !ok {
+		log.Printf("❌ Failed to get combinations array")
+		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
+		return
+	}
+
 	userID, _ := job.JobInputData["userId"].(string)
 
-	log.Printf("📦 Input Data: AttachID=%d, Prompt=%s, Quantity=%d, UserID=%s",
-		int(mergedImageAttachID), prompt, quantity, userID)
+	log.Printf("📦 Input Data: AttachID=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
+		int(mergedImageAttachID), basePrompt, len(combinationsRaw), userID)
 
-	// Phase 2: Status 업데이트 - Job & Production → "processing"
+	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
 		log.Printf("❌ Failed to update job status: %v", err)
 		return
@@ -156,60 +163,108 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	base64Image := service.ConvertImageToBase64(imageData)
 	log.Printf("✅ Input image prepared (Base64 length: %d)", len(base64Image))
 
-	// Phase 4: 이미지 생성 루프
+	// Phase 4: Combinations 순회하며 이미지 생성
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	for i := 0; i < quantity; i++ {
-		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)
+	// Camera Angle 매핑
+	cameraAngleTextMap := map[string]string{
+		"front":   "Front view",
+		"side":    "Side view",
+		"profile": "Profile view",
+		"back":    "Back view",
+	}
 
-		// 4.1: Gemini API 호출
-		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
-		if err != nil {
-			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
-			continue
+	// Shot Type 매핑
+	shotTypeTextMap := map[string]string{
+		"tight":  "tight shot, close-up",
+		"middle": "middle shot, medium distance",
+		"full":   "full body shot, full length",
+	}
+
+	for comboIdx, comboRaw := range combinationsRaw {
+		combo := comboRaw.(map[string]interface{})
+		angle := combo["angle"].(string)
+		shot := combo["shot"].(string)
+		quantity := int(combo["quantity"].(float64))
+
+		log.Printf("🎯 Combination %d/%d: angle=%s, shot=%s, quantity=%d",
+			comboIdx+1, len(combinationsRaw), angle, shot, quantity)
+
+		// 조합별 프롬프트 생성
+		cameraAngleText := cameraAngleTextMap[angle]
+		if cameraAngleText == "" {
+			cameraAngleText = "Front view" // 기본값
 		}
 
-		// 4.2: Base64 → []byte 변환
-		generatedImageData, err := base64DecodeString(generatedBase64)
-		if err != nil {
-			log.Printf("❌ Failed to decode generated image %d: %v", i+1, err)
-			continue
+		shotTypeText := shotTypeTextMap[shot]
+		if shotTypeText == "" {
+			shotTypeText = "full body shot" // 기본값
 		}
 
-		// 4.3: Storage 업로드
-		filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
-		if err != nil {
-			log.Printf("❌ Failed to upload image %d: %v", i+1, err)
-			continue
+		enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
+			". IMPORTANT: No split layouts, no grid layouts, no separate product shots. " +
+			"Each image must be a single unified composition with the model wearing/using all items."
+
+		log.Printf("📝 Enhanced Prompt: %s", enhancedPrompt[:minInt(100, len(enhancedPrompt))])
+
+		// 해당 조합의 quantity만큼 생성
+		for i := 0; i < quantity; i++ {
+			log.Printf("🎨 Generating image %d/%d for combination [%s + %s]...",
+				i+1, quantity, angle, shot)
+
+			// Gemini API 호출
+			generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, enhancedPrompt)
+			if err != nil {
+				log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
+				continue
+			}
+
+			// Base64 → []byte 변환
+			generatedImageData, err := base64DecodeString(generatedBase64)
+			if err != nil {
+				log.Printf("❌ Failed to decode generated image %d: %v", i+1, err)
+				continue
+			}
+
+			// Storage 업로드
+			filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+			if err != nil {
+				log.Printf("❌ Failed to upload image %d: %v", i+1, err)
+				continue
+			}
+
+			// Attach 레코드 생성
+			attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+			if err != nil {
+				log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
+				continue
+			}
+
+			// 크레딧 차감
+			if job.ProductionID != nil && userID != "" {
+				go func(attachID int, prodID string) {
+					if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+						log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
+					}
+				}(attachID, *job.ProductionID)
+			}
+
+			// 성공 카운트 및 ID 수집
+			generatedAttachIds = append(generatedAttachIds, attachID)
+			completedCount++
+
+			log.Printf("✅ Image %d/%d completed for [%s + %s]: AttachID=%d",
+				i+1, quantity, angle, shot, attachID)
+
+			// 진행 상황 업데이트
+			if err := service.UpdateJobProgress(ctx, job.JobID, completedCount, generatedAttachIds); err != nil {
+				log.Printf("⚠️  Failed to update progress: %v", err)
+			}
 		}
 
-		// 4.4: Attach 레코드 생성
-		attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
-		if err != nil {
-			log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
-			continue
-		}
-
-		// 4.5: 크레딧 차감 (Attach 성공 직후 즉시 처리)
-		if job.ProductionID != nil && userID != "" {
-			go func(attachID int, prodID string) {
-				if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
-					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
-				}
-			}(attachID, *job.ProductionID)
-		}
-
-		// 4.6: 성공 카운트 및 ID 수집
-		generatedAttachIds = append(generatedAttachIds, attachID)
-		completedCount++
-
-		log.Printf("✅ Image %d/%d completed: AttachID=%d", i+1, quantity, attachID)
-
-		// 4.7: 진행 상황 업데이트
-		if err := service.UpdateJobProgress(ctx, job.JobID, completedCount, generatedAttachIds); err != nil {
-			log.Printf("⚠️  Failed to update progress: %v", err)
-		}
+		log.Printf("✅ Combination %d/%d completed: %d images generated",
+			comboIdx+1, len(combinationsRaw), quantity)
 	}
 
 	// Phase 5: 최종 완료 처리
@@ -218,21 +273,19 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 		finalStatus = StatusFailed
 	}
 
-	log.Printf("🏁 Job %s finished: %d/%d images completed", job.JobID, completedCount, quantity)
+	log.Printf("🏁 Job %s finished: %d/%d images completed", job.JobID, completedCount, job.TotalImages)
 
 	// Job 상태 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, finalStatus); err != nil {
 		log.Printf("❌ Failed to update final job status: %v", err)
 	}
 
-	// Production 업데이트 (상태 + attach_ids 배열)
+	// Production 업데이트
 	if job.ProductionID != nil {
-		// Production 상태 업데이트
 		if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, finalStatus); err != nil {
 			log.Printf("⚠️  Failed to update final production status: %v", err)
 		}
 
-		// Production attach_ids 배열에 생성된 이미지 ID 추가
 		if len(generatedAttachIds) > 0 {
 			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, generatedAttachIds); err != nil {
 				log.Printf("⚠️  Failed to update production attach_ids: %v", err)
@@ -241,6 +294,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	}
 
 	log.Printf("✅ Single Batch processing completed for job: %s", job.JobID)
+}
+
+// minInt - Helper function for minimum of two integers
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // processPipelineStage - Pipeline Stage 모드 처리 (여러 stage 순차 실행)

@@ -24,15 +24,27 @@ type ProductionJob struct {
 	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
+// Combination - Camera Angle & Shot Type 조합
+type Combination struct {
+	Angle    string `json:"angle"`    // "front", "side", "profile", "back"
+	Shot     string `json:"shot"`     // "tight", "middle", "full"
+	Quantity int    `json:"quantity"` // 해당 조합 생성 개수
+}
+
 // JobInputData - job_input_data JSONB 구조
 type JobInputData struct {
-	Prompt                   string   `json:"prompt"`
-	MergedImageAttachID      int      `json:"mergedImageAttachId"`
-	IndividualImageAttachIDs []int    `json:"individualImageAttachIds"`
-	CameraAngle              string   `json:"cameraAngle"`
-	ShotType                 string   `json:"shotType"`
-	Quantity                 int      `json:"quantity"`
-	UserID                   string   `json:"userId"`
+	// 새로운 구조 (다중 조합 지원)
+	BasePrompt               string        `json:"basePrompt"`  // angle/shot 제외된 순수 프롬프트
+	MergedImageAttachID      int           `json:"mergedImageAttachId"`
+	IndividualImageAttachIDs []int         `json:"individualImageAttachIds"`
+	Combinations             []Combination `json:"combinations"` // Camera Angle & Shot Type 조합 배열
+	UserID                   string        `json:"userId"`
+
+	// 하위 호환성을 위해 유지 (deprecated)
+	Prompt      string `json:"prompt"`
+	CameraAngle string `json:"cameraAngle"`
+	ShotType    string `json:"shotType"`
+	Quantity    int    `json:"quantity"`
 }
 
 // Attach - quel_attach 테이블 구조
