@@ -178,14 +178,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 		}
 
 		// 4.3: Storage 업로드
-		filePath, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
 		if err != nil {
 			log.Printf("❌ Failed to upload image %d: %v", i+1, err)
 			continue
 		}
 
 		// 4.4: Attach 레코드 생성
-		attachID, err := service.CreateAttachRecord(ctx, filePath, int64(len(generatedImageData)))
+		attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
 		if err != nil {
 			log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
 			continue
@@ -334,14 +334,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				}
 
 				// Storage 업로드
-				filePath, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+				filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
 				if err != nil {
 					log.Printf("❌ Stage %d: Failed to upload image %d: %v", stageIndex, i+1, err)
 					continue
 				}
 
 				// Attach 레코드 생성
-				attachID, err := service.CreateAttachRecord(ctx, filePath, int64(len(generatedImageData)))
+				attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
 				if err != nil {
 					log.Printf("❌ Stage %d: Failed to create attach record %d: %v", stageIndex, i+1, err)
 					continue
@@ -598,14 +598,14 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *Production
 		}
 
 		// 4.3: Storage 업로드
-		filePath, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
 		if err != nil {
 			log.Printf("❌ Failed to upload image %d: %v", i+1, err)
 			continue
 		}
 
 		// 4.4: Attach 레코드 생성
-		attachID, err := service.CreateAttachRecord(ctx, filePath, int64(len(generatedImageData)))
+		attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
 		if err != nil {
 			log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
 			continue
@@ -747,14 +747,14 @@ func processSimplePortrait(ctx context.Context, service *Service, job *Productio
 		}
 
 		// 3.4: Storage 업로드
-		filePath, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
 		if err != nil {
 			log.Printf("❌ Failed to upload image %d: %v", i+1, err)
 			continue
 		}
 
 		// 3.5: Attach 레코드 생성
-		attachID, err := service.CreateAttachRecord(ctx, filePath, int64(len(generatedImageData)))
+		attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
 		if err != nil {
 			log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
 			continue
