@@ -163,7 +163,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	base64Image := service.ConvertImageToBase64(imageData)
 	log.Printf("✅ Input image prepared (Base64 length: %d)", len(base64Image))
 
-	// Phase 4: Combinations 순회하며 이미지 생성
+	// Phase 4: Combinations 병렬 처리
+	var wg sync.WaitGroup
+	var progressMutex sync.Mutex
 	generatedAttachIds := []int{}
 	completedCount := 0
 
@@ -171,7 +173,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	cameraAngleTextMap := map[string]string{
 		"front":   "Front view",
 		"side":    "Side view",
-		"profile": "Profile view",
+		"profile": "Professional ID photo style, formal front-facing portrait with neat posture, clean background, well-organized and tidy appearance",
 		"back":    "Back view",
 	}
 
@@ -182,90 +184,115 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 		"full":   "full body shot, full length",
 	}
 
+	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))
+
+	// Semaphore: 최대 2개 조합만 동시 처리
+	semaphore := make(chan struct{}, 2)
+
 	for comboIdx, comboRaw := range combinationsRaw {
-		combo := comboRaw.(map[string]interface{})
-		angle := combo["angle"].(string)
-		shot := combo["shot"].(string)
-		quantity := int(combo["quantity"].(float64))
+		wg.Add(1)
 
-		log.Printf("🎯 Combination %d/%d: angle=%s, shot=%s, quantity=%d",
-			comboIdx+1, len(combinationsRaw), angle, shot, quantity)
+		go func(idx int, data interface{}) {
+			defer wg.Done()
 
-		// 조합별 프롬프트 생성
-		cameraAngleText := cameraAngleTextMap[angle]
-		if cameraAngleText == "" {
-			cameraAngleText = "Front view" // 기본값
-		}
+			// Semaphore 획득 (최대 2개까지만)
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }() // 완료 시 반환
 
-		shotTypeText := shotTypeTextMap[shot]
-		if shotTypeText == "" {
-			shotTypeText = "full body shot" // 기본값
-		}
+			combo := data.(map[string]interface{})
+			angle := combo["angle"].(string)
+			shot := combo["shot"].(string)
+			quantity := int(combo["quantity"].(float64))
 
-		enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-			". IMPORTANT: No split layouts, no grid layouts, no separate product shots. " +
-			"Each image must be a single unified composition with the model wearing/using all items."
+			log.Printf("🎯 Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
+				idx+1, len(combinationsRaw), angle, shot, quantity)
 
-		log.Printf("📝 Enhanced Prompt: %s", enhancedPrompt[:minInt(100, len(enhancedPrompt))])
-
-		// 해당 조합의 quantity만큼 생성
-		for i := 0; i < quantity; i++ {
-			log.Printf("🎨 Generating image %d/%d for combination [%s + %s]...",
-				i+1, quantity, angle, shot)
-
-			// Gemini API 호출
-			generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, enhancedPrompt)
-			if err != nil {
-				log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
-				continue
+			// 조합별 프롬프트 생성
+			cameraAngleText := cameraAngleTextMap[angle]
+			if cameraAngleText == "" {
+				cameraAngleText = "Front view" // 기본값
 			}
 
-			// Base64 → []byte 변환
-			generatedImageData, err := base64DecodeString(generatedBase64)
-			if err != nil {
-				log.Printf("❌ Failed to decode generated image %d: %v", i+1, err)
-				continue
+			shotTypeText := shotTypeTextMap[shot]
+			if shotTypeText == "" {
+				shotTypeText = "full body shot" // 기본값
 			}
 
-			// Storage 업로드
-			filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
-			if err != nil {
-				log.Printf("❌ Failed to upload image %d: %v", i+1, err)
-				continue
+			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
+				". IMPORTANT: No split layouts, no grid layouts, no separate product shots. " +
+				"Each image must be a single unified composition with the model wearing/using all items."
+
+			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
+
+			// 해당 조합의 quantity만큼 생성
+			for i := 0; i < quantity; i++ {
+				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
+					idx+1, i+1, quantity, angle, shot)
+
+				// Gemini API 호출
+				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, enhancedPrompt)
+				if err != nil {
+					log.Printf("❌ Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
+					continue
+				}
+
+				// Base64 → []byte 변환
+				generatedImageData, err := base64DecodeString(generatedBase64)
+				if err != nil {
+					log.Printf("❌ Combination %d: Failed to decode image %d: %v", idx+1, i+1, err)
+					continue
+				}
+
+				// Storage 업로드
+				filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+				if err != nil {
+					log.Printf("❌ Combination %d: Failed to upload image %d: %v", idx+1, i+1, err)
+					continue
+				}
+
+				// Attach 레코드 생성
+				attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+				if err != nil {
+					log.Printf("❌ Combination %d: Failed to create attach record %d: %v", idx+1, i+1, err)
+					continue
+				}
+
+				// 크레딧 차감
+				if job.ProductionID != nil && userID != "" {
+					go func(attachID int, prodID string) {
+						if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+							log.Printf("⚠️  Combination %d: Failed to deduct credits for attach %d: %v", idx+1, attachID, err)
+						}
+					}(attachID, *job.ProductionID)
+				}
+
+				// 성공 카운트 및 ID 수집 (thread-safe)
+				progressMutex.Lock()
+				generatedAttachIds = append(generatedAttachIds, attachID)
+				completedCount++
+				currentProgress := completedCount
+				currentAttachIds := make([]int, len(generatedAttachIds))
+				copy(currentAttachIds, generatedAttachIds)
+				progressMutex.Unlock()
+
+				log.Printf("✅ Combination %d: Image %d/%d completed for [%s + %s]: AttachID=%d",
+					idx+1, i+1, quantity, angle, shot, attachID)
+
+				// 진행 상황 업데이트
+				if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentAttachIds); err != nil {
+					log.Printf("⚠️  Failed to update progress: %v", err)
+				}
 			}
 
-			// Attach 레코드 생성
-			attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
-			if err != nil {
-				log.Printf("❌ Failed to create attach record %d: %v", i+1, err)
-				continue
-			}
-
-			// 크레딧 차감
-			if job.ProductionID != nil && userID != "" {
-				go func(attachID int, prodID string) {
-					if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
-						log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
-					}
-				}(attachID, *job.ProductionID)
-			}
-
-			// 성공 카운트 및 ID 수집
-			generatedAttachIds = append(generatedAttachIds, attachID)
-			completedCount++
-
-			log.Printf("✅ Image %d/%d completed for [%s + %s]: AttachID=%d",
-				i+1, quantity, angle, shot, attachID)
-
-			// 진행 상황 업데이트
-			if err := service.UpdateJobProgress(ctx, job.JobID, completedCount, generatedAttachIds); err != nil {
-				log.Printf("⚠️  Failed to update progress: %v", err)
-			}
-		}
-
-		log.Printf("✅ Combination %d/%d completed: %d images generated",
-			comboIdx+1, len(combinationsRaw), quantity)
+			log.Printf("✅ Combination %d/%d completed: %d images generated",
+				idx+1, len(combinationsRaw), quantity)
+		}(comboIdx, comboRaw)
 	}
+
+	// 모든 Combination 완료 대기
+	log.Printf("⏳ Waiting for all %d combinations to complete...", len(combinationsRaw))
+	wg.Wait()
+	log.Printf("✅ All combinations completed in parallel")
 
 	// Phase 5: 최종 완료 처리
 	finalStatus := StatusCompleted
