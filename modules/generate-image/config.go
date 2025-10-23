@@ -74,7 +74,7 @@ func LoadConfig() (*Config, error) {
 
 		// Gemini API
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
-		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image-preview"),
+		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
 
 		// Server
 		Port: getEnv("PORT", "8080"),
