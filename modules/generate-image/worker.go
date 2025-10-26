@@ -405,25 +405,16 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			// Stage별 이미지 생성 (목표 달성까지 계속 시도)
 			stageGeneratedIds := []int{}
 			
-			// 목표 달성까지 시도 (무한루프 방지 포함)
+			// 목표 달성까지 시도 (병렬 처리 + 부족분 체크)
 			maxAttempts := 5 // 최대 5번 라운드 시도
 			
 			for attemptRound := 1; attemptRound <= maxAttempts; attemptRound++ {
 				fmt.Printf("🔄 Stage %d: Starting attempt round %d/%d\n", 
 					stageIndex, attemptRound, maxAttempts)
-				// 1. 현재 실제 attach_ids 개수 확인
-				var currentCount int
-				if job.ProductionID != nil {
-					count, err := service.GetCurrentAttachIdsCount(*job.ProductionID)
-					if err != nil {
-						log.Printf("❌ Stage %d: Failed to get current attach count: %v", stageIndex, err)
-						currentCount = len(stageGeneratedIds) // fallback to local count
-					} else {
-						currentCount = count
-					}
-				} else {
-					currentCount = len(stageGeneratedIds) // ProductionID가 없으면 로컬 카운트 사용
-				}
+					
+				// 1. 현재 Stage별 생성된 개수 확인 (로컬 카운터 사용)
+				currentCount := len(stageGeneratedIds)
+				fmt.Printf("📊 Stage %d: Using local counter - already generated: %d\n", stageIndex, currentCount)
 
 				// 2. 부족한 개수 계산
 				remainingQuantity := quantity - currentCount
@@ -437,103 +428,118 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				fmt.Printf("📊 Stage %d: Current=%d, Target=%d, Need to generate=%d more\n", 
 					stageIndex, currentCount, quantity, remainingQuantity)
 
-				// 3. 부족한 만큼 생성 시도
-				successCount := 0
+				// 3. 부족한 만큼 병렬 생성
+				type GenerationResult struct {
+					AttachID int
+					Success  bool
+					Error    error
+				}
+				
+				results := make(chan GenerationResult, remainingQuantity)
+				var wg sync.WaitGroup
+				
+				// 병렬 이미지 생성
 				for i := 0; i < remainingQuantity; i++ {
-					fmt.Printf("🎨 Stage %d: Attempting to generate image %d/%d (current total: %d/%d)\n", 
-						stageIndex, i+1, remainingQuantity, currentCount, quantity)
+					wg.Add(1)
+					go func(imageIndex int) {
+						defer wg.Done()
+						
+						fmt.Printf("🎨 Stage %d: Generating image %d/%d in parallel\n", 
+							stageIndex, imageIndex+1, remainingQuantity)
 
-					// Gemini API 호출
-					generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
-					if err != nil {
-						fmt.Printf("❌ Stage %d: Gemini API failed for attempt %d: %v\n", stageIndex, i+1, err)
-						continue
-					}
+						// Gemini API 호출
+						generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
+						if err != nil {
+							fmt.Printf("❌ Stage %d: Gemini API failed for image %d: %v\n", stageIndex, imageIndex+1, err)
+							results <- GenerationResult{Success: false, Error: err}
+							return
+						}
 
-					// Base64 → []byte 변환
-					generatedImageData, err := base64DecodeString(generatedBase64)
-					if err != nil {
-						fmt.Printf("❌ Stage %d: Failed to decode image %d: %v\n", stageIndex, i+1, err)
-						continue
-					}
+						// Base64 → []byte 변환
+						generatedImageData, err := base64DecodeString(generatedBase64)
+						if err != nil {
+							fmt.Printf("❌ Stage %d: Failed to decode image %d: %v\n", stageIndex, imageIndex+1, err)
+							results <- GenerationResult{Success: false, Error: err}
+							return
+						}
 
-					// Storage 업로드
-					filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
-					if err != nil {
-						fmt.Printf("❌ Stage %d: Failed to upload image %d: %v\n", stageIndex, i+1, err)
-						continue
-					}
+						// Storage 업로드
+						filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+						if err != nil {
+							fmt.Printf("❌ Stage %d: Failed to upload image %d: %v\n", stageIndex, imageIndex+1, err)
+							results <- GenerationResult{Success: false, Error: err}
+							return
+						}
 
-					// Attach 레코드 생성
-					attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
-					if err != nil {
-						fmt.Printf("❌ Stage %d: Failed to create attach record %d: %v\n", stageIndex, i+1, err)
-						continue
-					}
+						// Attach 레코드 생성
+						attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+						if err != nil {
+							fmt.Printf("❌ Stage %d: Failed to create attach record %d: %v\n", stageIndex, imageIndex+1, err)
+							results <- GenerationResult{Success: false, Error: err}
+							return
+						}
 
-					// 크레딧 차감 (Attach 성공 직후)
-					if job.ProductionID != nil && userID != "" {
-						go func(attachID int, prodID string) {
-							if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
-								log.Printf("⚠️  Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
-							}
-						}(attachID, *job.ProductionID)
-					}
+						// 크레딧 차감 (Attach 성공 직후)
+						if job.ProductionID != nil && userID != "" {
+							go func(attachID int, prodID string) {
+								if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+									log.Printf("⚠️  Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
+								}
+							}(attachID, *job.ProductionID)
+						}
 
-					// Stage별 배열에 추가
-					stageGeneratedIds = append(stageGeneratedIds, attachID)
-					successCount++
+						fmt.Printf("✅ Stage %d: Successfully generated image %d, AttachID=%d\n", 
+							stageIndex, imageIndex+1, attachID)
+							
+						results <- GenerationResult{AttachID: attachID, Success: true}
+					}(i)
+				}
 
-					fmt.Printf("✅ Stage %d: Successfully generated image, AttachID=%d (attempt %d/%d success)\n", 
-						stageIndex, attachID, successCount, remainingQuantity)
+				// 모든 병렬 작업 완료 대기
+				wg.Wait()
+				close(results)
 
-					// 전체 진행 상황 카운트 (thread-safe)
-					progressMutex.Lock()
-					totalCompleted++
-					currentProgress := totalCompleted
-					progressMutex.Unlock()
+				// 4. 결과 수집 및 카운팅
+				successCount := 0
+				for result := range results {
+					if result.Success {
+						stageGeneratedIds = append(stageGeneratedIds, result.AttachID)
+						successCount++
+						
+						// 전체 진행 상황 카운트 (thread-safe)
+						progressMutex.Lock()
+						totalCompleted++
+						tempAttachIds = append(tempAttachIds, result.AttachID)
+						currentProgress := totalCompleted
+						currentTempIds := make([]int, len(tempAttachIds))
+						copy(currentTempIds, tempAttachIds)
+						progressMutex.Unlock()
 
-					log.Printf("📊 Overall progress: %d/%d images completed", currentProgress, job.TotalImages)
+						log.Printf("📊 Overall progress: %d/%d images completed", currentProgress, job.TotalImages)
 
-					// 실시간 DB 업데이트 (순서 무관, 빠른 업데이트)
-					progressMutex.Lock()
-					tempAttachIds = append(tempAttachIds, attachID)
-					currentTempIds := make([]int, len(tempAttachIds))
-					copy(currentTempIds, tempAttachIds)
-					progressMutex.Unlock()
-
-					// DB 업데이트 (순서는 나중에 최종 정렬)
-					if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentTempIds); err != nil {
-						log.Printf("⚠️  Failed to update progress: %v", err)
+						// DB 업데이트
+						if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentTempIds); err != nil {
+							log.Printf("⚠️  Failed to update progress: %v", err)
+						}
 					}
 				}
 
-				// 4. 이번 시도 결과 출력
-				fmt.Printf("🔄 Stage %d: Round completed - %d/%d successful generations\n", 
-					stageIndex, successCount, remainingQuantity)
+				// 5. 이번 라운드 결과 출력
+				fmt.Printf("🔄 Stage %d: Round %d completed - %d/%d successful (parallel processing)\n", 
+					stageIndex, attemptRound, successCount, remainingQuantity)
 				
-				// 5. 연속 실패 체크 및 대기
+				// 6. 연속 실패 체크 및 대기
 				if successCount == 0 {
 					fmt.Printf("⚠️  Stage %d: No successful generations in round %d, waiting 10 seconds...\n", 
 						stageIndex, attemptRound)
-					time.Sleep(10 * time.Second) // 연속 실패시 잠시 대기
+					time.Sleep(10 * time.Second)
 				}
 				
-				// 6. 다음 라운드로 (현재 개수 재확인)
+				// 7. 다음 라운드로 (현재 개수 재확인)
 			}
 			
-			// 최종 시도 완료 후 결과 확인
-			var finalCount int
-			if job.ProductionID != nil {
-				count, err := service.GetCurrentAttachIdsCount(*job.ProductionID)
-				if err != nil {
-					finalCount = len(stageGeneratedIds)
-				} else {
-					finalCount = count
-				}
-			} else {
-				finalCount = len(stageGeneratedIds)
-			}
+			// 최종 시도 완료 후 결과 확인 (로컬 카운터 사용)
+			finalCount := len(stageGeneratedIds)
 			
 			if finalCount < quantity {
 				fmt.Printf("⚠️  Stage %d: Could not reach target after %d attempts. Final: %d/%d\n", 
