@@ -371,11 +371,21 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 	totalCompleted := 0
 	tempAttachIds := []int{} // 실시간 진행용 임시 배열 (순서 무관)
 
+	// Stage 동시 실행 제한 (메모리 보호)
+	maxConcurrentStages := 3
+	stageSemaphore := make(chan struct{}, maxConcurrentStages)
+	
+	log.Printf("🔒 Stage execution limited to max %d concurrent stages (memory protection)", maxConcurrentStages)
+
 	for stageIdx, stageData := range stages {
 		wg.Add(1)
 
 		go func(idx int, data interface{}) {
 			defer wg.Done()
+			
+			// Stage 동시 실행 제한 (최대 3개)
+			stageSemaphore <- struct{}{}
+			defer func() { <-stageSemaphore }() // 완료 시 해제
 
 			stage, ok := data.(map[string]interface{})
 			if !ok {
@@ -389,7 +399,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			quantity := int(stage["quantity"].(float64))
 			mergedImageAttachID := int(stage["mergedImageAttachId"].(float64))
 
-			log.Printf("🎬 Stage %d/%d: Processing %d images (parallel)", stageIndex+1, len(stages), quantity)
+			log.Printf("🎬 Stage %d/%d: Processing %d images (pool: %d/%d active)", 
+				stageIndex+1, len(stages), quantity, len(stageSemaphore), maxConcurrentStages)
 
 			// Stage별 입력 이미지 다운로드
 			imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
