@@ -412,19 +412,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				fmt.Printf("🔄 Stage %d: Starting attempt round %d/%d\n", 
 					stageIndex, attemptRound, maxAttempts)
 					
-				// 1. 현재 실제 attach_ids 개수 확인
-				var currentCount int
-				if job.ProductionID != nil {
-					count, err := service.GetCurrentAttachIdsCount(*job.ProductionID)
-					if err != nil {
-						log.Printf("❌ Stage %d: Failed to get current attach count: %v", stageIndex, err)
-						currentCount = len(stageGeneratedIds) // fallback to local count
-					} else {
-						currentCount = count
-					}
-				} else {
-					currentCount = len(stageGeneratedIds) // ProductionID가 없으면 로컬 카운트 사용
-				}
+				// 1. 현재 Stage별 생성된 개수 확인 (로컬 카운터 사용)
+				currentCount := len(stageGeneratedIds)
+				fmt.Printf("📊 Stage %d: Using local counter - already generated: %d\n", stageIndex, currentCount)
 
 				// 2. 부족한 개수 계산
 				remainingQuantity := quantity - currentCount
@@ -548,18 +538,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				// 7. 다음 라운드로 (현재 개수 재확인)
 			}
 			
-			// 최종 시도 완료 후 결과 확인
-			var finalCount int
-			if job.ProductionID != nil {
-				count, err := service.GetCurrentAttachIdsCount(*job.ProductionID)
-				if err != nil {
-					finalCount = len(stageGeneratedIds)
-				} else {
-					finalCount = count
-				}
-			} else {
-				finalCount = len(stageGeneratedIds)
-			}
+			// 최종 시도 완료 후 결과 확인 (로컬 카운터 사용)
+			finalCount := len(stageGeneratedIds)
 			
 			if finalCount < quantity {
 				fmt.Printf("⚠️  Stage %d: Could not reach target after %d attempts. Final: %d/%d\n", 
