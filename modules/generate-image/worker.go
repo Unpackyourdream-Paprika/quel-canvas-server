@@ -412,11 +412,19 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			base64Image := service.ConvertImageToBase64(imageData)
 			log.Printf("✅ Stage %d: Input image prepared (Base64 length: %d)", stageIndex, len(base64Image))
 
-			// Stage별 이미지 생성 루프
+			// Stage별 이미지 생성 루프 (로컬 카운터 사용)
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
-				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
+				// 현재 Stage에서 생성된 개수 확인
+				currentStageCount := len(stageGeneratedIds)
+				if currentStageCount >= quantity {
+					log.Printf("✅ Stage %d: Target reached (%d/%d), stopping", stageIndex, currentStageCount, quantity)
+					break
+				}
+				
+				log.Printf("🎨 Stage %d: Generating image %d/%d (stage progress: %d/%d)...", 
+					stageIndex, i+1, quantity, currentStageCount, quantity)
 
 				// Gemini API 호출
 				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
