@@ -17,6 +17,8 @@ func StartWorker() {
 
 	config := GetConfig()
 
+
+	// 테스트
 	// Service 초기화
 	service := NewService()
 	if service == nil {
