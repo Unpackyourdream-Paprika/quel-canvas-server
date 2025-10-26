@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -401,73 +402,145 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			base64Image := service.ConvertImageToBase64(imageData)
 			log.Printf("✅ Stage %d: Input image prepared (Base64 length: %d)", stageIndex, len(base64Image))
 
-			// Stage별 이미지 생성 루프
+			// Stage별 이미지 생성 (목표 달성까지 계속 시도)
 			stageGeneratedIds := []int{}
+			
+			// 목표 달성까지 시도 (무한루프 방지 포함)
+			maxAttempts := 5 // 최대 5번 라운드 시도
+			
+			for attemptRound := 1; attemptRound <= maxAttempts; attemptRound++ {
+				fmt.Printf("🔄 Stage %d: Starting attempt round %d/%d\n", 
+					stageIndex, attemptRound, maxAttempts)
+				// 1. 현재 실제 attach_ids 개수 확인
+				var currentCount int
+				if job.ProductionID != nil {
+					count, err := service.GetCurrentAttachIdsCount(*job.ProductionID)
+					if err != nil {
+						log.Printf("❌ Stage %d: Failed to get current attach count: %v", stageIndex, err)
+						currentCount = len(stageGeneratedIds) // fallback to local count
+					} else {
+						currentCount = count
+					}
+				} else {
+					currentCount = len(stageGeneratedIds) // ProductionID가 없으면 로컬 카운트 사용
+				}
 
-			for i := 0; i < quantity; i++ {
-				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
+				// 2. 부족한 개수 계산
+				remainingQuantity := quantity - currentCount
+				
+				if remainingQuantity <= 0 {
+					fmt.Printf("✅ Stage %d: Target reached (%d/%d), stopping generation\n", 
+						stageIndex, currentCount, quantity)
+					break // 목표 달성
+				}
 
-				// Gemini API 호출
-				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
+				fmt.Printf("📊 Stage %d: Current=%d, Target=%d, Need to generate=%d more\n", 
+					stageIndex, currentCount, quantity, remainingQuantity)
+
+				// 3. 부족한 만큼 생성 시도
+				successCount := 0
+				for i := 0; i < remainingQuantity; i++ {
+					fmt.Printf("🎨 Stage %d: Attempting to generate image %d/%d (current total: %d/%d)\n", 
+						stageIndex, i+1, remainingQuantity, currentCount, quantity)
+
+					// Gemini API 호출
+					generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
+					if err != nil {
+						fmt.Printf("❌ Stage %d: Gemini API failed for attempt %d: %v\n", stageIndex, i+1, err)
+						continue
+					}
+
+					// Base64 → []byte 변환
+					generatedImageData, err := base64DecodeString(generatedBase64)
+					if err != nil {
+						fmt.Printf("❌ Stage %d: Failed to decode image %d: %v\n", stageIndex, i+1, err)
+						continue
+					}
+
+					// Storage 업로드
+					filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+					if err != nil {
+						fmt.Printf("❌ Stage %d: Failed to upload image %d: %v\n", stageIndex, i+1, err)
+						continue
+					}
+
+					// Attach 레코드 생성
+					attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+					if err != nil {
+						fmt.Printf("❌ Stage %d: Failed to create attach record %d: %v\n", stageIndex, i+1, err)
+						continue
+					}
+
+					// 크레딧 차감 (Attach 성공 직후)
+					if job.ProductionID != nil && userID != "" {
+						go func(attachID int, prodID string) {
+							if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+								log.Printf("⚠️  Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
+							}
+						}(attachID, *job.ProductionID)
+					}
+
+					// Stage별 배열에 추가
+					stageGeneratedIds = append(stageGeneratedIds, attachID)
+					successCount++
+
+					fmt.Printf("✅ Stage %d: Successfully generated image, AttachID=%d (attempt %d/%d success)\n", 
+						stageIndex, attachID, successCount, remainingQuantity)
+
+					// 전체 진행 상황 카운트 (thread-safe)
+					progressMutex.Lock()
+					totalCompleted++
+					currentProgress := totalCompleted
+					progressMutex.Unlock()
+
+					log.Printf("📊 Overall progress: %d/%d images completed", currentProgress, job.TotalImages)
+
+					// 실시간 DB 업데이트 (순서 무관, 빠른 업데이트)
+					progressMutex.Lock()
+					tempAttachIds = append(tempAttachIds, attachID)
+					currentTempIds := make([]int, len(tempAttachIds))
+					copy(currentTempIds, tempAttachIds)
+					progressMutex.Unlock()
+
+					// DB 업데이트 (순서는 나중에 최종 정렬)
+					if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentTempIds); err != nil {
+						log.Printf("⚠️  Failed to update progress: %v", err)
+					}
+				}
+
+				// 4. 이번 시도 결과 출력
+				fmt.Printf("🔄 Stage %d: Round completed - %d/%d successful generations\n", 
+					stageIndex, successCount, remainingQuantity)
+				
+				// 5. 연속 실패 체크 및 대기
+				if successCount == 0 {
+					fmt.Printf("⚠️  Stage %d: No successful generations in round %d, waiting 10 seconds...\n", 
+						stageIndex, attemptRound)
+					time.Sleep(10 * time.Second) // 연속 실패시 잠시 대기
+				}
+				
+				// 6. 다음 라운드로 (현재 개수 재확인)
+			}
+			
+			// 최종 시도 완료 후 결과 확인
+			var finalCount int
+			if job.ProductionID != nil {
+				count, err := service.GetCurrentAttachIdsCount(*job.ProductionID)
 				if err != nil {
-					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
-					continue
+					finalCount = len(stageGeneratedIds)
+				} else {
+					finalCount = count
 				}
-
-				// Base64 → []byte 변환
-				generatedImageData, err := base64DecodeString(generatedBase64)
-				if err != nil {
-					log.Printf("❌ Stage %d: Failed to decode image %d: %v", stageIndex, i+1, err)
-					continue
-				}
-
-				// Storage 업로드
-				filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
-				if err != nil {
-					log.Printf("❌ Stage %d: Failed to upload image %d: %v", stageIndex, i+1, err)
-					continue
-				}
-
-				// Attach 레코드 생성
-				attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
-				if err != nil {
-					log.Printf("❌ Stage %d: Failed to create attach record %d: %v", stageIndex, i+1, err)
-					continue
-				}
-
-				// 크레딧 차감 (Attach 성공 직후)
-				if job.ProductionID != nil && userID != "" {
-					go func(attachID int, prodID string) {
-						if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
-							log.Printf("⚠️  Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
-						}
-					}(attachID, *job.ProductionID)
-				}
-
-				// Stage별 배열에 추가
-				stageGeneratedIds = append(stageGeneratedIds, attachID)
-
-				log.Printf("✅ Stage %d: Image %d/%d completed: AttachID=%d", stageIndex, i+1, quantity, attachID)
-
-				// 전체 진행 상황 카운트 (thread-safe)
-				progressMutex.Lock()
-				totalCompleted++
-				currentProgress := totalCompleted
-				progressMutex.Unlock()
-
-				log.Printf("📊 Overall progress: %d/%d images completed", currentProgress, job.TotalImages)
-
-				// 실시간 DB 업데이트 (순서 무관, 빠른 업데이트)
-				progressMutex.Lock()
-				tempAttachIds = append(tempAttachIds, attachID)
-				currentTempIds := make([]int, len(tempAttachIds))
-				copy(currentTempIds, tempAttachIds)
-				progressMutex.Unlock()
-
-				// DB 업데이트 (순서는 나중에 최종 정렬)
-				if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentTempIds); err != nil {
-					log.Printf("⚠️  Failed to update progress: %v", err)
-				}
+			} else {
+				finalCount = len(stageGeneratedIds)
+			}
+			
+			if finalCount < quantity {
+				fmt.Printf("⚠️  Stage %d: Could not reach target after %d attempts. Final: %d/%d\n", 
+					stageIndex, maxAttempts, finalCount, quantity)
+			} else {
+				fmt.Printf("🎉 Stage %d: Target successfully reached! Final: %d/%d\n", 
+					stageIndex, finalCount, quantity)
 			}
 
 			// Stage 결과 저장 (stage_index 기반으로 올바른 위치에 저장)
@@ -477,7 +550,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				Success:    len(stageGeneratedIds),
 			}
 
-			log.Printf("🎬 Stage %d completed: %d/%d images generated", stageIndex, len(stageGeneratedIds), quantity)
+			fmt.Printf("🎬 Stage %d completed: %d new images generated (existing: %d, total: %d/%d)\n", 
+				stageIndex, len(stageGeneratedIds), existingCount, existingCount+len(stageGeneratedIds), quantity)
 		}(stageIdx, stageData)
 	}
 
