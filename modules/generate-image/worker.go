@@ -550,8 +550,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				Success:    len(stageGeneratedIds),
 			}
 
-			fmt.Printf("🎬 Stage %d completed: %d new images generated (existing: %d, total: %d/%d)\n", 
-				stageIndex, len(stageGeneratedIds), existingCount, existingCount+len(stageGeneratedIds), quantity)
+			fmt.Printf("🎬 Stage %d completed: %d new images generated (total generated this session: %d)\n", 
+				stageIndex, len(stageGeneratedIds), len(stageGeneratedIds))
 		}(stageIdx, stageData)
 	}
 
