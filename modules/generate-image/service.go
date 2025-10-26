@@ -572,6 +572,34 @@ func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID st
 	return nil
 }
 
+// GetCurrentAttachIdsCount - Production의 현재 attach_ids 배열 개수 조회
+func (s *Service) GetCurrentAttachIdsCount(productionID string) (int, error) {
+	var productions []struct {
+		AttachIds []interface{} `json:"attach_ids"`
+	}
+
+	data, _, err := s.supabase.From("quel_production_photo").
+		Select("attach_ids", "", false).
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch current attach_ids: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &productions); err != nil {
+		return 0, fmt.Errorf("failed to parse productions: %w", err)
+	}
+
+	if len(productions) == 0 || productions[0].AttachIds == nil {
+		return 0, nil // 빈 배열 또는 데이터 없음
+	}
+
+	count := len(productions[0].AttachIds)
+	log.Printf("📊 Current attach_ids count for production %s: %d", productionID, count)
+	return count, nil
+}
+
 // DeductCredits - 크레딧 차감 및 트랜잭션 기록
 func (s *Service) DeductCredits(ctx context.Context, userID string, productionID string, attachIds []int) error {
 	config := GetConfig()
