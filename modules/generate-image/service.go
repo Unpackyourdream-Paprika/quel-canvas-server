@@ -38,7 +38,7 @@ func NewService() *Service {
 	ctx := context.Background()
 	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  config.GeminiAPIKey,
-		Backend: genai.BackendGoogleAI,
+		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
 		log.Printf("❌ Failed to create Genai client: %v", err)
@@ -302,13 +302,20 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 		return "", fmt.Errorf("failed to decode base64 image: %w", err)
 	}
 
+	// Content 생성
+	content := &genai.Content{
+		Parts: []*genai.Part{
+			genai.NewTextPart(prompt + "\n\nPlease generate 1 different variation of this image."),
+			genai.NewPartFromBytes(imageData, "image/png"),
+		},
+	}
+
 	// API 호출 (새 google.golang.org/genai 패키지 사용)
 	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		config.GeminiModel,
-		genai.Text(prompt+"\n\nPlease generate 1 different variation of this image."),
-		genai.ImageBytes("image/png", imageData),
+		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
@@ -330,11 +337,11 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 		}
 
 		for _, part := range candidate.Content.Parts {
-			// GeneratedImage 타입 확인
-			if genImg, ok := part.(*genai.GeneratedImage); ok {
-				log.Printf("✅ Received image from Gemini: %d bytes", len(genImg.Image))
+			// GeneratedImage 확인 - part.GeneratedImage 필드 체크
+			if part.GeneratedImage != nil {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(part.GeneratedImage.Image))
 				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(genImg.Image), nil
+				return base64.StdEncoding.EncodeToString(part.GeneratedImage.Image), nil
 			}
 		}
 	}
@@ -369,13 +376,20 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 		return "", fmt.Errorf("no valid input images")
 	}
 
-	// API 호출 - 첫 번째 이미지만 사용 (Gemini API 제한)
+	// Content 생성 - 첫 번째 이미지만 사용
+	content := &genai.Content{
+		Parts: []*genai.Part{
+			genai.NewTextPart(prompt + "\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
+			genai.NewPartFromBytes(decodedImages[0], "image/png"),
+		},
+	}
+
+	// API 호출
 	log.Printf("📤 Sending request to Gemini API with first image...")
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		config.GeminiModel,
-		genai.Text(prompt+"\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
-		genai.ImageBytes("image/png", decodedImages[0]),
+		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
@@ -397,11 +411,11 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 		}
 
 		for _, part := range candidate.Content.Parts {
-			// GeneratedImage 타입 확인
-			if genImg, ok := part.(*genai.GeneratedImage); ok {
-				log.Printf("✅ Received image from Gemini: %d bytes", len(genImg.Image))
+			// GeneratedImage 확인 - part.GeneratedImage 필드 체크
+			if part.GeneratedImage != nil {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(part.GeneratedImage.Image))
 				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(genImg.Image), nil
+				return base64.StdEncoding.EncodeToString(part.GeneratedImage.Image), nil
 			}
 		}
 	}
