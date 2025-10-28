@@ -353,30 +353,29 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 
 	log.Printf("🎨 Calling Gemini API (model: %s) with %d input images, prompt length: %d, aspect-ratio: %s", config.GeminiModel, len(base64Images), len(prompt), aspectRatio)
 
-	// Content Parts 생성 - 프롬프트 먼저
-	textPart := genai.Text(prompt + "\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo.")
-
-	// 모든 입력 이미지를 ImageBytes로 변환
-	var imageParts []interface{}
-	imageParts = append(imageParts, textPart)
-
+	// 모든 입력 이미지를 디코딩
+	var decodedImages [][]byte
 	for i, base64Image := range base64Images {
 		imageData, err := base64.StdEncoding.DecodeString(base64Image)
 		if err != nil {
 			log.Printf("⚠️  Failed to decode base64 image %d: %v", i, err)
 			continue
 		}
-
-		imageParts = append(imageParts, genai.ImageBytes("image/png", imageData))
-		log.Printf("📎 Added input image %d to request (%d bytes)", i+1, len(imageData))
+		decodedImages = append(decodedImages, imageData)
+		log.Printf("📎 Decoded input image %d (%d bytes)", i+1, len(imageData))
 	}
 
-	// API 호출
-	log.Printf("📤 Sending request to Gemini API with %d parts (1 text + %d images)...", len(imageParts), len(base64Images))
+	if len(decodedImages) == 0 {
+		return "", fmt.Errorf("no valid input images")
+	}
+
+	// API 호출 - 첫 번째 이미지만 사용 (Gemini API 제한)
+	log.Printf("📤 Sending request to Gemini API with first image...")
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		config.GeminiModel,
-		imageParts...,
+		genai.Text(prompt+"\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
+		genai.ImageBytes("image/png", decodedImages[0]),
 		&genai.GenerateContentConfig{
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
