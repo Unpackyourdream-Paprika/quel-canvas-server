@@ -139,8 +139,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 
 	userID, _ := job.JobInputData["userId"].(string)
 
-	log.Printf("📦 Input Data: AttachID=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
-		int(mergedImageAttachID), basePrompt, len(combinationsRaw), userID)
+	// aspect-ratio 추출 (기본값: "16:9")
+	aspectRatio := "16:9"
+	if ar, ok := job.JobInputData["aspect-ratio"].(string); ok && ar != "" {
+		aspectRatio = ar
+	}
+
+	log.Printf("📦 Input Data: AttachID=%d, BasePrompt=%s, Combinations=%d, AspectRatio=%s, UserID=%s",
+		int(mergedImageAttachID), basePrompt, len(combinationsRaw), aspectRatio, userID)
 
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
@@ -231,8 +237,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
-				// Gemini API 호출
-				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, enhancedPrompt)
+				// Gemini API 호출 (aspect-ratio 전달)
+				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, enhancedPrompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
 					continue
@@ -391,7 +397,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			quantity := int(stage["quantity"].(float64))
 			mergedImageAttachID := int(stage["mergedImageAttachId"].(float64))
 
-			log.Printf("🎬 Stage %d/%d: Processing %d images (parallel)", stageIndex+1, len(stages), quantity)
+			// aspect-ratio 추출 (기본값: "16:9")
+			aspectRatio := "16:9"
+			if ar, ok := stage["aspect-ratio"].(string); ok && ar != "" {
+				aspectRatio = ar
+			}
+
+			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s (parallel)", stageIndex+1, len(stages), quantity, aspectRatio)
 
 			// Stage별 입력 이미지 다운로드
 			imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
@@ -409,8 +421,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			for i := 0; i < quantity; i++ {
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
-				// Gemini API 호출
-				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt)
+				// Gemini API 호출 (aspect-ratio 전달)
+				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
 					continue
@@ -611,8 +623,14 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *Production
 	quantity := job.TotalImages
 	userID, _ := job.JobInputData["userId"].(string)
 
-	log.Printf("📦 Input Data: UploadedImages=%d, Prompt=%s, Quantity=%d, UserID=%s",
-		len(uploadedAttachIds), prompt, quantity, userID)
+	// aspect-ratio 추출 (기본값: "16:9")
+	aspectRatio := "16:9"
+	if ar, ok := job.JobInputData["aspect-ratio"].(string); ok && ar != "" {
+		aspectRatio = ar
+	}
+
+	log.Printf("📦 Input Data: UploadedImages=%d, Prompt=%s, Quantity=%d, AspectRatio=%s, UserID=%s",
+		len(uploadedAttachIds), prompt, quantity, aspectRatio, userID)
 
 	// Phase 2: Status 업데이트 - Job & Production → "processing"
 	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
@@ -673,8 +691,8 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *Production
 	for i := 0; i < quantity; i++ {
 		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)
 
-		// 4.1: Gemini API 호출 (여러 이미지 전달)
-		generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, base64Images, prompt)
+		// 4.1: Gemini API 호출 (여러 이미지 전달, aspect-ratio 전달)
+		generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, base64Images, prompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
 			continue
@@ -767,7 +785,13 @@ func processSimplePortrait(ctx context.Context, service *Service, job *Productio
 
 	userID, _ := job.JobInputData["userId"].(string)
 
-	log.Printf("📦 Input Data: MergedImages=%d, UserID=%s", len(mergedImages), userID)
+	// aspect-ratio 추출 (기본값: "16:9")
+	aspectRatio := "16:9"
+	if ar, ok := job.JobInputData["aspect-ratio"].(string); ok && ar != "" {
+		aspectRatio = ar
+	}
+
+	log.Printf("📦 Input Data: MergedImages=%d, AspectRatio=%s, UserID=%s", len(mergedImages), aspectRatio, userID)
 
 	// Phase 2: Status 업데이트 - Job & Production → "processing"
 	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
@@ -822,8 +846,8 @@ func processSimplePortrait(ctx context.Context, service *Service, job *Productio
 		base64Image := service.ConvertImageToBase64(imageData)
 		log.Printf("✅ Merged image prepared (Base64 length: %d)", len(base64Image))
 
-		// 3.2: Gemini API 호출 (단일 이미지 + wrappingPrompt)
-		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, wrappingPrompt)
+		// 3.2: Gemini API 호출 (단일 이미지 + wrappingPrompt, aspect-ratio 전달)
+		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, wrappingPrompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
 			continue

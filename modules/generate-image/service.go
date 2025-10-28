@@ -274,10 +274,15 @@ func (s *Service) UpdateProductionPhotoStatus(ctx context.Context, productionID 
 }
 
 // GenerateImageWithGemini - Gemini API로 이미지 생성
-func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image string, prompt string) (string, error) {
+func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image string, prompt string, aspectRatio string) (string, error) {
 	config := GetConfig()
 
-	log.Printf("🎨 Calling Gemini API with prompt length: %d", len(prompt))
+	// aspect-ratio 기본값 처리
+	if aspectRatio == "" {
+		aspectRatio = "16:9"
+	}
+
+	log.Printf("🎨 Calling Gemini API with prompt length: %d, aspect-ratio: %s", len(prompt), aspectRatio)
 
 	// Gemini 클라이언트 생성
 	client, err := genai.NewClient(ctx, option.WithAPIKey(config.GeminiAPIKey))
@@ -301,9 +306,13 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 		genai.ImageData("png", imageData),
 	}
 
-	// API 호출
-	log.Printf("📤 Sending request to Gemini API...")
-	resp, err := model.GenerateContent(ctx, parts...)
+	// API 호출 (aspect-ratio 설정 포함)
+	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
+	resp, err := model.GenerateContent(ctx, parts, &genai.GenerateContentConfig{
+		ImageConfig: &genai.ImageConfig{
+			AspectRatio: aspectRatio,
+		},
+	})
 	if err != nil {
 		return "", fmt.Errorf("Gemini API call failed: %w", err)
 	}
@@ -332,10 +341,15 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 }
 
 // GenerateImageWithGeminiMultiple - Gemini API로 여러 입력 이미지 기반 이미지 생성
-func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Images []string, prompt string) (string, error) {
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Images []string, prompt string, aspectRatio string) (string, error) {
 	config := GetConfig()
 
-	log.Printf("🎨 Calling Gemini API with %d input images and prompt length: %d", len(base64Images), len(prompt))
+	// aspect-ratio 기본값 처리
+	if aspectRatio == "" {
+		aspectRatio = "16:9"
+	}
+
+	log.Printf("🎨 Calling Gemini API with %d input images, prompt length: %d, aspect-ratio: %s", len(base64Images), len(prompt), aspectRatio)
 
 	// Gemini 클라이언트 생성
 	client, err := genai.NewClient(ctx, option.WithAPIKey(config.GeminiAPIKey))
@@ -364,9 +378,13 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 		log.Printf("📎 Added input image %d to request (%d bytes)", i+1, len(imageData))
 	}
 
-	// API 호출
-	log.Printf("📤 Sending request to Gemini API with %d parts (1 text + %d images)...", len(parts), len(base64Images))
-	resp, err := model.GenerateContent(ctx, parts...)
+	// API 호출 (aspect-ratio 설정 포함)
+	log.Printf("📤 Sending request to Gemini API with %d parts (1 text + %d images) and aspect-ratio: %s", len(parts), len(base64Images), aspectRatio)
+	resp, err := model.GenerateContent(ctx, parts, &genai.GenerateContentConfig{
+		ImageConfig: &genai.ImageConfig{
+			AspectRatio: aspectRatio,
+		},
+	})
 	if err != nil {
 		return "", fmt.Errorf("Gemini API call failed: %w", err)
 	}
