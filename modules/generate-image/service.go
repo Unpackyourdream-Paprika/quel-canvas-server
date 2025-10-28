@@ -305,7 +305,7 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	// Content 생성
 	content := &genai.Content{
 		Parts: []*genai.Part{
-			genai.NewTextPart(prompt + "\n\nPlease generate 1 different variation of this image."),
+			genai.NewPartFromText(prompt + "\n\nPlease generate 1 different variation of this image."),
 			genai.NewPartFromBytes(imageData, "image/png"),
 		},
 	}
@@ -337,11 +337,11 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 		}
 
 		for _, part := range candidate.Content.Parts {
-			// GeneratedImage 확인 - part.GeneratedImage 필드 체크
-			if part.GeneratedImage != nil {
-				log.Printf("✅ Received image from Gemini: %d bytes", len(part.GeneratedImage.Image))
+			// InlineData 확인 (이미지는 InlineData로 반환됨)
+			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(part.InlineData.Data))
 				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(part.GeneratedImage.Image), nil
+				return base64.StdEncoding.EncodeToString(part.InlineData.Data), nil
 			}
 		}
 	}
@@ -379,7 +379,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 	// Content 생성 - 첫 번째 이미지만 사용
 	content := &genai.Content{
 		Parts: []*genai.Part{
-			genai.NewTextPart(prompt + "\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
+			genai.NewPartFromText(prompt + "\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
 			genai.NewPartFromBytes(decodedImages[0], "image/png"),
 		},
 	}
@@ -411,11 +411,11 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 		}
 
 		for _, part := range candidate.Content.Parts {
-			// GeneratedImage 확인 - part.GeneratedImage 필드 체크
-			if part.GeneratedImage != nil {
-				log.Printf("✅ Received image from Gemini: %d bytes", len(part.GeneratedImage.Image))
+			// InlineData 확인 (이미지는 InlineData로 반환됨)
+			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(part.InlineData.Data))
 				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(part.GeneratedImage.Image), nil
+				return base64.StdEncoding.EncodeToString(part.InlineData.Data), nil
 			}
 		}
 	}
