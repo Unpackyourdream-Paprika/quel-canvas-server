@@ -500,6 +500,125 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 	wg.Wait()
 	log.Printf("✅ All stages completed in parallel")
 
+	// ========== 재시도 로직 시작 ==========
+	log.Printf("🔍 Checking missing images for each stage...")
+
+	// Step 1: 각 Stage별 부족 갯수 확인
+	for stageIdx, stageData := range stages {
+		stage := stageData.(map[string]interface{})
+		expectedQuantity := int(stage["quantity"].(float64))
+		actualQuantity := len(results[stageIdx].AttachIDs)
+		missing := expectedQuantity - actualQuantity
+
+		if missing > 0 {
+			log.Printf("⚠️  Stage %d: Missing %d images (expected: %d, got: %d)",
+				stageIdx, missing, expectedQuantity, actualQuantity)
+		} else {
+			log.Printf("✅ Stage %d: Complete (expected: %d, got: %d)",
+				stageIdx, expectedQuantity, actualQuantity)
+		}
+	}
+
+	// Step 2: 부족한 Stage만 재시도
+	for stageIdx, stageData := range stages {
+		stage := stageData.(map[string]interface{})
+		expectedQuantity := int(stage["quantity"].(float64))
+		actualQuantity := len(results[stageIdx].AttachIDs)
+		missing := expectedQuantity - actualQuantity
+
+		if missing <= 0 {
+			continue
+		}
+
+		log.Printf("🔄 Stage %d: Starting retry for %d missing images...", stageIdx, missing)
+
+		// Stage 데이터 재추출
+		prompt := stage["prompt"].(string)
+		aspectRatio := "16:9"
+		if ar, ok := stage["aspect-ratio"].(string); ok && ar != "" {
+			aspectRatio = ar
+		}
+		mergedImageAttachID := int(stage["mergedImageAttachId"].(float64))
+
+		// 입력 이미지 다시 다운로드
+		imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
+		if err != nil {
+			log.Printf("❌ Stage %d: Failed to download input image for retry: %v", stageIdx, err)
+			continue
+		}
+		base64Image := service.ConvertImageToBase64(imageData)
+
+		// 재시도 루프
+		retrySuccess := 0
+		for i := 0; i < missing; i++ {
+			log.Printf("🔄 Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
+
+			// Gemini API 호출
+			generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt, aspectRatio)
+			if err != nil {
+				log.Printf("❌ Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
+				continue
+			}
+
+			// Base64 → []byte 변환
+			generatedImageData, err := base64DecodeString(generatedBase64)
+			if err != nil {
+				log.Printf("❌ Stage %d: Failed to decode retry image %d: %v", stageIdx, i+1, err)
+				continue
+			}
+
+			// Storage 업로드
+			filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+			if err != nil {
+				log.Printf("❌ Stage %d: Failed to upload retry image %d: %v", stageIdx, i+1, err)
+				continue
+			}
+
+			// Attach 레코드 생성
+			attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+			if err != nil {
+				log.Printf("❌ Stage %d: Failed to create attach record for retry %d: %v", stageIdx, i+1, err)
+				continue
+			}
+
+			// 크레딧 차감
+			if job.ProductionID != nil && userID != "" {
+				go func(aID int, prodID string) {
+					if err := service.DeductCredits(context.Background(), userID, prodID, []int{aID}); err != nil {
+						log.Printf("⚠️  Stage %d: Failed to deduct credits for retry attach %d: %v", stageIdx, aID, err)
+					}
+				}(attachID, *job.ProductionID)
+			}
+
+			// results에 추가
+			results[stageIdx].AttachIDs = append(results[stageIdx].AttachIDs, attachID)
+			retrySuccess++
+
+			// 전체 진행 상황 업데이트
+			progressMutex.Lock()
+			totalCompleted++
+			currentProgress := totalCompleted
+			tempAttachIds = append(tempAttachIds, attachID)
+			currentTempIds := make([]int, len(tempAttachIds))
+			copy(currentTempIds, tempAttachIds)
+			progressMutex.Unlock()
+
+			log.Printf("✅ Stage %d: Retry image %d/%d completed: AttachID=%d", stageIdx, i+1, missing, attachID)
+			log.Printf("📊 Overall progress: %d/%d images completed", currentProgress, job.TotalImages)
+
+			// DB 업데이트
+			if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentTempIds); err != nil {
+				log.Printf("⚠️  Failed to update progress: %v", err)
+			}
+		}
+
+		log.Printf("✅ Stage %d retry completed: %d/%d images recovered", stageIdx, retrySuccess, missing)
+		log.Printf("📊 Stage %d final count: %d/%d images", stageIdx, len(results[stageIdx].AttachIDs), expectedQuantity)
+	}
+
+	log.Printf("🔍 All retry attempts completed")
+	// ========== 재시도 로직 끝 ==========
+
 	// 배열 합치기 전 각 Stage 결과 출력
 	log.Printf("🔍 ===== Stage Results Before Merge =====")
 	for i := 0; i < len(results); i++ {
