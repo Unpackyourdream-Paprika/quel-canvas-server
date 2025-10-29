@@ -186,11 +186,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	}
 
 	// Shot Type 매핑
-	shotTypeTextMap := map[string]string{
-		"tight":  "tight shot, close-up",
-		"middle": "middle shot, medium distance",
-		"full":   "full body shot, full length",
-	}
+shotTypeTextMap := map[string]string{
+    "tight":  "tight shot, close-up, fill entire frame edge-to-edge with no empty space, no white borders, no letterboxing, no margins on any side, subject fills canvas completely",
+    "middle": "middle shot, medium distance, fill entire frame edge-to-edge with no empty space, no white borders, no letterboxing, no margins on any side, subject fills canvas completely",
+    "full":   "full body shot, full length, fill entire frame edge-to-edge with no empty space, no white borders, no letterboxing, no margins on any side, subject fills canvas completely",
+}
 
 	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))
 
