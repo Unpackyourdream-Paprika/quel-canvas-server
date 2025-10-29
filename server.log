@@ -1,0 +1,17 @@
+2025/10/29 14:43:58 ✅ Configuration loaded successfully
+2025/10/29 14:43:58    Redis: localhost:6379 (TLS: false)
+2025/10/29 14:43:58    Supabase: https://ftunegfzqsbhtucctaqq.supabase.co
+2025/10/29 14:43:58    Gemini: gemini-2.5-flash-image
+2025/10/29 14:43:58    Credit: 20 per image
+2025/10/29 14:43:58 🔄 Started session cleanup routines (Empty: 5min, Expired: 30min)
+2025/10/29 14:43:58 🚀 Quel Canvas Collaboration Server starting on port 8080
+2025/10/29 14:43:58 📡 WebSocket endpoint: ws://localhost:8080/ws
+2025/10/29 14:43:58 ❤️  Health check: http://localhost:8080/health
+2025/10/29 14:43:58 📊 Metrics: http://localhost:8080/metrics
+2025/10/29 14:43:58 🧹 Admin cleanup: http://localhost:8080/admin/cleanup
+2025/10/29 14:43:58 🔄 Redis Queue Worker starting...
+2025/10/29 14:43:58 ✅ Supabase and Genai clients initialized
+2025/10/29 14:43:58 🔌 Connecting to Redis: localhost:6379
+2025/10/29 14:43:58 🔍 Testing Redis connection...
+2025/10/29 14:43:58 Server failed to start: listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+exit status 1
