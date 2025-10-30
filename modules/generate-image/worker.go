@@ -115,9 +115,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	log.Printf("🚀 Starting Single Batch processing for job: %s", job.JobID)
 
 	// Phase 1: Input Data 추출
-	mergedImageAttachID, ok := job.JobInputData["mergedImageAttachId"].(float64)
-	if !ok {
-		log.Printf("❌ Failed to get mergedImageAttachId")
+	individualImageAttachIds, ok := job.JobInputData["individualImageAttachIds"].([]interface{})
+	if !ok || len(individualImageAttachIds) == 0 {
+		log.Printf("❌ Failed to get individualImageAttachIds or empty array")
 		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
 		return
 	}
@@ -145,8 +145,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 
 	userID, _ := job.JobInputData["userId"].(string)
 
-	log.Printf("📦 Input Data: AttachID=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
-		int(mergedImageAttachID), basePrompt, len(combinationsRaw), userID)
+	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
+		len(individualImageAttachIds), basePrompt, len(combinationsRaw), userID)
 
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, StatusProcessing); err != nil {
@@ -160,16 +160,70 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 		}
 	}
 
-	// Phase 3: 입력 이미지 다운로드 및 Base64 변환
-	imageData, err := service.DownloadImageFromStorage(int(mergedImageAttachID))
-	if err != nil {
-		log.Printf("❌ Failed to download image: %v", err)
+	// Phase 3: 이미지 다운로드 및 카테고리별 분류
+	categories := &ImageCategories{
+		Clothing:    [][]byte{},
+		Accessories: [][]byte{},
+	}
+
+	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
+	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+
+	for i, attachObj := range individualImageAttachIds {
+		attachMap, ok := attachObj.(map[string]interface{})
+		if !ok {
+			log.Printf("⚠️  Invalid attach object at index %d", i)
+			continue
+		}
+
+		attachIDFloat, ok := attachMap["attachId"].(float64)
+		if !ok {
+			log.Printf("⚠️  Failed to get attachId at index %d", i)
+			continue
+		}
+
+		attachID := int(attachIDFloat)
+		attachType, _ := attachMap["type"].(string)
+
+		log.Printf("📥 Downloading image %d/%d: AttachID=%d, Type=%s",
+			i+1, len(individualImageAttachIds), attachID, attachType)
+
+		imageData, err := service.DownloadImageFromStorage(attachID)
+		if err != nil {
+			log.Printf("❌ Failed to download image %d: %v", attachID, err)
+			continue
+		}
+
+		// type에 따라 카테고리별로 분류
+		switch attachType {
+		case "model":
+			categories.Model = imageData
+			log.Printf("✅ Model image added")
+		case "background", "bg":
+			categories.Background = imageData
+			log.Printf("✅ Background image added")
+		default:
+			if clothingTypes[attachType] {
+				categories.Clothing = append(categories.Clothing, imageData)
+				log.Printf("✅ Clothing image added (type: %s)", attachType)
+			} else if accessoryTypes[attachType] {
+				categories.Accessories = append(categories.Accessories, imageData)
+				log.Printf("✅ Accessory image added (type: %s)", attachType)
+			} else if attachType != "none" {
+				log.Printf("⚠️  Unknown type: %s, skipping", attachType)
+			}
+		}
+	}
+
+	// 최소한 의류 이미지는 있어야 함
+	if len(categories.Clothing) == 0 && categories.Model == nil {
+		log.Printf("❌ No clothing or model images found")
 		service.UpdateJobStatus(ctx, job.JobID, StatusFailed)
 		return
 	}
 
-	base64Image := service.ConvertImageToBase64(imageData)
-	log.Printf("✅ Input image prepared (Base64 length: %d)", len(base64Image))
+	log.Printf("✅ Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
+		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -237,8 +291,8 @@ shotTypeTextMap := map[string]string{
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
-				// Gemini API 호출 (aspect-ratio 전달)
-				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, enhancedPrompt, aspectRatio)
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
 					continue
@@ -395,7 +449,6 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			stageIndex := int(stage["stage_index"].(float64))
 			prompt := stage["prompt"].(string)
 			quantity := int(stage["quantity"].(float64))
-			mergedImageAttachID := int(stage["mergedImageAttachId"].(float64))
 
 			// aspect-ratio 추출 (기본값: "16:9")
 			aspectRatio := "16:9"
@@ -405,15 +458,93 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 
 			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s (parallel)", stageIndex+1, len(stages), quantity, aspectRatio)
 
-			// Stage별 입력 이미지 다운로드
-			imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
-			if err != nil {
-				log.Printf("❌ Stage %d: Failed to download image: %v", stageIndex, err)
+			// individualImageAttachIds 또는 mergedImageAttachId 지원
+			var stageCategories *ImageCategories
+
+			if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
+				// 새 방식: individualImageAttachIds로 카테고리별 분류
+				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
+
+				stageCategories = &ImageCategories{
+					Clothing:    [][]byte{},
+					Accessories: [][]byte{},
+				}
+
+				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
+				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true}
+
+				for i, attachObj := range individualIds {
+					attachMap, ok := attachObj.(map[string]interface{})
+					if !ok {
+						log.Printf("⚠️  Stage %d: Invalid attach object at index %d", stageIndex, i)
+						continue
+					}
+
+					attachIDFloat, ok := attachMap["attachId"].(float64)
+					if !ok {
+						log.Printf("⚠️  Stage %d: Failed to get attachId at index %d", stageIndex, i)
+						continue
+					}
+
+					attachID := int(attachIDFloat)
+					attachType, _ := attachMap["type"].(string)
+
+					imageData, err := service.DownloadImageFromStorage(attachID)
+					if err != nil {
+						log.Printf("❌ Stage %d: Failed to download image %d: %v", stageIndex, attachID, err)
+						continue
+					}
+
+					// type에 따라 카테고리별로 분류
+					switch attachType {
+					case "model":
+						stageCategories.Model = imageData
+						log.Printf("✅ Stage %d: Model image added", stageIndex)
+					case "bg":
+						stageCategories.Background = imageData
+						log.Printf("✅ Stage %d: Background image added", stageIndex)
+					default:
+						if clothingTypes[attachType] {
+							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
+							log.Printf("✅ Stage %d: Clothing image added (type: %s)", stageIndex, attachType)
+						} else if accessoryTypes[attachType] {
+							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
+							log.Printf("✅ Stage %d: Accessory image added (type: %s)", stageIndex, attachType)
+						} else {
+							log.Printf("⚠️  Stage %d: Unknown type: %s, skipping", stageIndex, attachType)
+						}
+					}
+				}
+
+				if len(stageCategories.Clothing) == 0 {
+					log.Printf("❌ Stage %d: No clothing images found", stageIndex)
+					return
+				}
+
+				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
+					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
+					len(stageCategories.Accessories), stageCategories.Background != nil)
+
+			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
+				// 레거시 방식: mergedImageAttachId
+				log.Printf("⚠️  Stage %d: Using legacy mergedImageAttachId (deprecated)", stageIndex)
+				mergedImageAttachID := int(mergedID)
+
+				imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
+				if err != nil {
+					log.Printf("❌ Stage %d: Failed to download merged image: %v", stageIndex, err)
+					return
+				}
+
+				// 레거시 이미지를 Clothing 카테고리로 처리
+				stageCategories = &ImageCategories{
+					Clothing:    [][]byte{imageData},
+					Accessories: [][]byte{},
+				}
+			} else {
+				log.Printf("❌ Stage %d: No individualImageAttachIds or mergedImageAttachId found", stageIndex)
 				return
 			}
-
-			base64Image := service.ConvertImageToBase64(imageData)
-			log.Printf("✅ Stage %d: Input image prepared (Base64 length: %d)", stageIndex, len(base64Image))
 
 			// Stage별 이미지 생성 루프
 			stageGeneratedIds := []int{}
@@ -421,8 +552,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			for i := 0; i < quantity; i++ {
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
-				// Gemini API 호출 (aspect-ratio 전달)
-				generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt, aspectRatio)
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
 					continue
@@ -538,23 +669,68 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 		if ar, ok := stage["aspect-ratio"].(string); ok && ar != "" {
 			aspectRatio = ar
 		}
-		mergedImageAttachID := int(stage["mergedImageAttachId"].(float64))
 
-		// 입력 이미지 다시 다운로드
-		imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
-		if err != nil {
-			log.Printf("❌ Stage %d: Failed to download input image for retry: %v", stageIdx, err)
+		// individualImageAttachIds 또는 mergedImageAttachId 지원
+		var retryCategories *ImageCategories
+
+		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
+			// 새 방식: individualImageAttachIds로 카테고리별 분류
+			retryCategories = &ImageCategories{
+				Clothing:    [][]byte{},
+				Accessories: [][]byte{},
+			}
+
+			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
+			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true}
+
+			for _, attachObj := range individualIds {
+				attachMap := attachObj.(map[string]interface{})
+				attachID := int(attachMap["attachId"].(float64))
+				attachType, _ := attachMap["type"].(string)
+
+				imageData, err := service.DownloadImageFromStorage(attachID)
+				if err != nil {
+					log.Printf("❌ Stage %d retry: Failed to download image %d", stageIdx, attachID)
+					continue
+				}
+
+				switch attachType {
+				case "model":
+					retryCategories.Model = imageData
+				case "bg":
+					retryCategories.Background = imageData
+				default:
+					if clothingTypes[attachType] {
+						retryCategories.Clothing = append(retryCategories.Clothing, imageData)
+					} else if accessoryTypes[attachType] {
+						retryCategories.Accessories = append(retryCategories.Accessories, imageData)
+					}
+				}
+			}
+		} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
+			// 레거시 방식
+			mergedImageAttachID := int(mergedID)
+			imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
+			if err != nil {
+				log.Printf("❌ Stage %d: Failed to download input image for retry: %v", stageIdx, err)
+				continue
+			}
+			retryCategories = &ImageCategories{
+				Clothing:    [][]byte{imageData},
+				Accessories: [][]byte{},
+			}
+		} else {
+			log.Printf("❌ Stage %d: No image data for retry", stageIdx)
 			continue
 		}
-		base64Image := service.ConvertImageToBase64(imageData)
 
 		// 재시도 루프
 		retrySuccess := 0
 		for i := 0; i < missing; i++ {
 			log.Printf("🔄 Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
-			// Gemini API 호출
-			generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, prompt, aspectRatio)
+			// Gemini API 호출 (카테고리별 이미지 전달)
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio)
 			if err != nil {
 				log.Printf("❌ Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
 				continue
@@ -810,8 +986,13 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *Production
 	for i := 0; i < quantity; i++ {
 		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)
 
-		// 4.1: Gemini API 호출 (여러 이미지 전달, aspect-ratio 포함)
-		generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, base64Images, prompt, aspectRatio)
+		// 4.1: Gemini API 호출 (단일 이미지 전달, aspect-ratio 포함)
+		// ⚠️  simple_general은 레거시 모드 - 첫 번째 이미지만 사용
+		if len(base64Images) == 0 {
+			log.Printf("❌ No base64 images available")
+			continue
+		}
+		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Images[0], prompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
 			continue
