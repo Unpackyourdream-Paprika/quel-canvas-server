@@ -6,14 +6,20 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg" // JPEG 디코더 등록
+	"image/draw"
 	"image/png"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/kolesa-team/go-webp/encoder"
+	_ "github.com/kolesa-team/go-webp/decoder" // WebP 디코더 등록
 	"github.com/kolesa-team/go-webp/webp"
 	"github.com/supabase-community/supabase-go"
 	"google.golang.org/genai"
@@ -22,6 +28,14 @@ import (
 type Service struct {
 	supabase    *supabase.Client
 	genaiClient *genai.Client
+}
+
+// ImageCategories - 카테고리별 이미지 분류 구조체
+type ImageCategories struct {
+	Model       []byte   // 모델 이미지 (최대 1장)
+	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
+	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
+	Background  []byte   // 배경 이미지 (최대 1장)
 }
 
 func NewService() *Service {
@@ -349,8 +363,282 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	return "", fmt.Errorf("no image data in response")
 }
 
-// GenerateImageWithGeminiMultiple - Gemini API로 여러 입력 이미지 기반 이미지 생성
-func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Images []string, prompt string, aspectRatio string) (string, error) {
+// mergeImages - 여러 이미지를 Grid 방식으로 병합 (resize 없음, 원본 그대로)
+func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
+	if len(images) == 0 {
+		return nil, fmt.Errorf("no images to merge")
+	}
+
+	if len(images) == 1 {
+		// 단일 이미지는 원본 그대로 반환
+		log.Printf("✅ Single image - returning original")
+		return images[0], nil
+	}
+
+	// 이미지 디코드 (WebP, PNG, JPEG 자동 감지)
+	decodedImages := []image.Image{}
+	for i, imgData := range images {
+		img, format, err := image.Decode(bytes.NewReader(imgData))
+		if err != nil {
+			log.Printf("⚠️  Failed to decode image %d: %v", i, err)
+			continue
+		}
+		log.Printf("🔍 Decoded image %d format: %s", i, format)
+		decodedImages = append(decodedImages, img)
+	}
+
+	if len(decodedImages) == 0 {
+		return nil, fmt.Errorf("no valid images to merge")
+	}
+
+	// Grid 방식으로 배치 (2x2, 2x3 등)
+	numImages := len(decodedImages)
+	cols := int(math.Ceil(math.Sqrt(float64(numImages)))) // 열 개수
+	rows := int(math.Ceil(float64(numImages) / float64(cols))) // 행 개수
+
+	// 각 셀의 최대 너비/높이 계산
+	maxCellWidth := 0
+	maxCellHeight := 0
+	for _, img := range decodedImages {
+		bounds := img.Bounds()
+		if bounds.Dx() > maxCellWidth {
+			maxCellWidth = bounds.Dx()
+		}
+		if bounds.Dy() > maxCellHeight {
+			maxCellHeight = bounds.Dy()
+		}
+	}
+
+	// 전체 그리드 크기
+	totalWidth := cols * maxCellWidth
+	totalHeight := rows * maxCellHeight
+
+	// 새 이미지 생성
+	merged := image.NewRGBA(image.Rect(0, 0, totalWidth, totalHeight))
+
+	// Grid에 이미지 배치
+	for idx, img := range decodedImages {
+		row := idx / cols
+		col := idx % cols
+
+		x := col * maxCellWidth
+		y := row * maxCellHeight
+
+		bounds := img.Bounds()
+		// 중앙 정렬
+		xOffset := x + (maxCellWidth-bounds.Dx())/2
+		yOffset := y + (maxCellHeight-bounds.Dy())/2
+
+		draw.Draw(merged,
+			image.Rect(xOffset, yOffset, xOffset+bounds.Dx(), yOffset+bounds.Dy()),
+			img, image.Point{0, 0}, draw.Src)
+	}
+
+	log.Printf("✅ Merged %d images into %dx%d grid (%dx%d total)", len(decodedImages), rows, cols, totalWidth, totalHeight)
+
+	// 1:1 비율이 아닌 경우만 aspect-ratio에 맞게 리사이즈
+	var finalImage image.Image = merged
+	if aspectRatio != "1:1" {
+		// aspect-ratio에 따른 목표 크기 설정
+		var targetWidth, targetHeight int
+		switch aspectRatio {
+		case "16:9":
+			targetWidth, targetHeight = 1344, 768
+		case "9:16":
+			targetWidth, targetHeight = 768, 1344
+		case "4:3":
+			targetWidth, targetHeight = 1152, 896
+		case "3:4":
+			targetWidth, targetHeight = 896, 1152
+		default:
+			targetWidth, targetHeight = 1024, 1024
+		}
+
+		finalImage = resizeImage(merged, targetWidth, targetHeight)
+		log.Printf("✅ Resized merged grid to %dx%d (aspect-ratio: %s)", targetWidth, targetHeight, aspectRatio)
+	} else {
+		log.Printf("✅ 1:1 aspect-ratio - skipping resize, keeping original grid size")
+	}
+
+	// PNG 인코딩
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, finalImage); err != nil {
+		return nil, fmt.Errorf("failed to encode merged image: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// resizeImage - 이미지를 지정된 크기로 resize (비율 유지하며 fit, 투명 배경)
+func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
+	srcBounds := src.Bounds()
+	srcWidth := srcBounds.Dx()
+	srcHeight := srcBounds.Dy()
+
+	// 비율 계산
+	scaleX := float64(targetWidth) / float64(srcWidth)
+	scaleY := float64(targetHeight) / float64(srcHeight)
+	scale := math.Min(scaleX, scaleY)
+
+	// 스케일된 크기 계산
+	newWidth := int(float64(srcWidth) * scale)
+	newHeight := int(float64(srcHeight) * scale)
+
+	// 새 이미지 생성 (목표 크기, 검은 배경)
+	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
+
+	// 중앙 정렬을 위한 오프셋 계산
+	xOffset := (targetWidth - newWidth) / 2
+	yOffset := (targetHeight - newHeight) / 2
+
+	// Nearest Neighbor 방식으로 리사이즈
+	for y := 0; y < newHeight; y++ {
+		for x := 0; x < newWidth; x++ {
+			srcX := int(float64(x) / scale)
+			srcY := int(float64(y) / scale)
+			dst.Set(x+xOffset, y+yOffset, src.At(srcX, srcY))
+		}
+	}
+
+	return dst
+}
+
+// generateDynamicPrompt - 상황별 동적 프롬프트 생성
+func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
+	// 🔥 맨 앞에 강력한 참조 이미지 조합 지시사항
+	mainInstruction := "[CRITICAL - REFERENCE IMAGES MUST BE COMBINED]\n" +
+		"You are provided with multiple reference images that MUST be combined into ONE single photograph.\n" +
+		"All clothing and accessories shown in the reference images MUST appear as worn/carried by ONE person in ONE unified photo.\n" +
+		"DO NOT display any items separately. DO NOT create product layouts. DO NOT show items floating.\n" +
+		"Generate ONE complete fashion photograph where the person is wearing ALL items from the reference images.\n\n"
+
+	var instructions []string
+	imageIndex := 1
+
+	// 각 카테고리별 설명 추가
+	if categories.Model != nil {
+		instructions = append(instructions,
+			fmt.Sprintf("Reference Image %d: Model's face and body (use this person's appearance)", imageIndex))
+		imageIndex++
+	}
+
+	if len(categories.Clothing) > 0 {
+		instructions = append(instructions,
+			fmt.Sprintf("Reference Image %d: Clothing items - the person MUST wear ALL these items (tops, pants, outerwear)", imageIndex))
+		imageIndex++
+	}
+
+	if len(categories.Accessories) > 0 {
+		instructions = append(instructions,
+			fmt.Sprintf("Reference Image %d: Accessories - the person MUST wear/carry ALL these items (shoes, bags, jewelry)", imageIndex))
+		imageIndex++
+	}
+
+	if categories.Background != nil {
+		instructions = append(instructions,
+			fmt.Sprintf("Reference Image %d: Background environment (use this setting)", imageIndex))
+		imageIndex++
+	}
+
+	// 기본 생성 지시사항
+	var compositionInstruction string
+	if categories.Model != nil {
+		compositionInstruction = "\n[COMPOSITION REQUIREMENT]\n" +
+			"Create ONE professional fashion photograph showing the referenced model wearing ALL clothing and accessories from the reference images"
+	} else {
+		compositionInstruction = "\n[COMPOSITION REQUIREMENT]\n" +
+			"Create ONE professional fashion photograph showing a model wearing ALL clothing and accessories from the reference images"
+	}
+
+	if categories.Background != nil {
+		compositionInstruction += " PHYSICALLY GROUNDED and NATURALLY INTEGRATED into the referenced background environment.\n\n" +
+			"[BACKGROUND INTEGRATION - ABSOLUTELY CRITICAL]\n" +
+			"🔥🔥🔥 The person MUST be STANDING ON THE GROUND in the background location - NOT FLOATING!\n\n" +
+			"[REQUIRED - PHYSICAL GROUNDING]\n" +
+			"✓ Person's feet MUST be ON THE GROUND/FLOOR of the background scene\n" +
+			"✓ Create realistic contact shadows where feet meet the ground\n" +
+			"✓ Person MUST cast shadows consistent with the background lighting\n" +
+			"✓ Match the exact lighting direction, intensity, and color of the background\n" +
+			"✓ Apply same atmospheric effects (haze, depth, air perspective) to the person\n" +
+			"✓ Person should be affected by same environmental lighting as background objects\n" +
+			"✓ Embed the person INTO the scene depth - not in front of it\n" +
+			"✓ Match perspective and viewing angle perfectly with the background\n" +
+			"✓ Person should have same color grading and tone as the background\n" +
+			"✓ Create natural depth of field - person should be part of the scene's focus plane\n" +
+			"✓ It MUST look like ONE photograph taken with ONE camera in ONE location\n\n" +
+			"[ABSOLUTELY FORBIDDEN - WILL REJECT IMAGE]\n" +
+			"❌❌❌ Person looking like they are FLOATING above the ground\n" +
+			"❌❌❌ Person looking like a CUTOUT or STICKER pasted on the background\n" +
+			"❌❌❌ Person having DIFFERENT LIGHTING than the background\n" +
+			"❌❌❌ NO SHADOWS or WRONG shadow direction\n" +
+			"❌❌❌ Green screen effect or obvious composite look\n" +
+			"❌❌❌ Person appearing to be in FRONT of the background instead of IN the scene\n" +
+			"❌❌❌ Different color temperature or atmosphere between person and background"
+	} else {
+		compositionInstruction += " in a clean, professional studio setting."
+	}
+
+	// CRITICAL RULES 추가
+	criticalRules := "\n\n[ABSOLUTELY FORBIDDEN]\n" +
+		"❌ NO separate product images floating in the frame\n" +
+		"❌ NO clothing displayed separately from the person\n" +
+		"❌ NO split screen or collage layout showing items separately\n" +
+		"❌ NO e-commerce product layout\n" +
+		"❌ NO grid showing multiple views\n" +
+		"❌ NO empty margins or letterboxing on sides\n" +
+		"❌ NO white/gray bars on left or right\n\n" +
+		"[REQUIRED OUTPUT]\n" +
+		"✓ ONE unified photograph taken with ONE camera shutter\n" +
+		"✓ ALL reference items MUST be worn/carried by the person\n" +
+		"✓ FILL entire frame edge-to-edge with NO empty space\n" +
+		"✓ Natural, asymmetric composition (left side ≠ right side)\n" +
+		"✓ Professional magazine editorial style\n" +
+		"✓ Single continuous moment in time"
+
+	// 16:9 비율 전용 추가 지시사항
+	var aspectRatioInstruction string
+	if aspectRatio == "16:9" {
+		aspectRatioInstruction = "\n\n[16:9 WIDE FRAME - CRITICAL SPATIAL INTEGRATION]\n" +
+			"🔥🔥🔥 This is a WIDE HORIZONTAL frame - special attention required!\n\n" +
+			"[DEPTH & PERSPECTIVE - MANDATORY]\n" +
+			"✓ Create STRONG DEPTH and REALISTIC PERSPECTIVE in the wide frame\n" +
+			"✓ Person MUST be embedded IN the 3D space of the scene, not flat against it\n" +
+			"✓ Use foreground, midground, and background layers for spatial depth\n" +
+			"✓ Apply proper atmospheric perspective (distant objects slightly hazier)\n" +
+			"✓ Ensure person casts realistic shadows that interact with the ground plane\n" +
+			"✓ Match the scale and proportions naturally within the environment\n\n" +
+			"[WIDE FRAME COMPOSITION]\n" +
+			"✓ Utilize the FULL WIDTH naturally - fill horizontal space with scene context\n" +
+			"✓ Position subject slightly off-center (rule of thirds) for natural look\n" +
+			"✓ Background should extend naturally to frame edges, not feel cropped\n" +
+			"✓ Person should feel like they BELONG in this wide environmental shot\n\n" +
+			"[LIGHTING & INTEGRATION]\n" +
+			"✓ Person MUST have IDENTICAL lighting as the environment (same direction, color, intensity)\n" +
+			"✓ Apply environmental light wrap and ambient occlusion\n" +
+			"✓ Match color temperature and atmospheric conditions perfectly\n" +
+			"✓ Person should be affected by the same light sources visible in the background\n\n" +
+			"[ABSOLUTELY FORBIDDEN IN 16:9]\n" +
+			"❌❌❌ Person looking PASTED or COMPOSITED onto background\n" +
+			"❌❌❌ Flat, cardboard cutout appearance\n" +
+			"❌❌❌ Different lighting on person vs environment\n" +
+			"❌❌❌ Floating or disconnected from ground plane\n" +
+			"❌❌❌ Unrealistic scale or perspective mismatch\n" +
+			"❌❌❌ Center-framed subject in wide shot (use off-center composition)\n\n" +
+			"GOAL: It must look like ONE REAL PHOTOGRAPH taken in ONE LOCATION with ONE CAMERA."
+	}
+
+	// 최종 조합: 강력한 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 금지사항 → 16:9 특화
+	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+
+	if userPrompt != "" {
+		finalPrompt += "\n\n[ADDITIONAL STYLING]\n" + userPrompt
+	}
+
+	return finalPrompt
+}
+
+// GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
 	config := GetConfig()
 
 	// aspect-ratio 기본값 처리
@@ -358,34 +646,95 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 		aspectRatio = "16:9"
 	}
 
-	log.Printf("🎨 Calling Gemini API (model: %s) with %d input images, prompt length: %d, aspect-ratio: %s", config.GeminiModel, len(base64Images), len(prompt), aspectRatio)
+	log.Printf("🎨 Calling Gemini API with categories - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
+		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
 
-	// 모든 입력 이미지를 디코딩
-	var decodedImages [][]byte
-	for i, base64Image := range base64Images {
-		imageData, err := base64.StdEncoding.DecodeString(base64Image)
+	// 카테고리별 병합 및 resize
+	var mergedClothing []byte
+	var mergedAccessories []byte
+	var err error
+
+	if len(categories.Clothing) > 0 {
+		mergedClothing, err = mergeImages(categories.Clothing, aspectRatio)
 		if err != nil {
-			log.Printf("⚠️  Failed to decode base64 image %d: %v", i, err)
-			continue
+			return "", fmt.Errorf("failed to merge clothing images: %w", err)
 		}
-		decodedImages = append(decodedImages, imageData)
-		log.Printf("📎 Decoded input image %d (%d bytes)", i+1, len(imageData))
 	}
 
-	if len(decodedImages) == 0 {
-		return "", fmt.Errorf("no valid input images")
+	if len(categories.Accessories) > 0 {
+		mergedAccessories, err = mergeImages(categories.Accessories, aspectRatio)
+		if err != nil {
+			return "", fmt.Errorf("failed to merge accessory images: %w", err)
+		}
 	}
 
-	// Content 생성 - 첫 번째 이미지만 사용
+	// Gemini Part 배열 구성
+	var parts []*genai.Part
+
+	// 순서: Model → Clothing → Accessories → Background
+	if categories.Model != nil {
+		// Model 이미지도 resize
+		resizedModel, err := mergeImages([][]byte{categories.Model}, aspectRatio)
+		if err != nil {
+			return "", fmt.Errorf("failed to resize model image: %w", err)
+		}
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{
+				MIMEType: "image/png",
+				Data:     resizedModel,
+			},
+		})
+		log.Printf("📎 Added Model image (resized)")
+	}
+
+	if mergedClothing != nil {
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{
+				MIMEType: "image/png",
+				Data:     mergedClothing,
+			},
+		})
+		log.Printf("📎 Added Clothing image (merged from %d items)", len(categories.Clothing))
+	}
+
+	if mergedAccessories != nil {
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{
+				MIMEType: "image/png",
+				Data:     mergedAccessories,
+			},
+		})
+		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Accessories))
+	}
+
+	if categories.Background != nil {
+		// Background 이미지도 resize
+		resizedBG, err := mergeImages([][]byte{categories.Background}, aspectRatio)
+		if err != nil {
+			return "", fmt.Errorf("failed to resize background image: %w", err)
+		}
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{
+				MIMEType: "image/png",
+				Data:     resizedBG,
+			},
+		})
+		log.Printf("📎 Added Background image (resized)")
+	}
+
+	// 동적 프롬프트 생성
+	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
+	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
+
+	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
+
+	// Content 생성
 	content := &genai.Content{
-		Parts: []*genai.Part{
-			genai.NewPartFromText(prompt + "\n\nGenerate exactly 1 image that follows these instructions. The output must be a single, transformed portrait photo."),
-			genai.NewPartFromBytes(decodedImages[0], "image/png"),
-		},
+		Parts: parts,
 	}
 
 	// API 호출
-	log.Printf("📤 Sending request to Gemini API with first image...")
+	log.Printf("📤 Sending request to Gemini API with %d parts...", len(parts))
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		config.GeminiModel,
@@ -394,6 +743,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
 			},
+			Temperature: floatPtr(0.45),
 		},
 	)
 	if err != nil {
@@ -411,16 +761,20 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, base64Ima
 		}
 
 		for _, part := range candidate.Content.Parts {
-			// InlineData 확인 (이미지는 InlineData로 반환됨)
 			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
 				log.Printf("✅ Received image from Gemini: %d bytes", len(part.InlineData.Data))
-				// Base64로 인코딩하여 반환
 				return base64.StdEncoding.EncodeToString(part.InlineData.Data), nil
 			}
 		}
 	}
 
 	return "", fmt.Errorf("no image data in response")
+}
+
+// floatPtr - float64를 *float32로 변환
+func floatPtr(f float64) *float32 {
+	f32 := float32(f)
+	return &f32
 }
 
 // UploadImageToStorage - Supabase Storage에 이미지 업로드 (WebP 변환 포함)
