@@ -231,20 +231,20 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑
+	// Camera Angle 매핑 (시네마틱 톤)
 	cameraAngleTextMap := map[string]string{
-		"front":   "Front view",
-		"side":    "Side view",
-		"profile": "Professional ID photo style, formal front-facing portrait with neat posture, clean background, well-organized and tidy appearance",
-		"back":    "Back view",
+		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
+		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
+		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
+		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
 	}
 
-	// Shot Type 매핑
-shotTypeTextMap := map[string]string{
-    "tight":  "tight shot, close-up, fill entire frame edge-to-edge with no empty space, no white borders, no letterboxing, no margins on any side, subject fills canvas completely",
-    "middle": "middle shot, medium distance, fill entire frame edge-to-edge with no empty space, no white borders, no letterboxing, no margins on any side, subject fills canvas completely",
-    "full":   "full body shot, full length, fill entire frame edge-to-edge with no empty space, no white borders, no letterboxing, no margins on any side, subject fills canvas completely",
-}
+	// Shot Type 매핑 (시네마틱 톤)
+	shotTypeTextMap := map[string]string{
+		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
+		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
+		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
+	}
 
 	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))
 
@@ -281,8 +281,8 @@ shotTypeTextMap := map[string]string{
 			}
 
 			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-				". IMPORTANT: No split layouts, no grid layouts, no separate product shots. " +
-				"Each image must be a single unified composition with the model wearing/using all items."
+				". Create a single unified photorealistic cinematic composition where the model wears all clothing and accessories together in one complete outfit. " +
+				"Film photography aesthetic with natural storytelling composition."
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
