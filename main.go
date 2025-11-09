@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	generateimage "quel-canvas-server/modules/generate-image"
+	"quel-canvas-server/modules/common/config"
+	"quel-canvas-server/modules/worker"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -583,7 +584,7 @@ func forceCleanupSessions(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	// 환경변수 로드
-	if _, err := generateimage.LoadConfig(); err != nil {
+	if _, err := config.LoadConfig(); err != nil {
 		log.Fatalf("❌ Failed to load config: %v", err)
 	}
 
@@ -591,9 +592,9 @@ func main() {
 	sessionManager.startCleanupRoutine()
 
 	// Redis Queue Worker 시작 (백그라운드)
-	go generateimage.StartWorker()
+	go worker.StartWorker()
 
-   // Generate Image 모듈 초기화
+   // Worker 모듈 초기화 완료
 
 
 
