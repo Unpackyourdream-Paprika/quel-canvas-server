@@ -7,7 +7,11 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(cat:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(brew install:*)",
+      "Bash(brew services start:*)",
+      "Bash(go run:*)",
+      "Bash(go install:*)"
     ],
     "deny": [],
     "ask": []
