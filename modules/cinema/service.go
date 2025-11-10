@@ -518,9 +518,9 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 케이스별 메인 지시사항
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
-			"You are a world-class fashion photographer shooting an editorial campaign.\n" +
+		// 모델 있음 → 시네마틱 에디토리얼
+		mainInstruction = "[CINEMATIC PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
+			"You are a world-class cinematic photographer shooting an editorial campaign.\n" +
 			"The PERSON is the HERO - their natural proportions are SACRED and CANNOT be distorted.\n" +
 			"The environment serves the subject, NOT the other way around.\n\n" +
 			"Create ONE photorealistic photograph with DRAMATIC CINEMATIC STORYTELLING:\n" +
@@ -585,11 +585,11 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 시네마틱 구성 지시사항
 	var compositionInstruction string
 
-	// 케이스 1: 모델 이미지가 있는 경우 → 모델 착용 샷 (패션 에디토리얼)
+	// 케이스 1: 모델 이미지가 있는 경우 → 모델 착용 샷 (시네마틱 에디토리얼)
 	if hasModel {
-		compositionInstruction = "\n[FASHION EDITORIAL COMPOSITION]\n" +
+		compositionInstruction = "\n[CINEMATIC EDITORIAL COMPOSITION]\n" +
 			"Generate ONE photorealistic film photograph showing the referenced model wearing the complete outfit (all clothing + accessories).\n" +
-			"This is a high-end fashion editorial shoot with the model as the star."
+			"This is a high-end cinematic editorial shoot with the model as the star."
 	} else if hasProducts {
 		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
 		compositionInstruction = "\n[CINEMATIC PRODUCT PHOTOGRAPHY]\n" +
@@ -728,8 +728,8 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"✓ Atmospheric perspective - distant elements are hazier\n" +
 				"✓ Film grain and natural color grading\n" +
 				"✓ Depth of field emphasizes the subject while showing environment\n\n" +
-				"GOAL: A breathtaking wide shot from a high-budget fashion editorial - \n" +
-				"like Annie Leibovitz or Steven Meisel capturing a MOMENT of drama and beauty."
+				"GOAL: A breathtaking wide shot from a high-budget cinematic production - \n" +
+				"like a film still capturing a MOMENT of drama and beauty with epic scope."
 		} else if hasProducts {
 			// 프로덕트 샷 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PRODUCT SHOT]\n" +
@@ -766,12 +766,16 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		}
 	}
 
-	// 최종 조합: 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
-	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+	// 최종 조합: ⚠️ 카메라/샷 타입이 최우선! → 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
+	var finalPrompt string
 
+	// 1️⃣ 카메라 앵글과 샷 타입을 맨 앞에 배치 (CRITICAL TECHNICAL SPECIFICATIONS)
 	if userPrompt != "" {
-		finalPrompt += "\n\n[ADDITIONAL STYLING]\n" + userPrompt
+		finalPrompt = "⚠️ CRITICAL CAMERA & FRAMING SPECIFICATIONS - HIGHEST PRIORITY:\n" + userPrompt + "\n\n"
 	}
+
+	// 2️⃣ 나머지 시네마틱 지시사항들
+	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
 
 	return finalPrompt
 }
@@ -866,6 +870,9 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
+	log.Printf("━━━━━━━━━━ 🎬 FINAL PROMPT TO GEMINI ━━━━━━━━━━")
+	log.Printf("%s", dynamicPrompt)
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	// Content 생성
 	content := &genai.Content{
@@ -1020,9 +1027,24 @@ func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileS
 func (s *Service) UpdateJobProgress(ctx context.Context, jobID string, completedImages int, generatedAttachIds []int) error {
 	log.Printf("📊 Updating job progress: %d/%d completed", completedImages, len(generatedAttachIds))
 
+	// 중복 제거: 같은 attach_id가 여러 번 포함되지 않도록
+	uniqueIds := make([]int, 0, len(generatedAttachIds))
+	seen := make(map[int]bool)
+	for _, id := range generatedAttachIds {
+		if !seen[id] {
+			seen[id] = true
+			uniqueIds = append(uniqueIds, id)
+		}
+	}
+
+	if len(uniqueIds) != len(generatedAttachIds) {
+		log.Printf("⚠️  Removed %d duplicate attach IDs (before: %d, after: %d)",
+			len(generatedAttachIds)-len(uniqueIds), len(generatedAttachIds), len(uniqueIds))
+	}
+
 	updateData := map[string]interface{}{
 		"completed_images":     completedImages,
-		"generated_attach_ids": generatedAttachIds,
+		"generated_attach_ids": uniqueIds,
 		"updated_at":           "now()",
 	}
 

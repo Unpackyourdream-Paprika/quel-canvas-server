@@ -234,19 +234,29 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 (시네마틱 톤)
+	// Camera Angle 매핑 (시네마틱 톤 + Beauty 전용 앵글)
 	cameraAngleTextMap := map[string]string{
+		// Fashion 기본 앵글
 		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
 		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
 		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
 		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
+
+		// Beauty 전용 앵글
+		"3/4": "Three-quarter angle, face turned slightly showing both frontal and side features, classic beauty portrait composition, elegant and flattering perspective",
 	}
 
-	// Shot Type 매핑 (시네마틱 톤)
+	// Shot Type 매핑 (시네마틱 톤 + Beauty 전용 샷)
 	shotTypeTextMap := map[string]string{
+		// Fashion 기본 샷
 		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
 		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
 		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
+
+		// Beauty 전용 샷 타입
+		"closeup": "Beauty closeup shot, tight framing on face highlighting makeup and skin texture, professional beauty photography, emphasizes facial features and cosmetics",
+		"upper":   "Upper body shot, framing from chest up, beauty editorial composition, shows face, neck, and shoulders with makeup and styling details",
+		"detail":  "Extreme detail shot, macro focus on specific feature (eyes, lips, skin), high-end beauty photography, showcases makeup artistry and product details",
 	}
 
 	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))

@@ -234,19 +234,32 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 (시네마틱 톤)
+	// Camera Angle 매핑 (시네마틱 톤 + Eats 전용 앵글)
 	cameraAngleTextMap := map[string]string{
+		// Fashion 기본 앵글
 		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
 		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
 		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
 		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
+
+		// Eats 전용 앵글
+		"overhead":   "Overhead flat lay angle, camera directly above subject looking straight down, top-down food photography composition, shows complete plate arrangement",
+		"45-degree":  "45-degree angle, camera tilted at diagonal viewpoint between overhead and eye-level, classic food photography perspective, shows depth and layers",
+		"macro":      "Macro close-up angle, extreme detail shot focusing on textures and ingredients, intimate food photography, fills frame with specific details",
 	}
 
-	// Shot Type 매핑 (시네마틱 톤)
+	// Shot Type 매핑 (시네마틱 톤 + Eats 전용 샷)
 	shotTypeTextMap := map[string]string{
+		// Fashion 기본 샷
 		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
 		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
 		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
+
+		// Eats 전용 샷 타입
+		"full-plate": "Full plate shot, complete dish visible from edge to edge, shows entire meal composition, classic food photography framing",
+		"hero-shot":  "Hero shot, dramatic main dish photography with artistic composition, highlights the star ingredient or dish, editorial food styling",
+		"detail":     "Detail shot, tight focus on specific ingredient or texture, artistic close-up food photography, emphasizes craftsmanship and quality",
+		"context":    "Context shot, food shown with environmental elements (table setting, restaurant atmosphere), lifestyle food photography, tells a story",
 	}
 
 	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))

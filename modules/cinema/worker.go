@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -234,19 +236,30 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 (시네마틱 톤)
+	// Camera Angle 매핑 - 간결한 라벨만
 	cameraAngleTextMap := map[string]string{
-		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
-		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
-		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
-		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
+		"front":          "Front-facing angle",
+		"side":           "Side profile 90-degree angle",
+		"profile":        "Profile angle",
+		"back":           "Back view angle",
+		"eye-level":      "Eye-level angle",
+		"low-angle":      "Low-angle (camera below subject looking up)",
+		"high-angle":     "High-angle (camera above subject looking down)",
+		"over-shoulder":  "Over-the-shoulder angle",
+		"dutch-angle":    "Dutch angle (tilted)",
+		"birds-eye":      "Bird's eye view (top-down)",
 	}
 
-	// Shot Type 매핑 (시네마틱 톤)
+	// Shot Type 매핑 - 간결한 라벨만
 	shotTypeTextMap := map[string]string{
-		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
-		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
-		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
+		"tight":  "Tight shot",
+		"middle": "Medium shot",
+		"full":   "Full body shot",
+		"ECU":    "ECU (Extreme Close-Up)",
+		"CU":     "CU (Close-Up)",
+		"MS":     "MS (Medium Shot)",
+		"FS":     "FS (Full Shot)",
+		"WS":     "WS (Wide Shot)",
 	}
 
 	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))
@@ -283,11 +296,59 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				shotTypeText = "full body shot" // 기본값
 			}
 
-			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-				". Create a single unified photorealistic cinematic composition where the model wears all clothing and accessories together in one complete outfit. " +
-				"Film photography aesthetic with natural storytelling composition."
+			// 샷 타입별 프레이밍 지시 - 극도로 간결하게
+			var frameInstruction string
+			if shot == "ECU" {
+				frameInstruction = "FRAME ONLY THE EYES (or hands/lips if specified). Eyes fill 80-90% of entire frame. Ultra-tight macro crop."
+			} else if shot == "CU" {
+				frameInstruction = "FRAME FROM NECK UP. Full face fills 70-80% of frame. Head top to neck/shoulders bottom."
+			} else if shot == "MS" {
+				frameInstruction = "FRAME FROM WAIST UP. Upper body and head visible. Bottom cuts at waist level."
+			} else if shot == "FS" {
+				frameInstruction = "FRAME ENTIRE BODY HEAD TO TOE. Full person fits in frame with small margins."
+			} else if shot == "WS" {
+				frameInstruction = "FRAME SUBJECT SMALL IN ENVIRONMENT. Person 20-40% of frame, environment dominates."
+			} else {
+				frameInstruction = "Standard cinematic framing."
+			}
 
-			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
+			// 앵글 지시 - 간결하게
+			var angleInstruction string
+			if angle == "eye-level" {
+				angleInstruction = "Camera at subject's eye height."
+			} else if angle == "low-angle" {
+				angleInstruction = "Camera below subject looking up."
+			} else if angle == "high-angle" {
+				angleInstruction = "Camera above subject looking down."
+			} else if angle == "over-shoulder" {
+				angleInstruction = "Camera behind subject's shoulder."
+			} else if angle == "dutch-angle" {
+				angleInstruction = "Camera tilted for diagonal horizon."
+			} else if angle == "birds-eye" {
+				angleInstruction = "Camera directly overhead looking straight down."
+			} else {
+				angleInstruction = cameraAngleText
+			}
+
+			enhancedPrompt := fmt.Sprintf(`SHOT TYPE: %s
+FRAMING: %s
+CAMERA ANGLE: %s
+
+SCENE: %s
+
+MANDATORY TECHNICAL SPECS:
+- 100%% photorealistic (looks like real photograph from film set)
+- Cinematic film production aesthetic
+- Natural lighting and shadows
+- Professional cinematography
+- CRITICAL: Follow the FRAMING instruction exactly - do not deviate`,
+				shotTypeText, frameInstruction, angleInstruction, basePrompt)
+
+			log.Printf("━━━━━━━━━━ 🎯 Combination %d/%d ━━━━━━━━━━", idx+1, len(combinationsRaw))
+			log.Printf("📐 Angle: [%s] → %s", angle, angleInstruction)
+			log.Printf("📷 Shot: [%s] → %s", shot, frameInstruction)
+			log.Printf("📝 Enhanced Prompt Preview:\n%s", enhancedPrompt[:minInt(300, len(enhancedPrompt))])
+			log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
@@ -450,8 +511,12 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 			// Stage 데이터 추출
 			stageIndex := int(stage["stage_index"].(float64))
-			prompt := stage["prompt"].(string)
+			basePrompt := stage["prompt"].(string)
 			quantity := int(stage["quantity"].(float64))
+
+			// 카메라 앵글과 샷 타입 추출
+			cameraAngle, _ := stage["cameraAngle"].(string)
+			shotType, _ := stage["shotType"].(string)
 
 			// aspect-ratio 추출 (기본값: "16:9")
 			aspectRatio := "16:9"
@@ -459,7 +524,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				aspectRatio = ar
 			}
 
-			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s (parallel)", stageIndex+1, len(stages), quantity, aspectRatio)
+			log.Printf("🎬 Stage %d/%d: Processing %d images [%s + %s] aspect-ratio %s (parallel)",
+				stageIndex+1, len(stages), quantity, cameraAngle, shotType, aspectRatio)
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			var stageCategories *ImageCategories
@@ -545,6 +611,117 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				return
 			}
 
+			// basePrompt 정제: 앞부분의 "Eye Level, ECU." 같은 텍스트 제거
+			cleanedBasePrompt := basePrompt
+			// 정규식으로 앞부분의 카메라 앵글/샷 타입 텍스트 제거
+			// 패턴: "Eye Level, ECU. " 또는 "Low Angle, MS. " 등
+			if idx := strings.Index(basePrompt, ". "); idx != -1 && idx < 50 {
+				// 첫 번째 ". " 이전 부분이 50자 미만이면 카메라/샷 설정일 가능성 높음
+				potentialPrefix := basePrompt[:idx+2] // ". " 포함
+				// "," 가 포함되어 있으면 카메라 앵글/샷 타입 형식
+				if strings.Contains(potentialPrefix, ",") {
+					cleanedBasePrompt = strings.TrimSpace(basePrompt[idx+2:])
+					log.Printf("🧹 Removed camera/shot prefix from basePrompt: '%s'", potentialPrefix)
+				}
+			}
+
+			// 구조화된 프롬프트 생성 (processSingleBatch와 동일한 로직)
+			var enhancedPrompt string
+
+			if cameraAngle != "" && shotType != "" {
+				// Camera Angle 매핑
+				cameraAngleTextMap := map[string]string{
+					"front":          "Front-facing angle",
+					"side":           "Side profile 90-degree angle",
+					"profile":        "Profile angle",
+					"back":           "Back view angle",
+					"eye-level":      "Eye-level angle",
+					"low-angle":      "Low-angle (camera below subject looking up)",
+					"high-angle":     "High-angle (camera above subject looking down)",
+					"over-shoulder":  "Over-the-shoulder angle",
+					"dutch-angle":    "Dutch angle (tilted)",
+					"birds-eye":      "Bird's eye view (top-down)",
+				}
+
+				// Shot Type 매핑
+				shotTypeTextMap := map[string]string{
+					"tight":  "Tight shot",
+					"middle": "Medium shot",
+					"full":   "Full body shot",
+					"ECU":    "ECU (Extreme Close-Up)",
+					"CU":     "CU (Close-Up)",
+					"MS":     "MS (Medium Shot)",
+					"FS":     "FS (Full Shot)",
+					"WS":     "WS (Wide Shot)",
+				}
+
+				cameraAngleText := cameraAngleTextMap[cameraAngle]
+				if cameraAngleText == "" {
+					cameraAngleText = "Front view"
+				}
+
+				shotTypeText := shotTypeTextMap[shotType]
+				if shotTypeText == "" {
+					shotTypeText = "full body shot"
+				}
+
+				// 샷 타입별 프레이밍 지시
+				var frameInstruction string
+				if shotType == "ECU" {
+					frameInstruction = "FRAME ONLY THE EYES (or hands/lips if specified). Eyes fill 80-90% of entire frame. Ultra-tight macro crop."
+				} else if shotType == "CU" {
+					frameInstruction = "FRAME FROM NECK UP. Full face fills 70-80% of frame. Head top to neck/shoulders bottom."
+				} else if shotType == "MS" {
+					frameInstruction = "FRAME FROM WAIST UP. Upper body and head visible. Bottom cuts at waist level."
+				} else if shotType == "FS" {
+					frameInstruction = "FRAME ENTIRE BODY HEAD TO TOE. Full person fits in frame with small margins."
+				} else if shotType == "WS" {
+					frameInstruction = "FRAME SUBJECT SMALL IN ENVIRONMENT. Person 20-40% of frame, environment dominates."
+				} else {
+					frameInstruction = "Standard cinematic framing."
+				}
+
+				// 앵글 지시
+				var angleInstruction string
+				if cameraAngle == "eye-level" {
+					angleInstruction = "Camera at subject's eye height."
+				} else if cameraAngle == "low-angle" {
+					angleInstruction = "Camera below subject looking up."
+				} else if cameraAngle == "high-angle" {
+					angleInstruction = "Camera above subject looking down."
+				} else if cameraAngle == "over-shoulder" {
+					angleInstruction = "Camera behind subject's shoulder."
+				} else if cameraAngle == "dutch-angle" {
+					angleInstruction = "Camera tilted for diagonal horizon."
+				} else if cameraAngle == "birds-eye" {
+					angleInstruction = "Camera directly overhead looking straight down."
+				} else {
+					angleInstruction = cameraAngleText
+				}
+
+				enhancedPrompt = fmt.Sprintf(`SHOT TYPE: %s
+FRAMING: %s
+CAMERA ANGLE: %s
+
+SCENE: %s
+
+MANDATORY TECHNICAL SPECS:
+- 100%% photorealistic (looks like real photograph from film set)
+- Cinematic film production aesthetic
+- Natural lighting and shadows
+- Professional cinematography
+- CRITICAL: Follow the FRAMING instruction exactly - do not deviate`,
+					shotTypeText, frameInstruction, angleInstruction, cleanedBasePrompt)
+
+				log.Printf("━━━━━━━━━━ 🎯 Stage %d ━━━━━━━━━━", stageIndex)
+				log.Printf("📐 Angle: [%s] → %s", cameraAngle, angleInstruction)
+				log.Printf("📷 Shot: [%s] → %s", shotType, frameInstruction)
+				log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			} else {
+				// 카메라 앵글/샷 타입 정보가 없으면 basePrompt 사용
+				enhancedPrompt = basePrompt
+			}
+
 			// Stage별 이미지 생성 루프
 			stageGeneratedIds := []int{}
 
@@ -552,7 +729,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, enhancedPrompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
 					continue

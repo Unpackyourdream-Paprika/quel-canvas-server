@@ -26,16 +26,26 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var mainInstruction string
 	if hasModel {
 		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
-			"You are a world-class fashion photographer shooting an editorial campaign.\n" +
+		mainInstruction = "[HIGH-FASHION EDITORIAL PHOTOGRAPHER'S APPROACH]\n" +
+			"You are a world-class fashion photographer shooting a high-end editorial campaign.\n" +
+			"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n" +
 			"The PERSON is the HERO - their natural proportions are SACRED and CANNOT be distorted.\n" +
 			"The environment serves the subject, NOT the other way around.\n\n" +
-			"Create ONE photorealistic photograph with DRAMATIC CINEMATIC STORYTELLING:\n" +
+			"Create ONE photorealistic photograph with HIGH-FASHION EDITORIAL STYLE:\n" +
+			"• ONLY ONE MODEL - this is a solo fashion editorial shoot\n" +
+			"• FULL BODY SHOT - model's ENTIRE body from head to TOE visible in frame\n" +
+			"• FEET MUST BE VISIBLE - both feet and shoes completely in frame, NOT cut off\n" +
+			"• CHIC and SOPHISTICATED fashion model pose - confident, elegant, striking\n" +
+			"• SERIOUS FACIAL EXPRESSION - stern/fierce/intense gaze, stoic attitude, NO SMILING EVER\n" +
+			"• Model's face is SERIOUS - closed mouth or slightly parted, intense eyes, editorial confidence\n" +
+			"• ABSOLUTELY NO SMILING - this is critical (model must look stern, fierce, or neutral)\n" +
+			"• STRONG POSTURE - elongated body lines, poised stance, dynamic angles\n" +
 			"• The model wears ALL clothing and accessories in ONE complete outfit\n" +
-			"• Dynamic pose and angle - NOT static or stiff\n" +
-			"• Environmental storytelling - use the location for drama\n" +
-			"• Directional lighting creates mood and depth\n" +
-			"• This is a MOMENT full of energy and narrative\n\n"
+			"• Fashion model attitude - NOT casual snapshot, NOT relaxed candid style\n" +
+			"• Vogue/Harper's Bazaar editorial aesthetic - high fashion, not lifestyle photography\n" +
+			"• Environmental storytelling - use the location for drama and visual impact\n" +
+			"• Directional lighting creates mood, depth, and sculpts the model's features\n" +
+			"• This is a MOMENT of high-fashion drama and editorial sophistication\n\n"
 	} else if hasProducts {
 		// 프로덕트만 → 프로덕트 포토그래피
 		mainInstruction = "[CINEMATIC PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
@@ -171,10 +181,15 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"❌ The image must be ONE continuous scene without ANY vertical dividers\n\n" +
 		"⚠️ NO DUAL/SPLIT COMPOSITION - THIS IS NOT A COMPARISON IMAGE:\n" +
 		"❌ DO NOT show the same character twice (left side vs right side)\n" +
+		"❌ DO NOT show TWO different people (one on left, one on right)\n" +
 		"❌ DO NOT create before/after, comparison, or variation layouts\n" +
 		"❌ DO NOT duplicate the subject on both sides with different colors/styles\n" +
 		"❌ This is ONE SINGLE MOMENT with ONE CHARACTER in ONE UNIFIED SCENE\n" +
 		"❌ Left side and right side must be PART OF THE SAME ENVIRONMENT, not separate panels\n\n" +
+		"⚠️ ONLY ONE PERSON MAXIMUM:\n" +
+		"❌ DO NOT show multiple models, friends, or people together\n" +
+		"❌ DO NOT show background people or crowds visible in the frame\n" +
+		"❌ This is SOLO photography - if there's a model, they are ALONE\n\n" +
 		"⚠️ SINGLE UNIFIED COMPOSITION ONLY:\n" +
 		"✓ ONE continuous background that flows naturally across the entire frame\n" +
 		"✓ ONE character in ONE pose at ONE moment in time\n" +
@@ -184,9 +199,19 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if hasModel {
 		// 모델 있는 케이스 - 드라마틱 패션 에디토리얼 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
+		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS - HIGH-FASHION EDITORIAL]\n" +
+			"🎯 ONLY ONE MODEL in the photograph - this is a solo fashion editorial\n" +
+			"🎯 HIGH-FASHION MODEL ATTITUDE - chic, sophisticated, confident, striking\n" +
+			"🎯 PROFESSIONAL FASHION POSE - elongated lines, strong posture, editorial stance\n" +
+			"🎯 SERIOUS FACIAL EXPRESSION MANDATORY - fierce/stern/intense gaze, stoic face (NEVER SMILING)\n" +
+			"🎯 Model's face shows INTENSITY - serious eyes, closed or slightly parted mouth, NO smile\n" +
+			"🎯 ABSOLUTELY NO SMILING - this will ruin the editorial aesthetic (high fashion = serious)\n" +
 			"🎯 Person's body proportions are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
+			"🎯 FULL BODY SHOT MANDATORY - model's ENTIRE BODY must be visible from head to TOE\n" +
+			"🎯 FEET MUST BE VISIBLE - both feet and toes MUST appear in the frame (critical for full shot)\n" +
+			"🎯 DO NOT crop at ankles or calves - show complete legs down to the shoes and feet\n" +
 			"🎯 The subject is the STAR - everything else supports their presence\n" +
+			"🎯 Vogue/Harper's Bazaar aesthetic - high fashion editorial, NOT lifestyle photography\n" +
 			"🎯 Dramatic composition with ENERGY and MOVEMENT\n" +
 			"🎯 Environmental storytelling - what's the narrative of this moment?\n" +
 			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
@@ -194,9 +219,18 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"🎯 Film photography aesthetic - not digital, not flat\n" +
 			"🎯 Dynamic framing - use negative space creatively\n\n" +
 			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
+			"❌ TWO or more people in the frame - this is NOT a group shot\n" +
+			"❌ Multiple models, friends, or background people visible\n" +
+			"❌ CROPPING AT ANKLES/CALVES - the model's feet MUST be visible in the frame\n" +
+			"❌ CUT OFF FEET - both feet and shoes must appear completely in the photograph\n" +
+			"❌ Bottom of frame cutting through legs - leave space below the feet\n" +
 			"❌ ANY distortion of the person's proportions (stretched, compressed, squashed)\n" +
 			"❌ Person looking pasted, floating, or artificially placed\n" +
-			"❌ Static, boring, catalog-style poses\n" +
+			"❌ Casual, relaxed poses - this is HIGH FASHION, not lifestyle photography\n" +
+			"❌ Static, boring, catalog-style poses without editorial attitude\n" +
+			"❌ SMILING OR HAPPY EXPRESSION - model must be serious/fierce (NOT friendly, NOT smiling)\n" +
+			"❌ Teeth showing in a smile - mouth should be closed or neutral\n" +
+			"❌ Cheerful, joyful, or pleasant facial expression - this is editorial, not lifestyle\n" +
 			"❌ Centered, symmetrical composition without drama\n" +
 			"❌ Flat lighting that doesn't create mood"
 	} else if hasProducts {
@@ -229,14 +263,69 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"❌ Flat, boring composition without depth"
 	}
 
-	// 16:9 비율 전용 추가 지시사항
+	// aspect ratio별 추가 지시사항
 	var aspectRatioInstruction string
-	if aspectRatio == "16:9" {
+	if aspectRatio == "9:16" {
+		if hasModel {
+			// 모델이 있는 9:16 케이스 (세로 포맷 - 패션 에디토리얼)
+			aspectRatioInstruction = "\n\n[9:16 VERTICAL FASHION EDITORIAL - FULL BODY PORTRAIT]\n" +
+				"This is a VERTICAL PORTRAIT format - perfect for showcasing the model's full body.\n\n" +
+				"🎬 VERTICAL FULL BODY COMPOSITION:\n" +
+				"✓ CRITICAL: Model's ENTIRE BODY from head to TOE must fit in the vertical frame\n" +
+				"✓ FEET MUST BE VISIBLE - both feet and shoes completely in frame at the bottom\n" +
+				"✓ Leave space BELOW the feet - do NOT crop at ankles or calves\n" +
+				"✓ Use the HEIGHT to show the model's full silhouette and outfit\n" +
+				"✓ Model positioned with room at top (hair/head space) and bottom (feet with ground)\n" +
+				"✓ Dynamic vertical pose - elongated lines, fashion model stance\n" +
+				"✓ Background provides context without overwhelming the subject\n\n" +
+				"🎬 FRAMING REQUIREMENTS:\n" +
+				"⚠️ Top of frame: room above head (not cropping hair)\n" +
+				"⚠️ Bottom of frame: model's feet FULLY VISIBLE with space below\n" +
+				"⚠️ This is a FULL BODY shot - show complete outfit from head to toe\n" +
+				"⚠️ Model should occupy 60-75% of frame height - enough to see all details\n\n" +
+				"🎬 FASHION EDITORIAL EXECUTION:\n" +
+				"✓ Directional lighting sculpts the model's features and outfit\n" +
+				"✓ Film photography aesthetic with natural color grading\n" +
+				"✓ Depth of field emphasizes the model while showing environment\n" +
+				"✓ Rule of thirds or dynamic composition - NOT centered\n\n" +
+				"GOAL: A stunning vertical fashion editorial like Vogue or Harper's Bazaar - \n" +
+				"capturing the model's complete look from head to toe with high-fashion sophistication."
+		} else if hasProducts {
+			// 프로덕트 샷 9:16 케이스
+			aspectRatioInstruction = "\n\n[9:16 VERTICAL PRODUCT SHOT]\n" +
+				"This is a VERTICAL format product shot - use the height for elegant storytelling.\n\n" +
+				"🎬 VERTICAL PRODUCT COMPOSITION:\n" +
+				"✓ Products arranged to utilize the vertical space creatively\n" +
+				"✓ Layers of depth from top to bottom\n" +
+				"✓ Leading lines guide the eye through the composition\n" +
+				"✓ Negative space creates elegance and breathing room\n\n" +
+				"🎬 EXECUTION:\n" +
+				"✓ Directional lighting creates drama and highlights textures\n" +
+				"✓ Film grain and natural color grading\n" +
+				"✓ Depth of field emphasizes products\n\n" +
+				"GOAL: A stunning vertical product shot like high-end editorial still life photography."
+		} else {
+			// 배경만 있는 9:16 케이스
+			aspectRatioInstruction = "\n\n[9:16 VERTICAL LANDSCAPE SHOT]\n" +
+				"This is a VERTICAL environmental shot - showcase the location's height and atmosphere.\n\n" +
+				"🎬 VERTICAL COMPOSITION:\n" +
+				"✓ Use the HEIGHT to capture vertical elements and scale\n" +
+				"✓ Layers of depth from foreground to background\n" +
+				"✓ Asymmetric composition creates visual interest\n\n" +
+				"🎬 EXECUTION:\n" +
+				"✓ Directional lighting creates mood and drama\n" +
+				"✓ Film grain and natural color grading\n\n" +
+				"GOAL: A stunning vertical environmental shot."
+		}
+	} else if aspectRatio == "16:9" {
 		if hasModel {
 			// 모델이 있는 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
 				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
 				"🎬 DRAMATIC WIDE COMPOSITION:\n" +
+				"✓ CRITICAL: Model's ENTIRE BODY from head to TOE must be visible in the wide frame\n" +
+				"✓ FEET MUST BE VISIBLE - both feet and shoes completely in frame at the bottom\n" +
+				"✓ Leave space BELOW the feet - do NOT crop at ankles or calves\n" +
 				"✓ Subject positioned off-center (rule of thirds) creating dynamic tension\n" +
 				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
 				"✓ Layers of depth - foreground elements, subject, background scenery\n" +
@@ -245,6 +334,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"🎬 SUBJECT INTEGRITY IN WIDE FRAME:\n" +
 				"⚠️ The wide frame is NOT an excuse to distort proportions\n" +
 				"⚠️ Person maintains PERFECT natural proportions - just smaller in frame if needed\n" +
+				"⚠️ FULL BODY shot - show complete outfit from head to toe with feet visible\n" +
 				"⚠️ Use the space to tell a STORY, not to force-fit the subject\n\n" +
 				"🎬 CINEMATIC EXECUTION:\n" +
 				"✓ Directional lighting creates mood across the wide frame\n" +
@@ -287,14 +377,114 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"GOAL: A stunning environmental shot that tells a story without people - \n" +
 				"like a cinematic establishing shot from a high-budget film."
 		}
+	} else {
+		// 1:1 (square) 및 기타 비율
+		if hasModel {
+			// 모델이 있는 1:1 케이스 (정사각형 - 패션 에디토리얼)
+			aspectRatioInstruction = "\n\n[1:1 SQUARE FASHION EDITORIAL - FULL BODY PORTRAIT]\n" +
+				"This is a SQUARE format - perfect for balanced fashion editorial composition.\n\n" +
+				"🎬 SQUARE FULL BODY COMPOSITION:\n" +
+				"✓ CRITICAL: Model's ENTIRE BODY from head to TOE must fit in the square frame\n" +
+				"✓ FEET MUST BE VISIBLE - both feet and shoes completely in frame at the bottom\n" +
+				"✓ Leave space BELOW the feet - do NOT crop at ankles or calves\n" +
+				"✓ Balanced composition utilizing the square format\n" +
+				"✓ Model positioned with room at top and bottom for full body visibility\n" +
+				"✓ Dynamic pose - fashion model stance with editorial confidence\n" +
+				"✓ Background provides context without overwhelming the subject\n\n" +
+				"🎬 FRAMING REQUIREMENTS:\n" +
+				"⚠️ Top of frame: room above head (not cropping hair)\n" +
+				"⚠️ Bottom of frame: model's feet FULLY VISIBLE with space below\n" +
+				"⚠️ This is a FULL BODY shot - show complete outfit from head to toe\n" +
+				"⚠️ Model should occupy appropriate frame space - enough to see all details\n\n" +
+				"🎬 FASHION EDITORIAL EXECUTION:\n" +
+				"✓ Directional lighting sculpts the model's features and outfit\n" +
+				"✓ Film photography aesthetic with natural color grading\n" +
+				"✓ Depth of field emphasizes the model while showing environment\n" +
+				"✓ Dynamic composition - NOT static or centered\n\n" +
+				"GOAL: A stunning square fashion editorial showcasing the model's complete look from head to toe."
+		} else if hasProducts {
+			// 프로덕트 샷 1:1 케이스
+			aspectRatioInstruction = "\n\n[1:1 SQUARE PRODUCT SHOT]\n" +
+				"This is a SQUARE format product shot - balanced and elegant.\n\n" +
+				"🎬 SQUARE PRODUCT COMPOSITION:\n" +
+				"✓ Products arranged to utilize the square space creatively\n" +
+				"✓ Balanced composition with artistic arrangement\n" +
+				"✓ Negative space creates elegance\n\n" +
+				"🎬 EXECUTION:\n" +
+				"✓ Directional lighting creates drama and highlights textures\n" +
+				"✓ Film grain and natural color grading\n\n" +
+				"GOAL: A stunning square product shot."
+		} else {
+			// 배경만 있는 1:1 케이스
+			aspectRatioInstruction = "\n\n[1:1 SQUARE LANDSCAPE SHOT]\n" +
+				"This is a SQUARE environmental shot - balanced composition.\n\n" +
+				"🎬 SQUARE COMPOSITION:\n" +
+				"✓ Balanced framing utilizing the square format\n" +
+				"✓ Layers of depth create visual interest\n\n" +
+				"🎬 EXECUTION:\n" +
+				"✓ Directional lighting creates mood\n" +
+				"✓ Film grain and natural color grading\n\n" +
+				"GOAL: A stunning square environmental shot."
+		}
 	}
 
-	// 최종 조합: 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
-	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+	// ⚠️ 최우선 지시사항 - 맨 앞에 배치
+	criticalHeader := "⚠️⚠️⚠️ CRITICAL REQUIREMENTS - ABSOLUTE PRIORITY - IMAGE WILL BE REJECTED IF NOT FOLLOWED ⚠️⚠️⚠️\n\n" +
+		"[MANDATORY - FEET MUST BE VISIBLE]:\n" +
+		"🚨 BOTH FEET MUST APPEAR COMPLETELY IN THE FRAME - NO EXCEPTIONS\n" +
+		"🚨 DO NOT CROP AT ANKLES, CALVES, OR KNEES\n" +
+		"🚨 LEAVE SPACE BELOW THE FEET - show ground/floor beneath the shoes\n" +
+		"🚨 FULL BODY means HEAD TO TOE - every part of the body must be visible\n" +
+		"🚨 Bottom edge of frame MUST be BELOW the model's feet, NOT cutting through legs\n\n" +
+		"[MANDATORY - FACIAL EXPRESSION - ABSOLUTE REQUIREMENT]:\n" +
+		"🚨🚨🚨 MODEL MUST NOT SMILE - THIS IS NON-NEGOTIABLE 🚨🚨🚨\n" +
+		"🚨 ZERO TOLERANCE for smiling - image will be REJECTED if model is smiling\n" +
+		"🚨 NO happy expression whatsoever - NO grin, NO teeth showing, NO friendly smile\n" +
+		"🚨 NO slight smile, NO subtle smile, NO hint of smile - NONE AT ALL\n" +
+		"🚨 REQUIRED EXPRESSION: Serious, stern, fierce, intense, or stoic ONLY\n" +
+		"🚨 Model should look like a professional runway model - INTENSE gaze, NOT happy\n" +
+		"🚨 Think Vogue/Harper's Bazaar editorial - models are FIERCE and SERIOUS, never cheerful\n" +
+		"🚨 Mouth should be CLOSED or slightly parted - NEVER showing teeth in a smile\n" +
+		"🚨 Eyes should be INTENSE and FOCUSED - serious editorial confidence\n\n" +
+		"[NEGATIVE PROMPT - ABSOLUTELY FORBIDDEN FACIAL EXPRESSIONS]:\n" +
+		"❌❌❌ SMILING - model is smiling, happy smile, friendly smile, subtle smile, slight smile\n" +
+		"❌❌❌ GRINNING - model is grinning, showing teeth, big smile, wide smile\n" +
+		"❌❌❌ HAPPY EXPRESSION - cheerful look, joyful expression, pleasant smile\n" +
+		"❌❌❌ CASUAL FRIENDLY FACE - relaxed smile, candid smile, lifestyle photography smile\n" +
+		"❌❌❌ TEETH VISIBLE IN SMILE - any teeth showing from smiling\n\n" +
+		"[FORBIDDEN - IMAGE WILL BE REJECTED]:\n" +
+		"❌ NO left-right split, NO side-by-side layout, NO duplicate subject on both sides\n" +
+		"❌ NO grid, NO collage, NO comparison view, NO before/after layout\n" +
+		"❌ NO vertical dividing line, NO center split, NO symmetrical duplication\n" +
+		"❌ NO white/gray borders, NO letterboxing, NO empty margins on any side\n" +
+		"❌ NO multiple identical poses, NO mirrored images, NO panel divisions\n" +
+		"❌ NO separate product shots arranged in a grid or catalog layout\n" +
+		"❌ ONLY ONE PERSON in the photograph - NO multiple models, NO two people, NO groups\n" +
+		"❌ NO SMILING - model must have serious/fierce fashion expression (CRITICAL)\n" +
+		"❌ NO CROPPED FEET - both feet must be fully visible in frame\n\n" +
+		"[REQUIRED - MUST GENERATE THIS WAY]:\n" +
+		"✓ ONE single continuous photograph taken with ONE camera shutter\n" +
+		"✓ ONE unified moment in time - NOT two or more moments combined\n" +
+		"✓ ONLY ONE MODEL in the entire frame - this is a solo fashion editorial\n" +
+		"✓ MODEL'S FEET FULLY VISIBLE with space below them\n" +
+		"✓ SERIOUS/STERN/FIERCE expression - stern face, serious eyes, intense gaze\n" +
+		"✓ MODEL'S FACE shows editorial confidence - NOT happiness, NOT friendliness\n" +
+		"✓ FILL entire frame edge-to-edge with NO empty space\n" +
+		"✓ Natural asymmetric composition - left side MUST be different from right side\n" +
+		"✓ Professional editorial style - real single-shot photography only\n\n"
 
+	// 최종 조합: ⚠️ 콜라주 방지 최우선 → 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
+	var finalPrompt string
+
+	// 1️⃣ 크리티컬 요구사항을 맨 앞에 배치 (CRITICAL REQUIREMENTS - FEET VISIBLE & NO SMILING)
 	if userPrompt != "" {
-		finalPrompt += "\n\n[ADDITIONAL STYLING]\n" + userPrompt
+		finalPrompt = criticalHeader + "[ADDITIONAL STYLING]\n" + userPrompt + "\n\n"
+	} else {
+		finalPrompt = criticalHeader
 	}
+
+	// 2️⃣ 나머지 지시사항들
+	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
 
 	return finalPrompt
 }

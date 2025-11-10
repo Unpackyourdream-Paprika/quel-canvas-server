@@ -11,7 +11,9 @@
       "Bash(brew install:*)",
       "Bash(brew services start:*)",
       "Bash(go run:*)",
-      "Bash(go install:*)"
+      "Bash(go install:*)",
+      "Bash(~/.zshrc)",
+      "Bash(~/go/bin/air:*)"
     ],
     "deny": [],
     "ask": []
