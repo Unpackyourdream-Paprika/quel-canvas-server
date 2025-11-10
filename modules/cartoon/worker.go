@@ -218,9 +218,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		}
 	}
 
-	// 최소한 의류 이미지는 있어야 함
-	if len(categories.Clothing) == 0 && categories.Model == nil {
-		log.Printf("❌ No clothing or model images found")
+	// Cartoon 모듈 - 캐릭터(Model)가 반드시 필요
+	if categories.Model == nil {
+		log.Printf("❌ CRITICAL: Cartoon module requires CHARACTER (Model) image")
+		log.Printf("❌ GLOBAL node must include character appearance reference")
+		log.Printf("❌ Cannot generate webtoon/cartoon without character - Job failed")
 		service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
 		return
 	}
@@ -234,19 +236,20 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 (시네마틱 톤)
+	// Camera Angle 매핑 - Cartoon/Webtoon 전용
 	cameraAngleTextMap := map[string]string{
-		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
-		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
-		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
-		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
+		"front":   "Front-facing character angle, webtoon/manga illustration style, character looking at viewer with expressive eyes, clean linework and vibrant colors",
+		"side":    "Side profile character angle, webtoon/manga illustration style, 90-degree side view showing character profile, comic art composition",
+		"profile": "Character portrait angle, webtoon/manga style front view, expressive facial features and personality, anime/comic illustration aesthetic",
+		"dynamic": "Dynamic action angle, energetic perspective with movement and drama, anime/cartoon style composition with impact and motion lines",
 	}
 
-	// Shot Type 매핑 (시네마틱 톤)
+	// Shot Type 매핑 - Cartoon/Webtoon 전용
 	shotTypeTextMap := map[string]string{
-		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
-		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
-		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
+		"bust":      "Bust shot, webtoon/manga character framing from chest up, portrait composition showing face and upper body clearly with clean lines",
+		"full-body": "Full body shot, complete webtoon/manga character from head to toe, character design composition showing entire figure and outfit in comic style",
+		"action":    "Action shot, dynamic pose with movement and energy, anime/cartoon action sequence with motion lines and impact, emphasizes dramatic motion",
+		"portrait":  "Portrait shot, webtoon/manga character headshot with emotional expression, close-up emphasizing facial features and eyes in comic art style",
 	}
 
 	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))
@@ -283,9 +286,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				shotTypeText = "full body shot" // 기본값
 			}
 
-			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-				". Create a single unified photorealistic cinematic composition where the model wears all clothing and accessories together in one complete outfit. " +
-				"Film photography aesthetic with natural storytelling composition."
+			// basePrompt는 사용자의 캐릭터 묘사 (표정, 제스처, 상황)
+			// 앵글/샷 정보만 추가, 스타일은 GenerateDynamicPrompt에서 자동 처리
+			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
@@ -542,6 +545,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 			} else {
 				log.Printf("❌ Stage %d: No individualImageAttachIds or mergedImageAttachId found", stageIndex)
+				return
+			}
+
+			// Cartoon 모듈 - 캐릭터(Model) 검증
+			if stageCategories.Model == nil {
+				log.Printf("❌ CRITICAL: Stage %d - Cartoon module requires CHARACTER (Model) image", stageIndex)
+				log.Printf("❌ GLOBAL node must include character appearance reference")
+				log.Printf("❌ Cannot generate webtoon/cartoon without character - Stage skipped")
 				return
 			}
 

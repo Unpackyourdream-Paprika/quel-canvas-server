@@ -13,7 +13,7 @@ type PromptCategories struct {
 	Background  []byte   // 배경 이미지 (최대 1장)
 }
 
-// GenerateDynamicPrompt - Fashion 모듈 전용 프롬프트 생성
+// GenerateDynamicPrompt - Cinema 모듈 전용 프롬프트 생성
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
@@ -22,43 +22,50 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	hasProducts := hasClothing || hasAccessories
 	hasBackground := categories.Background != nil
 
-	// 케이스별 메인 지시사항
+	// 케이스별 메인 지시사항 - Cinema 전용
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
-			"You are a world-class fashion photographer shooting an editorial campaign.\n" +
-			"The PERSON is the HERO - their natural proportions are SACRED and CANNOT be distorted.\n" +
-			"The environment serves the subject, NOT the other way around.\n\n" +
-			"Create ONE photorealistic photograph with DRAMATIC CINEMATIC STORYTELLING:\n" +
-			"• The model wears ALL clothing and accessories in ONE complete outfit\n" +
-			"• Dynamic pose and angle - NOT static or stiff\n" +
-			"• Environmental storytelling - use the location for drama\n" +
-			"• Directional lighting creates mood and depth\n" +
-			"• This is a MOMENT full of energy and narrative\n\n"
+		// 모델 있음 → 영화 장면 / 시네마틱 프레임
+		mainInstruction = "⚠️ ABSOLUTE PHOTOREALISM REQUIREMENT - THIS IS NOT OPTIONAL:\n" +
+			"Generate a 100% PHOTOREALISTIC image that looks like it was captured by a REAL CAMERA.\n" +
+			"• ZERO artistic interpretation - pure photography\n" +
+			"• ZERO illustration, painting, or stylized rendering\n" +
+			"• Must look INDISTINGUISHABLE from a real photograph taken on film set\n" +
+			"• Real skin texture, real fabric texture, real lighting physics\n" +
+			"• If someone cannot tell this from a real photo, you succeeded\n\n" +
+			"[CINEMA DIRECTOR'S DRAMATIC FRAME]\n" +
+			"You are a world-class cinematographer shooting a high-budget film scene.\n" +
+			"The CHARACTER is the emotional center - their natural proportions and presence drive the narrative.\n" +
+			"Every frame tells a story through composition, lighting, and atmosphere.\n\n" +
+			"Create ONE photorealistic cinematic film frame with DRAMATIC STORYTELLING:\n" +
+			"• The character exists in a specific moment of the narrative\n" +
+			"• Camera angle and framing create emotional impact\n" +
+			"• Environmental storytelling - location reveals character and mood\n" +
+			"• Cinematic lighting creates depth, drama, and atmosphere\n" +
+			"• This is a FILM STILL from a high-production movie scene\n\n"
 	} else if hasProducts {
-		// 프로덕트만 → 프로덕트 포토그래피
-		mainInstruction = "[CINEMATIC PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class product photographer creating editorial-style still life.\n" +
-			"The PRODUCTS are the STARS - showcase them as beautiful objects with perfect details.\n" +
-			"⚠️ CRITICAL: NO people or models in this shot - products only.\n\n" +
-			"Create ONE photorealistic photograph with ARTISTIC STORYTELLING:\n" +
-			"• Artistic arrangement of all items - creative composition\n" +
-			"• Dramatic lighting that highlights textures and materials\n" +
-			"• Environmental context (if location provided) or studio elegance\n" +
-			"• Directional lighting creates depth and mood\n" +
-			"• This is high-end product photography with cinematic quality\n\n"
+		// 프로덕트만 → 영화 소품 / 시네마틱 오브젝트
+		mainInstruction = "[CINEMATIC PROP PHOTOGRAPHER'S APPROACH]\n" +
+			"You are a cinematic prop photographer creating dramatic still life for film production.\n" +
+			"The OBJECTS are narrative elements - they tell a story through presence and arrangement.\n" +
+			"⚠️ CRITICAL: NO people or characters in this shot - objects only.\n\n" +
+			"Create ONE photorealistic cinematic still life with NARRATIVE WEIGHT:\n" +
+			"• Objects arranged to suggest story and context\n" +
+			"• Dramatic film lighting that creates mood and mystery\n" +
+			"• Environmental context suggests a larger narrative\n" +
+			"• Directional lighting creates cinematic depth\n" +
+			"• This is a KEY PROP SHOT from a film production\n\n"
 	} else {
-		// 배경만 → 환경 포토그래피
-		mainInstruction = "[CINEMATIC ENVIRONMENTAL PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class environmental photographer capturing pure atmosphere.\n" +
-			"The LOCATION is the SUBJECT - showcase its mood, scale, and character.\n" +
-			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n\n" +
-			"Create ONE photorealistic photograph with ATMOSPHERIC STORYTELLING:\n" +
-			"• Dramatic composition that captures the location's essence\n" +
-			"• Layers of depth - foreground, midground, background\n" +
-			"• Directional lighting creates mood and drama\n" +
-			"• This is cinematic environmental photography with narrative quality\n\n"
+		// 배경만 → 영화 로케이션 / 시네마틱 환경
+		mainInstruction = "[CINEMATIC LOCATION SCOUT'S APPROACH]\n" +
+			"You are a cinematographer capturing an establishing shot for a film.\n" +
+			"The LOCATION is a character itself - it sets tone, mood, and narrative context.\n" +
+			"⚠️ CRITICAL: NO people or objects in this shot - pure environment.\n\n" +
+			"Create ONE photorealistic cinematic establishing shot with ATMOSPHERIC PRESENCE:\n" +
+			"• Dramatic composition that establishes the world of the film\n" +
+			"• Layers of depth create cinematic scale\n" +
+			"• Film lighting creates mood, time of day, and emotional tone\n" +
+			"• This is an ESTABLISHING SHOT from a high-budget film\n\n"
 	}
 
 	var instructions []string
@@ -89,72 +96,73 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		imageIndex++
 	}
 
-	// 시네마틱 구성 지시사항
+	// 시네마틱 구성 지시사항 - Cinema 전용
 	var compositionInstruction string
 
-	// 케이스 1: 모델 이미지가 있는 경우 → 모델 착용 샷 (패션 에디토리얼)
+	// 케이스 1: 모델 이미지가 있는 경우 → 영화 장면의 캐릭터
 	if hasModel {
-		compositionInstruction = "\n[FASHION EDITORIAL COMPOSITION]\n" +
-			"Generate ONE photorealistic film photograph showing the referenced model wearing the complete outfit (all clothing + accessories).\n" +
-			"This is a high-end fashion editorial shoot with the model as the star."
+		compositionInstruction = "\n[CINEMATIC FILM SCENE COMPOSITION]\n" +
+			"Generate ONE photorealistic film frame showing the referenced character in a dramatic moment.\n" +
+			"This is a HIGH-BUDGET MOVIE SCENE with the character as the emotional center of the narrative.\n" +
+			"Film production quality with cinematic lighting, color grading, and composition."
 	} else if hasProducts {
-		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
-		compositionInstruction = "\n[CINEMATIC PRODUCT PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic product photograph showcasing the clothing and accessories as OBJECTS.\n" +
-			"⚠️ DO NOT add any people, models, or human figures.\n" +
-			"⚠️ Display the items artistically arranged - like high-end product photography.\n"
+		// 케이스 2: 모델 없이 오브젝트만 → 영화 소품 샷
+		compositionInstruction = "\n[CINEMATIC PROP SHOT]\n" +
+			"Generate ONE photorealistic film still showcasing the objects as KEY NARRATIVE PROPS.\n" +
+			"⚠️ DO NOT add any people, characters, or human figures.\n" +
+			"⚠️ Display the items as if they are important props in a film scene.\n"
 
 		if hasBackground {
-			compositionInstruction += "The products are placed naturally within the referenced environment - " +
-				"as if styled by a professional photographer on location.\n" +
-				"The items interact with the space (resting on surfaces, hanging naturally, artfully positioned)."
+			compositionInstruction += "The props are placed naturally within the cinematic environment - " +
+				"as if arranged by a production designer for a key film moment.\n" +
+				"The objects tell a story through their placement and interaction with the space."
 		} else {
-			compositionInstruction += "Create a stunning studio product shot with professional lighting and composition.\n" +
-				"The items are arranged artistically - flat lay, suspended, or elegantly displayed."
+			compositionInstruction += "Create a dramatic studio prop shot with cinematic lighting and composition.\n" +
+				"The objects are arranged to suggest narrative weight and story context."
 		}
 	} else if hasBackground {
-		// 케이스 3: 배경만 → 환경 사진
-		compositionInstruction = "\n[CINEMATIC ENVIRONMENTAL PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic cinematic photograph of the referenced environment.\n" +
-			"⚠️ DO NOT add any people, models, or products to this scene.\n" +
-			"Focus on capturing the atmosphere, lighting, and mood of the location itself."
+		// 케이스 3: 배경만 → 영화 로케이션 샷
+		compositionInstruction = "\n[CINEMATIC ESTABLISHING SHOT]\n" +
+			"Generate ONE photorealistic film establishing shot of the referenced location.\n" +
+			"⚠️ DO NOT add any people, characters, or props to this scene.\n" +
+			"Focus on capturing the cinematic atmosphere, mood, and environmental storytelling of the location itself."
 	} else {
 		// 케이스 4: 아무것도 없는 경우 (에러 케이스)
-		compositionInstruction = "\n[CINEMATIC COMPOSITION]\n" +
-			"Generate a high-quality photorealistic image based on the references provided."
+		compositionInstruction = "\n[CINEMATIC FILM FRAME]\n" +
+			"Generate a high-quality photorealistic cinematic image based on the references provided."
 	}
 
-	// 배경 관련 지시사항 - 모델이 있을 때만 추가
+	// 배경 관련 지시사항 - 캐릭터가 있을 때만 추가
 	if hasModel && hasBackground {
-		// 모델 + 배경 케이스 → 환경 통합 지시사항
-		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
-			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
-			"The photographer CHOSE this environment to complement the subject - not to overwhelm them.\n" +
-			"🎬 Use the background reference as INSPIRATION ONLY:\n" +
-			"   • Recreate the atmosphere, lighting mood, and setting type\n" +
-			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The location serves as a STAGE for the subject's story\n\n" +
-			"[ABSOLUTE PRIORITY: SUBJECT INTEGRITY]\n" +
-			"⚠️ CRITICAL: The person's body proportions are UNTOUCHABLE\n" +
-			"⚠️ DO NOT distort, stretch, compress, or alter the person to fit the frame\n" +
-			"⚠️ The background adapts to showcase the subject - NEVER the reverse\n\n" +
-			"[DRAMATIC ENVIRONMENTAL INTEGRATION]\n" +
-			"✓ Subject positioned naturally in the space (standing, sitting, moving)\n" +
-			"✓ Realistic ground contact with natural shadows\n" +
-			"✓ Background elements create DEPTH - use foreground/midground/background layers\n" +
-			"✓ Directional lighting from the environment enhances drama\n" +
-			"✓ Environmental light wraps around the subject naturally\n" +
-			"✓ Atmospheric perspective adds cinematic depth\n" +
-			"✓ Shot composition tells a STORY - what is happening in this moment?\n\n" +
-			"[TECHNICAL EXECUTION]\n" +
-			"✓ Single camera angle - this is ONE photograph\n" +
-			"✓ Film photography aesthetic with natural color grading\n" +
-			"✓ Rule of thirds or dynamic asymmetric composition\n" +
-			"✓ Depth of field focuses attention on the subject\n" +
-			"✓ The environment and subject look like they exist in the SAME REALITY"
+		// 캐릭터 + 배경 케이스 → 영화 장면 환경 통합 지시사항
+		compositionInstruction += " shot on cinematic location with narrative environmental storytelling.\n\n" +
+			"[CINEMATOGRAPHER'S APPROACH TO LOCATION]\n" +
+			"The director CHOSE this environment to serve the story and character moment.\n" +
+			"🎬 Use the location reference as INSPIRATION ONLY:\n" +
+			"   • Recreate the mood, atmosphere, and cinematic tone\n" +
+			"   • Generate a NEW film-quality scene - do NOT paste or overlay the reference\n" +
+			"   • The location is a NARRATIVE STAGE that reveals character and story\n\n" +
+			"[ABSOLUTE PRIORITY: CHARACTER INTEGRITY]\n" +
+			"⚠️ CRITICAL: The character's body proportions are NATURAL and UNTOUCHABLE\n" +
+			"⚠️ DO NOT distort, stretch, compress, or alter the character to fit the frame\n" +
+			"⚠️ The environment supports the character - NEVER overwhelms them\n\n" +
+			"[CINEMATIC ENVIRONMENTAL INTEGRATION]\n" +
+			"✓ Character positioned naturally in the scene (standing, moving, interacting)\n" +
+			"✓ Realistic spatial relationship with natural shadows and lighting\n" +
+			"✓ Environmental elements create CINEMATIC DEPTH - foreground/midground/background layers\n" +
+			"✓ Directional film lighting creates mood, drama, and atmosphere\n" +
+			"✓ Environmental light wraps naturally around the character\n" +
+			"✓ Atmospheric perspective adds film production depth\n" +
+			"✓ Shot composition tells a NARRATIVE - this is a moment in a larger story\n\n" +
+			"[TECHNICAL FILM EXECUTION]\n" +
+			"✓ Single camera angle - this is ONE film frame from ONE take\n" +
+			"✓ Film production aesthetic with cinematic color grading\n" +
+			"✓ Cinematic composition rules - rule of thirds, leading lines, dynamic framing\n" +
+			"✓ Depth of field creates focus and separates character from environment\n" +
+			"✓ The environment and character exist in the SAME CINEMATIC REALITY"
 	} else if hasModel && !hasBackground {
-		// 모델만 있고 배경 없음 → 스튜디오
-		compositionInstruction += " in a cinematic studio setting with professional film lighting."
+		// 캐릭터만 있고 배경 없음 → 스튜디오 촬영
+		compositionInstruction += " in a controlled studio environment with professional cinematic film lighting."
 	}
 	// 프로덕트 샷이나 배경만 있는 케이스는 위에서 이미 처리됨
 
@@ -183,92 +191,92 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"✓ Background elements (buildings, sky, ground) must be CONTINUOUS with no breaks or seams\n"
 
 	if hasModel {
-		// 모델 있는 케이스 - 드라마틱 패션 에디토리얼 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Person's body proportions are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
-			"🎯 The subject is the STAR - everything else supports their presence\n" +
-			"🎯 Dramatic composition with ENERGY and MOVEMENT\n" +
-			"🎯 Environmental storytelling - what's the narrative of this moment?\n" +
-			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
-			"🎯 Single cohesive photograph - looks like ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY distortion of the person's proportions (stretched, compressed, squashed)\n" +
-			"❌ Person looking pasted, floating, or artificially placed\n" +
-			"❌ Static, boring, catalog-style poses\n" +
-			"❌ Centered, symmetrical composition without drama\n" +
-			"❌ Flat lighting that doesn't create mood"
+		// 캐릭터 있는 케이스 - 시네마틱 영화 장면 규칙
+		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE CINEMATIC REQUIREMENTS]\n" +
+			"🎯 Character's body proportions are NATURAL and REALISTIC - ZERO tolerance for distortion\n" +
+			"🎯 The character is the EMOTIONAL CENTER - the narrative revolves around them\n" +
+			"🎯 Cinematic composition with DRAMA and EMOTIONAL WEIGHT\n" +
+			"🎯 Environmental storytelling - what is happening in this narrative moment?\n" +
+			"🎯 Character action and emotion drive the scene - not posing, but ACTING\n" +
+			"🎯 Single film frame - looks like ONE shot from ONE cinematic take\n" +
+			"🎯 Film production aesthetic with cinematic color grading - not snapshot, not selfie\n" +
+			"🎯 Dynamic cinematic framing - use negative space and composition for storytelling\n\n" +
+			"[FORBIDDEN - THESE WILL RUIN THE CINEMATIC FRAME]\n" +
+			"❌ ANY distortion of the character's proportions (stretched, compressed, squashed)\n" +
+			"❌ Character looking pasted, floating, or artificially composited\n" +
+			"❌ Static, stiff, portrait-style poses - this is a FILM SCENE, not a photoshoot\n" +
+			"❌ Centered, flat, boring composition without cinematic drama\n" +
+			"❌ Flat lighting that doesn't create film-quality mood and atmosphere"
 	} else if hasProducts {
-		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Showcase the products as beautiful OBJECTS with perfect details\n" +
-			"🎯 Artistic arrangement - creative composition like high-end product photography\n" +
-			"🎯 Dramatic lighting that highlights textures and materials\n" +
-			"🎯 Environmental storytelling through product placement\n" +
-			"🎯 ALL items displayed clearly and beautifully\n" +
-			"🎯 Single cohesive photograph - ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and depth creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY people, models, or human figures in the frame\n" +
-			"❌ Products looking pasted or artificially placed\n" +
-			"❌ Boring, flat catalog-style layouts\n" +
-			"❌ Cluttered composition without focal point\n" +
-			"❌ Flat lighting that doesn't create depth"
+		// 오브젝트 샷 케이스 - 시네마틱 소품 촬영 규칙
+		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE CINEMATIC PROP REQUIREMENTS]\n" +
+			"🎯 Showcase the objects as NARRATIVE PROPS with story weight\n" +
+			"🎯 Cinematic arrangement - composition suggests film production value\n" +
+			"🎯 Dramatic film lighting that creates mood and mystery\n" +
+			"🎯 Environmental storytelling through prop placement and context\n" +
+			"🎯 ALL items displayed with narrative purpose\n" +
+			"🎯 Single film still - ONE shot from ONE cinematic frame\n" +
+			"🎯 Film production aesthetic with cinematic color grading\n" +
+			"🎯 Dynamic cinematic framing - use depth and negative space for storytelling\n\n" +
+			"[FORBIDDEN - THESE WILL RUIN THE CINEMATIC PROP SHOT]\n" +
+			"❌ ANY people, characters, or human figures in the frame\n" +
+			"❌ Props looking pasted, floating, or artificially placed\n" +
+			"❌ Boring, flat, catalog-style product layouts\n" +
+			"❌ Cluttered composition without cinematic focal point\n" +
+			"❌ Flat lighting that doesn't create film-quality depth and drama"
 	} else {
-		// 배경만 있는 케이스 - 환경 촬영 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Capture the pure atmosphere and mood of the location\n" +
-			"🎯 Dramatic composition with depth and visual interest\n" +
-			"🎯 Environmental storytelling - what story does this place tell?\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and layers creatively\n\n" +
+		// 배경만 있는 케이스 - 시네마틱 로케이션 촬영 규칙
+		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE CINEMATIC LOCATION REQUIREMENTS]\n" +
+			"🎯 Capture the pure cinematic atmosphere and narrative mood of the location\n" +
+			"🎯 Dramatic film composition with depth and visual storytelling\n" +
+			"🎯 Environmental storytelling - what narrative does this place suggest?\n" +
+			"🎯 Film production aesthetic with cinematic color grading\n" +
+			"🎯 Dynamic cinematic framing - use layers and negative space for depth\n\n" +
 			"[FORBIDDEN]\n" +
-			"❌ DO NOT add people, models, or products to the scene\n" +
-			"❌ Flat, boring composition without depth"
+			"❌ DO NOT add people, characters, or props to this establishing shot\n" +
+			"❌ Flat, boring snapshot composition without cinematic drama"
 	}
 
 	// 16:9 비율 전용 추가 지시사항
 	var aspectRatioInstruction string
 	if aspectRatio == "16:9" {
 		if hasModel {
-			// 모델이 있는 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
-				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE COMPOSITION:\n" +
-				"✓ Subject positioned off-center (rule of thirds) creating dynamic tension\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground elements, subject, background scenery\n" +
-				"✓ Leading lines guide the eye to the subject\n" +
-				"✓ Negative space creates breathing room and drama\n\n" +
-				"🎬 SUBJECT INTEGRITY IN WIDE FRAME:\n" +
-				"⚠️ The wide frame is NOT an excuse to distort proportions\n" +
-				"⚠️ Person maintains PERFECT natural proportions - just smaller in frame if needed\n" +
-				"⚠️ Use the space to tell a STORY, not to force-fit the subject\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates mood across the wide frame\n" +
-				"✓ Atmospheric perspective - distant elements are hazier\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes the subject while showing environment\n\n" +
-				"GOAL: A breathtaking wide shot from a high-budget fashion editorial - \n" +
-				"like Annie Leibovitz or Steven Meisel capturing a MOMENT of drama and beauty."
+			// 캐릭터 있는 16:9 케이스 - 시네마스코프 와이드샷
+			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - FILM NARRATIVE STORYTELLING]\n" +
+				"This is a WIDESCREEN FILM FRAME - use the horizontal space for powerful cinematic narrative.\n\n" +
+				"🎬 DRAMATIC CINEMATIC WIDE COMPOSITION:\n" +
+				"✓ Character positioned off-center (rule of thirds) creating cinematic tension\n" +
+				"✓ Use the WIDESCREEN FORMAT to show narrative context and atmosphere\n" +
+				"✓ Layers of depth - foreground elements, character, background environment\n" +
+				"✓ Leading lines guide the eye to the character and story\n" +
+				"✓ Negative space creates cinematic breathing room and emotional weight\n\n" +
+				"🎬 CHARACTER INTEGRITY IN WIDESCREEN:\n" +
+				"⚠️ The widescreen frame is NOT an excuse to distort proportions\n" +
+				"⚠️ Character maintains NATURAL realistic proportions - scale to environment naturally\n" +
+				"⚠️ Use the space to tell a NARRATIVE STORY, not to force-fit the character\n\n" +
+				"🎬 FILM PRODUCTION EXECUTION:\n" +
+				"✓ Cinematic lighting creates mood and drama across the widescreen frame\n" +
+				"✓ Atmospheric perspective - distant elements create depth\n" +
+				"✓ Film grain and cinematic color grading\n" +
+				"✓ Depth of field emphasizes the character while establishing environment\n\n" +
+				"GOAL: A breathtaking widescreen shot from a high-budget film production - \n" +
+				"like Roger Deakins or Emmanuel Lubezki capturing a CINEMATIC MOMENT of narrative drama."
 		} else if hasProducts {
-			// 프로덕트 샷 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PRODUCT SHOT]\n" +
-				"This is a WIDE ANGLE product shot - use the horizontal space for artistic storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE PRODUCT COMPOSITION:\n" +
-				"✓ Products positioned creatively using the full width\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground, products, background elements\n" +
-				"✓ Leading lines guide the eye to the key products\n" +
-				"✓ Negative space creates elegance and breathing room\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates drama and highlights textures\n" +
-				"✓ Atmospheric perspective adds depth\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes products while showing environment\n\n" +
-				"GOAL: A stunning wide product shot like high-end editorial still life photography."
+			// 소품 샷 16:9 케이스 - 영화 소품
+			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PROP SHOT]\n" +
+				"This is a WIDESCREEN PROP FRAME - use the horizontal space for narrative storytelling.\n\n" +
+				"🎬 DRAMATIC WIDE PROP COMPOSITION:\n" +
+				"✓ Props positioned cinematically using the full widescreen width\n" +
+				"✓ Use the WIDESCREEN FORMAT to show narrative context and story atmosphere\n" +
+				"✓ Layers of depth - foreground, props, background narrative elements\n" +
+				"✓ Leading lines guide the eye to the key story props\n" +
+				"✓ Negative space creates cinematic weight and narrative breathing room\n\n" +
+				"🎬 FILM PRODUCTION EXECUTION:\n" +
+				"✓ Cinematic lighting creates drama and reveals story details\n" +
+				"✓ Atmospheric perspective adds film production depth\n" +
+				"✓ Film grain and cinematic color grading\n" +
+				"✓ Depth of field emphasizes narrative props while showing environment\n\n" +
+				"GOAL: A stunning widescreen prop shot like high-budget film production still photography."
 		} else {
 			// 배경만 있는 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE LANDSCAPE SHOT]\n" +

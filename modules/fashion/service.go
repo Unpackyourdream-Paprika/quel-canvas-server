@@ -1020,9 +1020,24 @@ func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileS
 func (s *Service) UpdateJobProgress(ctx context.Context, jobID string, completedImages int, generatedAttachIds []int) error {
 	log.Printf("📊 Updating job progress: %d/%d completed", completedImages, len(generatedAttachIds))
 
+	// 중복 제거: 같은 attach_id가 여러 번 포함되지 않도록
+	uniqueIds := make([]int, 0, len(generatedAttachIds))
+	seen := make(map[int]bool)
+	for _, id := range generatedAttachIds {
+		if !seen[id] {
+			seen[id] = true
+			uniqueIds = append(uniqueIds, id)
+		}
+	}
+
+	if len(uniqueIds) != len(generatedAttachIds) {
+		log.Printf("⚠️  Removed %d duplicate attach IDs (before: %d, after: %d)",
+			len(generatedAttachIds)-len(uniqueIds), len(generatedAttachIds), len(uniqueIds))
+	}
+
 	updateData := map[string]interface{}{
 		"completed_images":     completedImages,
-		"generated_attach_ids": generatedAttachIds,
+		"generated_attach_ids": uniqueIds,
 		"updated_at":           "now()",
 	}
 
