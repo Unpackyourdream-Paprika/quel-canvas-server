@@ -457,6 +457,20 @@ func minInt(a, b int) int {
 	return b
 }
 
+// getIntFromInterface - Helper function to extract int from interface{} (supports both float64 and string)
+func getIntFromInterface(value interface{}, defaultValue int) int {
+	if f, ok := value.(float64); ok {
+		return int(f)
+	}
+	if s, ok := value.(string); ok {
+		var result int
+		if _, err := fmt.Sscanf(s, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return defaultValue
+}
+
 // processPipelineStage - Pipeline Stage 모드 처리 (여러 stage 순차 실행)
 func processPipelineStage(ctx context.Context, service *Service, job *model.ProductionJob) {
 	log.Printf("🚀 Starting Pipeline Stage processing for job: %s", job.JobID)
@@ -510,9 +524,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			}
 
 			// Stage 데이터 추출
-			stageIndex := int(stage["stage_index"].(float64))
+			stageIndex := getIntFromInterface(stage["stage_index"], idx)
 			basePrompt := stage["prompt"].(string)
-			quantity := int(stage["quantity"].(float64))
+			quantity := getIntFromInterface(stage["quantity"], 1)
 
 			// 카메라 앵글과 샷 타입 추출
 			cameraAngle, _ := stage["cameraAngle"].(string)
@@ -813,7 +827,7 @@ MANDATORY TECHNICAL SPECS:
 	// Step 1: 각 Stage별 부족 갯수 확인
 	for stageIdx, stageData := range stages {
 		stage := stageData.(map[string]interface{})
-		expectedQuantity := int(stage["quantity"].(float64))
+		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
 		missing := expectedQuantity - actualQuantity
 
@@ -829,7 +843,7 @@ MANDATORY TECHNICAL SPECS:
 	// Step 2: 부족한 Stage만 재시도
 	for stageIdx, stageData := range stages {
 		stage := stageData.(map[string]interface{})
-		expectedQuantity := int(stage["quantity"].(float64))
+		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
 		missing := expectedQuantity - actualQuantity
 
