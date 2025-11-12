@@ -13,7 +13,9 @@
       "Bash(go run:*)",
       "Bash(go install:*)",
       "Bash(~/.zshrc)",
-      "Bash(~/go/bin/air:*)"
+      "Bash(~/go/bin/air:*)",
+      "Bash(where:*)",
+      "Bash(air:*)"
     ],
     "deny": [],
     "ask": []
