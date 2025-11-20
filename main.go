@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"quel-canvas-server/modules/common/config"
+	"quel-canvas-server/modules/modify"
 	"quel-canvas-server/modules/worker"
 
 	"github.com/gorilla/mux"
@@ -613,8 +614,13 @@ func main() {
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/admin/cleanup", forceCleanupSessions).Methods("POST")
 
-
-
+	// Modify 모듈 라우트 등록
+	modifyHandler := modify.NewModifyHandler()
+	if modifyHandler != nil {
+		modifyHandler.RegisterRoutes(r)
+	} else {
+		log.Println("⚠️  Failed to initialize Modify handler")
+	}
 
 
 
@@ -629,6 +635,8 @@ func main() {
 	log.Printf("❤️  Health check: http://localhost:%s/health", port)
 	log.Printf("📊 Metrics: http://localhost:%s/metrics", port)
 	log.Printf("🧹 Admin cleanup: http://localhost:%s/admin/cleanup", port)
+	log.Printf("🎨 Modify submit: http://localhost:%s/api/modify/submit", port)
+	log.Printf("🔍 Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {

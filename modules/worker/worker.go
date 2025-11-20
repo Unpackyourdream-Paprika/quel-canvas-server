@@ -14,6 +14,7 @@ import (
 	"quel-canvas-server/modules/cinema"
 	"quel-canvas-server/modules/eats"
 	"quel-canvas-server/modules/fashion"
+	"quel-canvas-server/modules/modify"
 )
 
 // StartWorker - Redis Queue Worker 시작
@@ -86,7 +87,29 @@ func processJob(ctx context.Context, dbClient *database.Client, jobID string) {
 		log.Printf("   ProductionID: null")
 	}
 
-	// quel_production_path 기반 라우팅
+	// job_type이 "modify"이거나 job_input_data에 maskDataUrl이 있으면 modify 모듈로 라우팅
+	// (DB 제약으로 인해 job_type은 simple_general로 저장되지만 maskDataUrl로 modify job 식별)
+	isModifyJob := job.JobType == "modify"
+	if !isModifyJob && job.JobInputData != nil {
+		if _, hasMask := job.JobInputData["maskDataUrl"]; hasMask {
+			isModifyJob = true
+		}
+	}
+
+	if isModifyJob {
+		log.Printf("🎨 Routing to Modify module (detected via maskDataUrl)")
+		modifyService := modify.NewService()
+		if modifyService != nil {
+			if err := modifyService.ProcessModifyJob(ctx, jobID); err != nil {
+				log.Printf("❌ Modify job failed: %v", err)
+			}
+		} else {
+			log.Printf("❌ Failed to initialize Modify service")
+		}
+		return
+	}
+
+	// quel_production_path 기반 라우팅 (기존 로직)
 	path := job.QuelProductionPath
 
 	// NULL 또는 빈 문자열은 fashion으로 처리
