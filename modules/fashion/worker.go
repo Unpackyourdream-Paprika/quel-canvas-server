@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -16,31 +15,12 @@ import (
 	"quel-canvas-server/modules/common/model"
 )
 
-// safeInt converts interface{} values that may be float64 (JSON numbers), json.Number, int, or string to int.
-func safeInt(v interface{}) int {
-	switch val := v.(type) {
-	case float64:
-		return int(val)
-	case int:
-		return val
-	case json.Number:
-		if i, err := val.Int64(); err == nil {
-			return int(i)
-		}
-	case string:
-		var i int
-		if _, err := fmt.Sscanf(val, "%d", &i); err == nil {
-			return i
-		}
-	}
-	return 0
-}
-
 // StartWorker - Redis Queue Worker 시작
 func StartWorker() {
 	log.Println("🔄 Redis Queue Worker starting...")
 
 	cfg := config.GetConfig()
+
 
 	// 테스트
 	// Service 초기화
@@ -417,6 +397,20 @@ func minInt(a, b int) int {
 	return b
 }
 
+// getIntFromInterface - Helper function to extract int from interface{} (supports both float64 and string)
+func getIntFromInterface(value interface{}, defaultValue int) int {
+	if f, ok := value.(float64); ok {
+		return int(f)
+	}
+	if s, ok := value.(string); ok {
+		var result int
+		if _, err := fmt.Sscanf(s, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return defaultValue
+}
+
 // processPipelineStage - Pipeline Stage 모드 처리 (여러 stage 순차 실행)
 func processPipelineStage(ctx context.Context, service *Service, job *model.ProductionJob) {
 	log.Printf("🚀 Starting Pipeline Stage processing for job: %s", job.JobID)
@@ -469,10 +463,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				return
 			}
 
-			// Stage 데이터 추출 (수신 타입이 float64 또는 string일 수 있으므로 안전 변환)
-			stageIndex := safeInt(stage["stage_index"])
+			// Stage 데이터 추출
+			stageIndex := getIntFromInterface(stage["stage_index"], idx)
 			prompt := stage["prompt"].(string)
-			quantity := safeInt(stage["quantity"])
+			quantity := getIntFromInterface(stage["quantity"], 1)
 
 			// aspect-ratio 추출 (기본값: "16:9")
 			aspectRatio := "16:9"
@@ -539,6 +533,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						}
 					}
 				}
+
 
 				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
 					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
@@ -656,7 +651,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	// Step 1: 각 Stage별 부족 갯수 확인
 	for stageIdx, stageData := range stages {
 		stage := stageData.(map[string]interface{})
-		expectedQuantity := int(stage["quantity"].(float64))
+		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
 		missing := expectedQuantity - actualQuantity
 
@@ -672,7 +667,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	// Step 2: 부족한 Stage만 재시도
 	for stageIdx, stageData := range stages {
 		stage := stageData.(map[string]interface{})
-		expectedQuantity := int(stage["quantity"].(float64))
+		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
 		missing := expectedQuantity - actualQuantity
 
@@ -896,7 +891,7 @@ func connectRedis(config *config.Config) *redis.Client {
 		Username:     config.RedisUsername,
 		Password:     config.RedisPassword,
 		TLSConfig:    tlsConfig,
-		DB:           0,                // 기본 DB
+		DB:           0,              // 기본 DB
 		DialTimeout:  10 * time.Second, // 타임아웃 늘림
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
