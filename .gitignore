@@ -30,3 +30,10 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
+
+# Build output
+quel-canvas-server
+tmp/
+
+# Claude settings
+.claude/settings.local.json
