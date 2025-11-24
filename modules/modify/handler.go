@@ -66,11 +66,17 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// AspectRatio 기본값 설정
+	if req.AspectRatio == "" {
+		req.AspectRatio = "16:9"
+	}
+
 	log.Printf("🎨 Modify job submission:")
 	log.Printf("  - User: %s", req.UserID)
 	log.Printf("  - Original Attach ID: %d", req.AttachID)
 	log.Printf("  - Quantity: %d", req.Quantity)
 	log.Printf("  - Prompt: %s", req.Prompt)
+	log.Printf("  - Aspect Ratio: %s", req.AspectRatio)
 	log.Printf("  - Has Reference Image: %v", req.ReferenceImage != nil)
 
 	// 1. 크레딧 확인
@@ -116,6 +122,7 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 		Prompt:                req.Prompt,
 		ReferenceImageDataURL: req.ReferenceImage,
 		Quantity:              req.Quantity,
+		AspectRatio:           req.AspectRatio,
 		UserID:                req.UserID,
 		QuelMemberID:          req.UserID, // userId가 곧 quel_member_id
 	}

@@ -83,6 +83,7 @@ func (s *Service) ProcessModifyJob(ctx context.Context, jobID string) error {
 			inputData.Prompt,
 			referenceBase64,
 			referenceMimeType,
+			inputData.AspectRatio,
 		)
 
 		if err != nil {
@@ -169,6 +170,11 @@ func (s *Service) parseInputData(data map[string]interface{}) (*ModifyInputData,
 	if v, ok := data["quantity"].(float64); ok {
 		inputData.Quantity = int(v)
 	}
+	if v, ok := data["aspect-ratio"].(string); ok && v != "" {
+		inputData.AspectRatio = v
+	} else {
+		inputData.AspectRatio = "16:9" // default
+	}
 	if v, ok := data["userId"].(string); ok {
 		inputData.UserID = v
 		inputData.QuelMemberID = v
@@ -186,6 +192,7 @@ func (s *Service) performInpaint(
 	prompt string,
 	referenceBase64 string,
 	referenceMimeType string,
+	aspectRatio string,
 ) (string, string, error) {
 
 	log.Printf("🤖 Starting inpaint with Gemini API...")
@@ -238,13 +245,16 @@ func (s *Service) performInpaint(
 
 	// Gemini API 호출 (gemini-2.5-flash-image 모델 사용)
 	cfg := config.GetConfig()
+
+	log.Printf("📐 Using aspect ratio: %s", aspectRatio)
+
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel, // "gemini-2.5-flash-image"
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
 			ImageConfig: &genai.ImageConfig{
-				AspectRatio: "16:9", // 기본 aspect ratio
+				AspectRatio: aspectRatio,
 			},
 		},
 	)

@@ -43,6 +43,9 @@ type ModifyInputData struct {
 	// 생성 개수
 	Quantity              int    `json:"quantity"`              // 생성할 이미지 개수 (1-10)
 
+	// 이미지 비율
+	AspectRatio           string `json:"aspect-ratio"`          // 이미지 비율 (16:9, 4:3, 1:1, etc.)
+
 	// 사용자 정보
 	UserID                string `json:"userId"`                // 사용자 ID
 	QuelMemberID          string `json:"quelMemberId"`          // quel_member_id
@@ -58,6 +61,7 @@ type ModifyRequest struct {
 	ReferenceImage        *string `json:"referenceImage"`        // 참조 이미지 (Base64, optional)
 	Quantity              int     `json:"quantity"`              // 생성 개수 (1-10)
 	OriginalProductionID  *string `json:"originalProductionId"`  // 원본 production_id (optional)
+	AspectRatio           string  `json:"aspectRatio"`           // 이미지 비율 (16:9, 4:3, 1:1, etc.)
 }
 
 // ModifyResponse - HTTP API 응답 구조체

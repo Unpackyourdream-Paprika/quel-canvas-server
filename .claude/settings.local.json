@@ -16,7 +16,12 @@
       "Bash(~/go/bin/air:*)",
       "Bash(./quel-canvas-server)",
       "Bash(lsof:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker run:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
