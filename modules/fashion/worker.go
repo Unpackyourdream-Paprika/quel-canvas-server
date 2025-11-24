@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -14,12 +16,31 @@ import (
 	"quel-canvas-server/modules/common/model"
 )
 
+// safeInt converts interface{} values that may be float64 (JSON numbers), json.Number, int, or string to int.
+func safeInt(v interface{}) int {
+	switch val := v.(type) {
+	case float64:
+		return int(val)
+	case int:
+		return val
+	case json.Number:
+		if i, err := val.Int64(); err == nil {
+			return int(i)
+		}
+	case string:
+		var i int
+		if _, err := fmt.Sscanf(val, "%d", &i); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
 // StartWorker - Redis Queue Worker 시작
 func StartWorker() {
 	log.Println("🔄 Redis Queue Worker starting...")
 
 	cfg := config.GetConfig()
-
 
 	// 테스트
 	// Service 초기화
@@ -448,10 +469,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				return
 			}
 
-			// Stage 데이터 추출
-			stageIndex := int(stage["stage_index"].(float64))
+			// Stage 데이터 추출 (수신 타입이 float64 또는 string일 수 있으므로 안전 변환)
+			stageIndex := safeInt(stage["stage_index"])
 			prompt := stage["prompt"].(string)
-			quantity := int(stage["quantity"].(float64))
+			quantity := safeInt(stage["quantity"])
 
 			// aspect-ratio 추출 (기본값: "16:9")
 			aspectRatio := "16:9"
@@ -518,7 +539,6 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						}
 					}
 				}
-
 
 				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
 					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
@@ -876,7 +896,7 @@ func connectRedis(config *config.Config) *redis.Client {
 		Username:     config.RedisUsername,
 		Password:     config.RedisPassword,
 		TLSConfig:    tlsConfig,
-		DB:           0,              // 기본 DB
+		DB:           0,                // 기본 DB
 		DialTimeout:  10 * time.Second, // 타임아웃 늘림
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,

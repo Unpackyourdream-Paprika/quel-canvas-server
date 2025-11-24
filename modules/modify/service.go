@@ -190,6 +190,7 @@ func (s *Service) CreateJobAndEnqueue(jobID, productionID string, inputData Modi
 		"prompt":                inputData.Prompt,
 		"referenceImageDataUrl": inputData.ReferenceImageDataURL,
 		"quantity":              inputData.Quantity,
+		"aspect-ratio":          inputData.AspectRatio,
 		"userId":                inputData.UserID,
 		"quelMemberId":          inputData.QuelMemberID,
 	}
