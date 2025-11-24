@@ -164,14 +164,29 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		}
 	}
 
-	// Phase 3: 이미지 다운로드 및 카테고리별 분류
+	// Phase 3: 이미지 다운로드 및 카테고리별 분류 (Beauty 전용)
 	categories := &ImageCategories{
-		Clothing:    [][]byte{},
+		Products:    [][]byte{},  // Clothing 대신 Products 사용 (Beauty 전용)
 		Accessories: [][]byte{},
 	}
 
-	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+	// Beauty 전용 타입 정의
+	productTypes := map[string]bool{
+		"product":   true,  // 핵심: 프론트엔드에서 보내는 기본값
+		"lipstick":  true,
+		"cream":     true,
+		"bottle":    true,
+		"compact":   true,
+		"cosmetic":  true,
+		"skincare":  true,
+		"makeup":    true,
+	}
+
+	accessoryTypes := map[string]bool{
+		"brush": true,
+		"tool":  true,
+		"acce":  true,
+	}
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -189,7 +204,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		attachID := int(attachIDFloat)
 		attachType, _ := attachMap["type"].(string)
 
-		log.Printf("📥 Downloading image %d/%d: AttachID=%d, Type=%s",
+		log.Printf("📥 [Beauty] Downloading image %d/%d: AttachID=%d, Type='%s'",
 			i+1, len(individualImageAttachIds), attachID, attachType)
 
 		imageData, err := service.DownloadImageFromStorage(attachID)
@@ -198,36 +213,38 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			continue
 		}
 
-		// type에 따라 카테고리별로 분류
+		// type에 따라 카테고리별로 분류 (Beauty 전용 로직)
 		switch attachType {
 		case "model":
 			categories.Model = imageData
-			log.Printf("✅ Model image added")
+			log.Printf("✅ [Beauty] Model image added (for beauty portrait with makeup)")
 		case "background", "bg":
 			categories.Background = imageData
-			log.Printf("✅ Background image added")
+			log.Printf("✅ [Beauty] Background image added")
 		default:
-			if clothingTypes[attachType] {
-				categories.Clothing = append(categories.Clothing, imageData)
-				log.Printf("✅ Clothing image added (type: %s)", attachType)
+			if productTypes[attachType] {
+				categories.Products = append(categories.Products, imageData)
+				log.Printf("✅ [Beauty] Product image added (type: '%s')", attachType)
 			} else if accessoryTypes[attachType] {
 				categories.Accessories = append(categories.Accessories, imageData)
-				log.Printf("✅ Accessory image added (type: %s)", attachType)
+				log.Printf("✅ [Beauty] Accessory image added (type: '%s')", attachType)
 			} else if attachType != "none" {
-				log.Printf("⚠️  Unknown type: %s, skipping", attachType)
+				// 알 수 없는 타입도 제품으로 처리 (안전장치)
+				log.Printf("⚠️  [Beauty] Unknown type '%s', treating as product (safety fallback)", attachType)
+				categories.Products = append(categories.Products, imageData)
 			}
 		}
 	}
 
-	// 최소한 의류 이미지는 있어야 함
-	if len(categories.Clothing) == 0 && categories.Model == nil {
-		log.Printf("❌ No clothing or model images found")
+	// Beauty 전용: 최소한 제품 이미지는 있어야 함 (모델 없이 제품만 가능)
+	if len(categories.Products) == 0 && categories.Model == nil {
+		log.Printf("❌ [Beauty] No product or model images found - cannot proceed")
 		service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
 		return
 	}
 
-	log.Printf("✅ Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ [Beauty] Images classified - Model:%v, Products:%d, Accessories:%d, BG:%v",
+		categories.Model != nil, len(categories.Products), len(categories.Accessories), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -494,12 +511,22 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
-					Clothing:    [][]byte{},
+					Products:    [][]byte{},  // Beauty 전용
 					Accessories: [][]byte{},
 				}
 
-				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+				// Beauty 전용 타입 정의
+				productTypes := map[string]bool{
+					"product":  true,
+					"lipstick": true,
+					"cream":    true,
+					"bottle":   true,
+					"compact":  true,
+					"cosmetic": true,
+					"skincare": true,
+					"makeup":   true,
+				}
+				accessoryTypes := map[string]bool{"brush": true, "tool": true, "acce": true}
 
 				for i, attachObj := range individualIds {
 					attachMap, ok := attachObj.(map[string]interface{})
@@ -523,35 +550,36 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						continue
 					}
 
-					// type에 따라 카테고리별로 분류
+					// type에 따라 카테고리별로 분류 (Beauty 전용)
 					switch attachType {
 					case "model":
 						stageCategories.Model = imageData
-						log.Printf("✅ Stage %d: Model image added", stageIndex)
-					case "bg":
+						log.Printf("✅ [Beauty Pipeline] Stage %d: Model image added", stageIndex)
+					case "bg", "background":
 						stageCategories.Background = imageData
-						log.Printf("✅ Stage %d: Background image added", stageIndex)
+						log.Printf("✅ [Beauty Pipeline] Stage %d: Background image added", stageIndex)
 					default:
-						if clothingTypes[attachType] {
-							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
-							log.Printf("✅ Stage %d: Clothing image added (type: %s)", stageIndex, attachType)
+						if productTypes[attachType] {
+							stageCategories.Products = append(stageCategories.Products, imageData)
+							log.Printf("✅ [Beauty Pipeline] Stage %d: Product image added (type: %s)", stageIndex, attachType)
 						} else if accessoryTypes[attachType] {
 							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
-							log.Printf("✅ Stage %d: Accessory image added (type: %s)", stageIndex, attachType)
-						} else {
-							log.Printf("⚠️  Stage %d: Unknown type: %s, skipping", stageIndex, attachType)
+							log.Printf("✅ [Beauty Pipeline] Stage %d: Accessory image added (type: %s)", stageIndex, attachType)
+						} else if attachType != "none" {
+							log.Printf("⚠️  [Beauty Pipeline] Stage %d: Unknown type '%s', treating as product", stageIndex, attachType)
+							stageCategories.Products = append(stageCategories.Products, imageData)
 						}
 					}
 				}
 
 
-				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
+				log.Printf("✅ [Beauty Pipeline] Stage %d: Images classified - Model:%v, Products:%d, Accessories:%d, BG:%v",
+					stageIndex, stageCategories.Model != nil, len(stageCategories.Products),
 					len(stageCategories.Accessories), stageCategories.Background != nil)
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
 				// 레거시 방식: mergedImageAttachId
-				log.Printf("⚠️  Stage %d: Using legacy mergedImageAttachId (deprecated)", stageIndex)
+				log.Printf("⚠️  [Beauty Pipeline] Stage %d: Using legacy mergedImageAttachId (deprecated)", stageIndex)
 				mergedImageAttachID := int(mergedID)
 
 				imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
@@ -560,9 +588,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					return
 				}
 
-				// 레거시 이미지를 Clothing 카테고리로 처리
+				// Beauty: 레거시 이미지를 Products 카테고리로 처리
 				stageCategories = &ImageCategories{
-					Clothing:    [][]byte{imageData},
+					Products:    [][]byte{imageData},
 					Accessories: [][]byte{},
 				}
 			} else {
@@ -698,14 +726,17 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		var retryCategories *ImageCategories
 
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
-			// 새 방식: individualImageAttachIds로 카테고리별 분류
+			// 새 방식: individualImageAttachIds로 카테고리별 분류 (Beauty 전용)
 			retryCategories = &ImageCategories{
-				Clothing:    [][]byte{},
+				Products:    [][]byte{},
 				Accessories: [][]byte{},
 			}
 
-			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+			productTypes := map[string]bool{
+				"product": true, "lipstick": true, "cream": true, "bottle": true,
+				"compact": true, "cosmetic": true, "skincare": true, "makeup": true,
+			}
+			accessoryTypes := map[string]bool{"brush": true, "tool": true, "acce": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -721,18 +752,20 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				switch attachType {
 				case "model":
 					retryCategories.Model = imageData
-				case "bg":
+				case "bg", "background":
 					retryCategories.Background = imageData
 				default:
-					if clothingTypes[attachType] {
-						retryCategories.Clothing = append(retryCategories.Clothing, imageData)
+					if productTypes[attachType] {
+						retryCategories.Products = append(retryCategories.Products, imageData)
 					} else if accessoryTypes[attachType] {
 						retryCategories.Accessories = append(retryCategories.Accessories, imageData)
+					} else if attachType != "none" {
+						retryCategories.Products = append(retryCategories.Products, imageData)
 					}
 				}
 			}
 		} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
-			// 레거시 방식
+			// 레거시 방식 (Beauty: Products로 처리)
 			mergedImageAttachID := int(mergedID)
 			imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
 			if err != nil {
@@ -740,7 +773,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				continue
 			}
 			retryCategories = &ImageCategories{
-				Clothing:    [][]byte{imageData},
+				Products:    [][]byte{imageData},
 				Accessories: [][]byte{},
 			}
 		} else {
