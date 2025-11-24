@@ -2,115 +2,141 @@ package beauty
 
 import (
 	"fmt"
+	"log"
 	"strings"
 )
 
-// ImageCategories - 카테고리별 이미지 분류 구조체
+// ImageCategories - Beauty 카테고리별 이미지 분류 구조체 (화장품 전용)
 type PromptCategories struct {
-	Model       []byte   // 모델 이미지 (최대 1장)
-	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
-	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
+	Model       []byte   // 모델 이미지 (최대 1장) - Beauty에서는 인물 뷰티 샷용
+	Products    [][]byte // 화장품/제품 이미지 배열 (lipstick, cream, bottle 등) - Beauty 전용
+	Accessories [][]byte // 악세사리 이미지 배열 (brush, tool 등) - Beauty 보조 도구
 	Background  []byte   // 배경 이미지 (최대 1장)
 }
 
-// GenerateDynamicPrompt - Fashion 모듈 전용 프롬프트 생성
+// GenerateDynamicPrompt - Beauty 모듈 전용 프롬프트 생성
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
-	hasClothing := len(categories.Clothing) > 0
-	hasAccessories := len(categories.Accessories) > 0
-	hasProducts := hasClothing || hasAccessories
+	hasProducts := len(categories.Products) > 0  // Beauty 전용: Products 필드 직접 확인
 	hasBackground := categories.Background != nil
+
+	// 디버그 로그 추가
+	log.Printf("🔍 [Beauty Prompt] Model:%v, Products:%d, Accessories:%d, BG:%v",
+		hasModel, len(categories.Products), len(categories.Accessories), hasBackground)
 
 	// 케이스별 메인 지시사항
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
-			"You are a world-class fashion photographer shooting an editorial campaign.\n" +
-			"The PERSON is the HERO - their natural proportions are SACRED and CANNOT be distorted.\n" +
-			"The environment serves the subject, NOT the other way around.\n\n" +
-			"Create ONE photorealistic photograph with DRAMATIC CINEMATIC STORYTELLING:\n" +
-			"• The model wears ALL clothing and accessories in ONE complete outfit\n" +
-			"• Dynamic pose and angle - NOT static or stiff\n" +
-			"• Environmental storytelling - use the location for drama\n" +
-			"• Directional lighting creates mood and depth\n" +
-			"• This is a MOMENT full of energy and narrative\n\n"
+		// 모델 있음 → 뷰티 포트레이트 (얼굴 클로즈업)
+		mainInstruction = "[BEAUTY PHOTOGRAPHER'S CLOSE-UP PORTRAIT]\n" +
+			"You are a world-class beauty photographer specializing in cosmetic editorial and makeup photography.\n" +
+			"The FACE is the HERO - skin texture, makeup details, and facial features are SACRED.\n" +
+			"⚠️ CRITICAL: This is a BEAUTY SHOT, NOT a fashion shot.\n" +
+			"⚠️ MANDATORY: CLOSE-UP PORTRAIT ONLY - face and shoulders composition.\n" +
+			"⚠️ FORBIDDEN: NO full body shots, NO fashion model poses, NO runway looks.\n\n" +
+			"Create ONE photorealistic beauty photograph with FLAWLESS SKIN DETAIL:\n" +
+			"• CLOSE-UP PORTRAIT: Face fills most of the frame (head and shoulders only)\n" +
+			"• Focus on facial features, skin texture, makeup details\n" +
+			"• Soft, flattering lighting for beauty photography (butterfly or loop lighting)\n" +
+			"• Professional studio beauty photography composition\n" +
+			"• High-end cosmetic editorial quality\n" +
+			"• This is about BEAUTY and MAKEUP, not fashion or outfits\n\n"
 	} else if hasProducts {
-		// 프로덕트만 → 프로덕트 포토그래피
-		mainInstruction = "[CINEMATIC PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class product photographer creating editorial-style still life.\n" +
-			"The PRODUCTS are the STARS - showcase them as beautiful objects with perfect details.\n" +
-			"⚠️ CRITICAL: NO people or models in this shot - products only.\n\n" +
-			"Create ONE photorealistic photograph with ARTISTIC STORYTELLING:\n" +
-			"• Artistic arrangement of all items - creative composition\n" +
-			"• Dramatic lighting that highlights textures and materials\n" +
-			"• Environmental context (if location provided) or studio elegance\n" +
-			"• Directional lighting creates depth and mood\n" +
-			"• This is high-end product photography with cinematic quality\n\n"
+		// 프로덕트만 → 뷰티 프로덕트 (화장품/제품)
+		mainInstruction = "[BEAUTY PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
+			"You are a world-class cosmetic product photographer.\n" +
+			"The BEAUTY PRODUCTS are the STARS - showcase them as premium cosmetics.\n" +
+			"⚠️ CRITICAL: NO people or models in this shot - beauty products only.\n\n" +
+			"Create ONE photorealistic photograph with COSMETIC ELEGANCE:\n" +
+			"• Artistic arrangement of beauty products (lipsticks, makeup, skincare)\n" +
+			"• Soft, diffused lighting that highlights product details\n" +
+			"• Premium cosmetic brand photography style\n" +
+			"• Clean, elegant composition\n" +
+			"• This is high-end beauty product photography\n\n"
 	} else {
 		// 배경만 → 환경 포토그래피
-		mainInstruction = "[CINEMATIC ENVIRONMENTAL PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class environmental photographer capturing pure atmosphere.\n" +
-			"The LOCATION is the SUBJECT - showcase its mood, scale, and character.\n" +
+		mainInstruction = "[BEAUTY ENVIRONMENT PHOTOGRAPHER'S APPROACH]\n" +
+			"You are a photographer capturing a serene beauty photography backdrop.\n" +
+			"The LOCATION creates a MOOD for beauty photography - soft, elegant, clean.\n" +
 			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n\n" +
-			"Create ONE photorealistic photograph with ATMOSPHERIC STORYTELLING:\n" +
-			"• Dramatic composition that captures the location's essence\n" +
-			"• Layers of depth - foreground, midground, background\n" +
-			"• Directional lighting creates mood and drama\n" +
-			"• This is cinematic environmental photography with narrative quality\n\n"
+			"Create ONE photorealistic photograph with SOFT ATMOSPHERIC MOOD:\n" +
+			"• Soft, flattering lighting suitable for beauty photography\n" +
+			"• Clean, elegant composition\n" +
+			"• Subtle depth and layers\n" +
+			"• This creates a perfect backdrop for beauty shots\n\n"
 	}
 
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명
+	// 각 카테고리별 명확한 설명 (Beauty-specific)
 	if categories.Model != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
+			fmt.Sprintf("Reference Image %d (MODEL FACE): This person's FACE, facial features, skin tone, bone structure, and expression - use EXACTLY this appearance. Focus on face and shoulders only for beauty closeup", imageIndex))
 		imageIndex++
 	}
 
-	if len(categories.Clothing) > 0 {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (CLOTHING): ALL visible garments - tops, bottoms, dresses, outerwear, layers. The person MUST wear EVERY piece shown here", imageIndex))
+	if len(categories.Products) > 0 {
+		if hasModel {
+			// 모델 + 제품: 메이크업 레퍼런스로 사용
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d (MAKEUP/COSMETIC REFERENCE): These beauty products show the makeup style and color palette to apply to the model's face - lipstick shade, eyeshadow tones, skin finish. Use these as inspiration for the model's makeup look, NOT as products to place in the shot", imageIndex))
+		} else {
+			// 제품만: 순수 제품 촬영
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS): Cosmetic items to showcase as the main subject - bottles, jars, tubes, compacts, lipsticks, skincare packaging. Display these products artistically with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply", imageIndex))
+		}
 		imageIndex++
 	}
 
 	if len(categories.Accessories) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (ACCESSORIES): ALL items - shoes, bags, hats, glasses, jewelry, watches. The person MUST wear/carry EVERY item shown here", imageIndex))
+			fmt.Sprintf("Reference Image %d (BEAUTY ACCESSORIES): Visible accessories in closeup (earrings, necklace, headpiece) that complement the beauty portrait - include ONLY items visible in head and shoulders frame", imageIndex))
 		imageIndex++
 	}
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (LOCATION INSPIRATION): This shows the MOOD and ATMOSPHERE you should recreate - NOT a background to paste. Like a photographer's location scout photo, use this to understand the setting, lighting direction, and visual style. Generate a COMPLETELY NEW environment inspired by this reference that serves as the perfect stage for your subject", imageIndex))
+			fmt.Sprintf("Reference Image %d (LIGHTING/MOOD INSPIRATION): This shows the LIGHTING MOOD and ATMOSPHERE for the beauty portrait - NOT a background to paste. Use this to understand the lighting direction, color temperature, and visual mood. The background should be SOFT and OUT OF FOCUS, serving only as atmospheric context for the face", imageIndex))
 		imageIndex++
 	}
 
 	// 시네마틱 구성 지시사항
 	var compositionInstruction string
 
-	// 케이스 1: 모델 이미지가 있는 경우 → 모델 착용 샷 (패션 에디토리얼)
+	// 케이스 1: 모델 이미지가 있는 경우 → 뷰티 클로즈업 (얼굴 중심)
 	if hasModel {
-		compositionInstruction = "\n[FASHION EDITORIAL COMPOSITION]\n" +
-			"Generate ONE photorealistic film photograph showing the referenced model wearing the complete outfit (all clothing + accessories).\n" +
-			"This is a high-end fashion editorial shoot with the model as the star."
+		compositionInstruction = "\n[BEAUTY CLOSE-UP PORTRAIT COMPOSITION]\n" +
+			"Generate ONE photorealistic beauty portrait showing the referenced model's FACE AND SHOULDERS ONLY.\n" +
+			"⚠️ CRITICAL: This is a BEAUTY SHOT, NOT a fashion or full body shot.\n" +
+			"⚠️ MANDATORY: CLOSE-UP composition - face fills 60-80% of the frame.\n" +
+			"⚠️ FORBIDDEN: NO full body, NO outfit showcase, NO fashion poses.\n\n" +
+			"Focus on:\n" +
+			"• Facial features and expressions\n" +
+			"• Skin texture and quality\n" +
+			"• Makeup details (eyes, lips, cheeks)\n" +
+			"• Head and shoulders composition only\n" +
+			"• Soft, flattering beauty lighting\n" +
+			"This is high-end cosmetic editorial photography with the face as the star."
 	} else if hasProducts {
-		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
-		compositionInstruction = "\n[CINEMATIC PRODUCT PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic product photograph showcasing the clothing and accessories as OBJECTS.\n" +
-			"⚠️ DO NOT add any people, models, or human figures.\n" +
-			"⚠️ Display the items artistically arranged - like high-end product photography.\n"
+		// 케이스 2: 모델 없이 제품만 → 뷰티 프로덕트 샷 (화장품/코스메틱)
+		compositionInstruction = "\n[BEAUTY PRODUCT PHOTOGRAPHY]\n" +
+			"Generate ONE photorealistic beauty product photograph showcasing cosmetics and beauty items as OBJECTS.\n" +
+			"⚠️ CRITICAL: DO NOT add any people, models, or human figures.\n" +
+			"⚠️ CRITICAL: DO NOT add hands, fingers, or any body parts holding products.\n" +
+			"⚠️ CRITICAL: NO human faces, NO portraits, NO makeup application shots - PRODUCTS ONLY.\n" +
+			"⚠️ Display the beauty products artistically arranged - like high-end cosmetic advertising photography.\n"
 
 		if hasBackground {
-			compositionInstruction += "The products are placed naturally within the referenced environment - " +
-				"as if styled by a professional photographer on location.\n" +
-				"The items interact with the space (resting on surfaces, hanging naturally, artfully positioned)."
+			compositionInstruction += "The beauty products are placed naturally within the referenced environment - " +
+				"as if styled by a professional beauty photographer on location.\n" +
+				"The items interact with the space (resting on surfaces, elegantly positioned with soft lighting).\n" +
+				"This is STILL LIFE product photography - absolutely no people, just beautiful cosmetic product arrangement like Chanel or Dior ads."
 		} else {
-			compositionInstruction += "Create a stunning studio product shot with professional lighting and composition.\n" +
-				"The items are arranged artistically - flat lay, suspended, or elegantly displayed."
+			compositionInstruction += "Create a stunning studio beauty product shot with soft, diffused lighting and clean composition.\n" +
+				"The cosmetic items are arranged artistically - flat lay, clean display, or elegantly positioned with beauty editorial aesthetic.\n" +
+				"Think premium beauty brand campaigns (Estée Lauder, La Mer, Tom Ford Beauty) - pure product elegance, zero human presence."
 		}
 	} else if hasBackground {
 		// 케이스 3: 배경만 → 환경 사진
@@ -126,35 +152,37 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	// 배경 관련 지시사항 - 모델이 있을 때만 추가
 	if hasModel && hasBackground {
-		// 모델 + 배경 케이스 → 환경 통합 지시사항
-		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
-			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
-			"The photographer CHOSE this environment to complement the subject - not to overwhelm them.\n" +
-			"🎬 Use the background reference as INSPIRATION ONLY:\n" +
-			"   • Recreate the atmosphere, lighting mood, and setting type\n" +
-			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The location serves as a STAGE for the subject's story\n\n" +
-			"[ABSOLUTE PRIORITY: SUBJECT INTEGRITY]\n" +
-			"⚠️ CRITICAL: The person's body proportions are UNTOUCHABLE\n" +
-			"⚠️ DO NOT distort, stretch, compress, or alter the person to fit the frame\n" +
-			"⚠️ The background adapts to showcase the subject - NEVER the reverse\n\n" +
-			"[DRAMATIC ENVIRONMENTAL INTEGRATION]\n" +
-			"✓ Subject positioned naturally in the space (standing, sitting, moving)\n" +
-			"✓ Realistic ground contact with natural shadows\n" +
-			"✓ Background elements create DEPTH - use foreground/midground/background layers\n" +
-			"✓ Directional lighting from the environment enhances drama\n" +
-			"✓ Environmental light wraps around the subject naturally\n" +
-			"✓ Atmospheric perspective adds cinematic depth\n" +
-			"✓ Shot composition tells a STORY - what is happening in this moment?\n\n" +
+		// 모델 + 배경 케이스 → 뷰티 환경 통합
+		compositionInstruction += " shot on location with environmental lighting.\n\n" +
+			"[BEAUTY PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
+			"The environment provides MOOD and LIGHTING for the beauty portrait.\n" +
+			"⚠️ CRITICAL: Even with a background, this is still a CLOSE-UP BEAUTY PORTRAIT.\n" +
+			"⚠️ MANDATORY: Face and shoulders composition - NOT full body.\n\n" +
+			"🎬 Use the background reference as ATMOSPHERE INSPIRATION:\n" +
+			"   • Recreate the lighting mood and color palette\n" +
+			"   • Background should be SOFT and OUT OF FOCUS (shallow depth of field)\n" +
+			"   • Face remains the PRIMARY FOCUS - background is secondary\n" +
+			"   • Generate a NEW scene inspired by the reference\n\n" +
+			"[BEAUTY PORTRAIT PRIORITY]\n" +
+			"⚠️ CRITICAL: The face fills 60-80% of the frame\n" +
+			"⚠️ Background is BLURRED and serves as atmospheric context only\n" +
+			"⚠️ Soft, flattering lighting from the environment\n\n" +
+			"[BEAUTY PORTRAIT EXECUTION]\n" +
+			"✓ Close-up composition - head and shoulders only\n" +
+			"✓ Shallow depth of field - face is sharp, background is soft\n" +
+			"✓ Soft, diffused lighting flatters the skin\n" +
+			"✓ Environmental light creates subtle rim or fill light\n" +
+			"✓ Background provides color and mood, not distraction\n\n" +
 			"[TECHNICAL EXECUTION]\n" +
-			"✓ Single camera angle - this is ONE photograph\n" +
-			"✓ Film photography aesthetic with natural color grading\n" +
-			"✓ Rule of thirds or dynamic asymmetric composition\n" +
-			"✓ Depth of field focuses attention on the subject\n" +
-			"✓ The environment and subject look like they exist in the SAME REALITY"
+			"✓ Beauty photography lens (85mm-135mm equivalent)\n" +
+			"✓ Shallow depth of field (f/2.8 or wider)\n" +
+			"✓ Soft, natural color grading for skin tones\n" +
+			"✓ Focus on eyes and facial features\n" +
+			"✓ This is BEAUTY EDITORIAL, not environmental portraiture"
 	} else if hasModel && !hasBackground {
-		// 모델만 있고 배경 없음 → 스튜디오
-		compositionInstruction += " in a cinematic studio setting with professional film lighting."
+		// 모델만 있고 배경 없음 → 뷰티 스튜디오
+		compositionInstruction += " in a professional beauty studio with soft, flattering lighting.\n" +
+			"Clean background (white, grey, or neutral) to emphasize the face."
 	}
 	// 프로덕트 샷이나 배경만 있는 케이스는 위에서 이미 처리됨
 
@@ -183,39 +211,47 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"✓ Background elements (buildings, sky, ground) must be CONTINUOUS with no breaks or seams\n"
 
 	if hasModel {
-		// 모델 있는 케이스 - 드라마틱 패션 에디토리얼 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Person's body proportions are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
-			"🎯 The subject is the STAR - everything else supports their presence\n" +
-			"🎯 Dramatic composition with ENERGY and MOVEMENT\n" +
-			"🎯 Environmental storytelling - what's the narrative of this moment?\n" +
-			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
-			"🎯 Single cohesive photograph - looks like ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY distortion of the person's proportions (stretched, compressed, squashed)\n" +
+		// 모델 있는 케이스 - 뷰티 클로즈업 규칙
+		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE BEAUTY PORTRAIT REQUIREMENTS]\n" +
+			"🎯 CLOSE-UP PORTRAIT ONLY - face fills 60-80% of the frame\n" +
+			"🎯 Head and shoulders composition - NO full body shots\n" +
+			"🎯 The FACE is the STAR - focus on skin, makeup, and features\n" +
+			"🎯 Facial features are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
+			"🎯 Soft, flattering beauty lighting (butterfly, loop, or Rembrandt)\n" +
+			"🎯 Flawless skin texture with natural detail preservation\n" +
+			"🎯 Professional beauty photography composition\n" +
+			"🎯 High-end cosmetic editorial quality\n" +
+			"🎯 This is BEAUTY/MAKEUP photography, NOT fashion photography\n\n" +
+			"[FORBIDDEN - THESE WILL RUIN THE BEAUTY SHOT]\n" +
+			"❌ ANY full body shots or fashion model poses\n" +
+			"❌ ANY distortion of facial features (stretched, compressed, squashed face)\n" +
+			"❌ Fashion editorial composition (full body, runway, outfit showcase)\n" +
 			"❌ Person looking pasted, floating, or artificially placed\n" +
-			"❌ Static, boring, catalog-style poses\n" +
-			"❌ Centered, symmetrical composition without drama\n" +
-			"❌ Flat lighting that doesn't create mood"
+			"❌ Harsh, unflattering lighting that emphasizes skin flaws\n" +
+			"❌ Wide shots that don't focus on the face\n" +
+			"❌ Cluttered composition that distracts from facial features"
 	} else if hasProducts {
-		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Showcase the products as beautiful OBJECTS with perfect details\n" +
-			"🎯 Artistic arrangement - creative composition like high-end product photography\n" +
-			"🎯 Dramatic lighting that highlights textures and materials\n" +
-			"🎯 Environmental storytelling through product placement\n" +
-			"🎯 ALL items displayed clearly and beautifully\n" +
+		// 뷰티 프로덕트 샷 케이스 - 화장품 촬영 규칙
+		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE BEAUTY PRODUCT REQUIREMENTS]\n" +
+			"🎯 Showcase the beauty products as elegant OBJECTS with perfect details\n" +
+			"🎯 Artistic arrangement - creative composition like high-end cosmetic advertising\n" +
+			"🎯 Soft, diffused lighting that highlights product packaging and textures\n" +
+			"🎯 Clean, elegant aesthetic typical of beauty product photography\n" +
+			"🎯 ALL cosmetic items displayed clearly and beautifully\n" +
 			"🎯 Single cohesive photograph - ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and depth creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
+			"🎯 Professional beauty editorial aesthetic - clean and sophisticated\n" +
+			"🎯 Elegant framing - use negative space and minimalism\n" +
+			"🎯 This is STILL LIFE photography - products are inanimate objects\n\n" +
+			"[FORBIDDEN - THESE WILL RUIN THE BEAUTY PRODUCT SHOT - ZERO TOLERANCE]\n" +
 			"❌ ANY people, models, or human figures in the frame\n" +
+			"❌ ANY hands, fingers, arms, or body parts touching/holding products\n" +
+			"❌ ANY faces, portraits, or makeup application scenes\n" +
+			"❌ ANY human skin, lips, eyes, or facial features\n" +
 			"❌ Products looking pasted or artificially placed\n" +
-			"❌ Boring, flat catalog-style layouts\n" +
 			"❌ Cluttered composition without focal point\n" +
-			"❌ Flat lighting that doesn't create depth"
+			"❌ Harsh lighting that creates unflattering shadows\n" +
+			"❌ Messy or chaotic arrangement\n" +
+			"❌ ANY suggestion of human presence - this is OBJECT photography ONLY"
 	} else {
 		// 배경만 있는 케이스 - 환경 촬영 규칙
 		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
@@ -233,42 +269,44 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var aspectRatioInstruction string
 	if aspectRatio == "16:9" {
 		if hasModel {
-			// 모델이 있는 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
-				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE COMPOSITION:\n" +
-				"✓ Subject positioned off-center (rule of thirds) creating dynamic tension\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground elements, subject, background scenery\n" +
-				"✓ Leading lines guide the eye to the subject\n" +
-				"✓ Negative space creates breathing room and drama\n\n" +
-				"🎬 SUBJECT INTEGRITY IN WIDE FRAME:\n" +
-				"⚠️ The wide frame is NOT an excuse to distort proportions\n" +
-				"⚠️ Person maintains PERFECT natural proportions - just smaller in frame if needed\n" +
-				"⚠️ Use the space to tell a STORY, not to force-fit the subject\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates mood across the wide frame\n" +
-				"✓ Atmospheric perspective - distant elements are hazier\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes the subject while showing environment\n\n" +
-				"GOAL: A breathtaking wide shot from a high-budget fashion editorial - \n" +
-				"like Annie Leibovitz or Steven Meisel capturing a MOMENT of drama and beauty."
+			// 모델이 있는 16:9 케이스 - 뷰티에서도 여전히 얼굴 클로즈업
+			aspectRatioInstruction = "\n\n[16:9 BEAUTY PORTRAIT - WIDE FORMAT CLOSEUP]\n" +
+				"⚠️ CRITICAL: Even in 16:9, this is STILL A BEAUTY CLOSEUP PORTRAIT.\n" +
+				"The wide format provides horizontal space for creative framing, but the face remains the STAR.\n\n" +
+				"🎬 16:9 BEAUTY COMPOSITION:\n" +
+				"✓ Face and shoulders CLOSEUP - positioned creatively in the wide frame\n" +
+				"✓ Subject positioned off-center (rule of thirds) for elegant composition\n" +
+				"✓ Use the WIDTH for negative space and atmospheric background (soft and blurred)\n" +
+				"✓ Face fills 60-80% of the frame vertically, even in wide format\n" +
+				"✓ Horizontal space allows for directional lighting and mood\n\n" +
+				"🎬 BEAUTY PORTRAIT INTEGRITY IN WIDE FRAME:\n" +
+				"⚠️ The wide frame is NOT an excuse for full body shots\n" +
+				"⚠️ Face maintains PERFECT natural proportions and remains the focal point\n" +
+				"⚠️ Background is SOFT and OUT OF FOCUS, providing atmosphere only\n" +
+				"⚠️ This is BEAUTY PHOTOGRAPHY, not fashion or environmental portraiture\n\n" +
+				"🎬 BEAUTY EXECUTION IN 16:9:\n" +
+				"✓ Soft, flattering beauty lighting (butterfly, loop, or Rembrandt)\n" +
+				"✓ Shallow depth of field - face sharp, background soft\n" +
+				"✓ Horizontal space used for elegant negative space and mood\n" +
+				"✓ Natural color grading for skin tones\n\n" +
+				"GOAL: A stunning wide-format beauty portrait like Peter Lindbergh or Patrick Demarchelier - \n" +
+				"elegant closeup with horizontal breathing room, NOT a full body fashion shot."
 		} else if hasProducts {
-			// 프로덕트 샷 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PRODUCT SHOT]\n" +
-				"This is a WIDE ANGLE product shot - use the horizontal space for artistic storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE PRODUCT COMPOSITION:\n" +
-				"✓ Products positioned creatively using the full width\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground, products, background elements\n" +
-				"✓ Leading lines guide the eye to the key products\n" +
-				"✓ Negative space creates elegance and breathing room\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates drama and highlights textures\n" +
-				"✓ Atmospheric perspective adds depth\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes products while showing environment\n\n" +
-				"GOAL: A stunning wide product shot like high-end editorial still life photography."
+			// 뷰티 프로덕트 샷 16:9 케이스
+			aspectRatioInstruction = "\n\n[16:9 BEAUTY PRODUCT SHOT]\n" +
+				"This is a WIDE ANGLE beauty product shot - use the horizontal space for elegant cosmetic advertising.\n\n" +
+				"🎬 ELEGANT WIDE BEAUTY PRODUCT COMPOSITION:\n" +
+				"✓ Cosmetic products positioned elegantly using the full width\n" +
+				"✓ Use the WIDTH for clean negative space and sophisticated aesthetic\n" +
+				"✓ Soft, diffused lighting typical of beauty product photography\n" +
+				"✓ Minimalist composition with focus on product details\n" +
+				"✓ Negative space creates luxury and breathing room\n\n" +
+				"🎬 BEAUTY PRODUCT EXECUTION:\n" +
+				"✓ Soft lighting highlights product packaging and textures\n" +
+				"✓ Clean, elegant aesthetic like high-end cosmetic ads\n" +
+				"✓ Natural color grading for product accuracy\n" +
+				"✓ Shallow depth of field emphasizes key products\n\n" +
+				"GOAL: A stunning wide beauty product shot like Estée Lauder or Chanel advertising - clean, elegant, sophisticated."
 		} else {
 			// 배경만 있는 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE LANDSCAPE SHOT]\n" +

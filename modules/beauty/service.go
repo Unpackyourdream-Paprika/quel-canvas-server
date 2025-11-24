@@ -33,11 +33,11 @@ type Service struct {
 	genaiClient *genai.Client
 }
 
-// ImageCategories - 카테고리별 이미지 분류 구조체
+// ImageCategories - Beauty 카테고리별 이미지 분류 구조체 (화장품 전용)
 type ImageCategories struct {
-	Model       []byte   // 모델 이미지 (최대 1장)
-	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
-	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
+	Model       []byte   // 모델 이미지 (최대 1장) - Beauty에서는 인물 뷰티 샷용
+	Products    [][]byte // 화장품/제품 이미지 배열 (lipstick, cream, bottle 등) - Beauty 전용
+	Accessories [][]byte // 악세사리 이미지 배열 (brush, tool 등) - Beauty 보조 도구
 	Background  []byte   // 배경 이미지 (최대 1장)
 }
 
@@ -506,13 +506,12 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 	return dst
 }
 
-// generateDynamicPrompt - 상황별 동적 프롬프트 생성
+// generateDynamicPrompt - 상황별 동적 프롬프트 생성 (레거시 - 사용 안 함, GenerateDynamicPrompt 사용)
+// 이 함수는 이제 사용되지 않습니다. Beauty 모듈은 prompt.go의 GenerateDynamicPrompt를 사용합니다.
 func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
-	hasClothing := len(categories.Clothing) > 0
-	hasAccessories := len(categories.Accessories) > 0
-	hasProducts := hasClothing || hasAccessories
+	hasProducts := len(categories.Products) > 0
 	hasBackground := categories.Background != nil
 
 	// 케이스별 메인 지시사항
@@ -557,16 +556,16 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명
+	// 각 카테고리별 명확한 설명 (Beauty 전용)
 	if categories.Model != nil {
 		instructions = append(instructions,
 			fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
 		imageIndex++
 	}
 
-	if len(categories.Clothing) > 0 {
+	if len(categories.Products) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (CLOTHING): ALL visible garments - tops, bottoms, dresses, outerwear, layers. The person MUST wear EVERY piece shown here", imageIndex))
+			fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS): Beauty products and cosmetics - use as styling reference or showcase as products", imageIndex))
 		imageIndex++
 	}
 
@@ -785,19 +784,20 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		aspectRatio = "16:9"
 	}
 
-	log.Printf("🎨 Calling Gemini API with categories - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("🎨 [Beauty Service] Calling Gemini API with categories - Model:%v, Products:%d, Accessories:%d, BG:%v",
+		categories.Model != nil, len(categories.Products), len(categories.Accessories), categories.Background != nil)
 
-	// 카테고리별 병합 및 resize
-	var mergedClothing []byte
+	// 카테고리별 병합 및 resize (Beauty 전용)
+	var mergedProducts []byte
 	var mergedAccessories []byte
 	var err error
 
-	if len(categories.Clothing) > 0 {
-		mergedClothing, err = mergeImages(categories.Clothing, aspectRatio)
+	if len(categories.Products) > 0 {
+		mergedProducts, err = mergeImages(categories.Products, aspectRatio)
 		if err != nil {
-			return "", fmt.Errorf("failed to merge clothing images: %w", err)
+			return "", fmt.Errorf("failed to merge product images: %w", err)
 		}
+		log.Printf("✅ [Beauty Service] Merged %d product images", len(categories.Products))
 	}
 
 	if len(categories.Accessories) > 0 {
@@ -826,14 +826,14 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 Added Model image (resized)")
 	}
 
-	if mergedClothing != nil {
+	if mergedProducts != nil {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     mergedClothing,
+				Data:     mergedProducts,
 			},
 		})
-		log.Printf("📎 Added Clothing image (merged from %d items)", len(categories.Clothing))
+		log.Printf("📎 [Beauty Service] Added Products image (merged from %d beauty items)", len(categories.Products))
 	}
 
 	if mergedAccessories != nil {
@@ -861,11 +861,11 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 Added Background image (resized)")
 	}
 
-	// 동적 프롬프트 생성
-	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
+	// Beauty 전용 동적 프롬프트 생성
+	dynamicPrompt := GenerateDynamicPrompt(categories, userPrompt, aspectRatio)
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
-	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
+	log.Printf("📝 [Beauty Service] Generated Beauty-specific dynamic prompt (%d chars)", len(dynamicPrompt))
 
 	// Content 생성
 	content := &genai.Content{
