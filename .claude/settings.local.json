@@ -21,7 +21,8 @@
       "Bash(docker rm:*)",
       "Bash(docker run:*)",
       "Bash(docker exec:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
