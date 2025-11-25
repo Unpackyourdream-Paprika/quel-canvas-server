@@ -151,9 +151,6 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
 		len(individualImageAttachIds), basePrompt, len(combinationsRaw), userID)
 
-	// 제품 전용 케이스일 때 사람/모델이 들어가지 않도록 프롬프트 보강
-	basePrompt = ensureProductOnlyPrompt(basePrompt, categories)
-
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
 		log.Printf("❌ Failed to update job status: %v", err)
@@ -220,6 +217,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			}
 		}
 	}
+
+	// 제품 전용 케이스일 때 사람/모델이 들어가지 않도록 프롬프트 보강
+	basePrompt = ensureProductOnlyPrompt(basePrompt, categories)
 
 	// 최소한 의류 이미지는 있어야 함
 	if len(categories.Clothing) == 0 && categories.Model == nil {
@@ -989,7 +989,7 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 	// Phase 3: 모든 입력 이미지 다운로드 및 Base64 변환
 	var base64Images []string
 	hasModel := false
-	hasProducts := false
+	productCount := 0
 
 	for i, attachObj := range uploadedAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -1015,7 +1015,7 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		if attachType == "model" {
 			hasModel = true
 		} else if clothingTypes[attachType] || accessoryTypes[attachType] {
-			hasProducts = true
+			productCount++
 		}
 
 		imageData, err := service.DownloadImageFromStorage(attachID)
@@ -1036,7 +1036,7 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// 제품만 있을 때는 사람 금지 규칙을 프롬프트에 추가
-	prompt = ensureProductOnlyPromptFromFlags(prompt, hasModel, hasProducts)
+	prompt = ensureProductOnlyPromptFromFlags(prompt, hasModel, productCount)
 
 	log.Printf("✅ All %d input images prepared", len(base64Images))
 
