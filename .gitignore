@@ -37,3 +37,4 @@ tmp/
 
 # Claude settings
 .claude/settings.local.json
+app
