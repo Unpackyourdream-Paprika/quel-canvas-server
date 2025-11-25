@@ -21,7 +21,6 @@ func StartWorker() {
 
 	cfg := config.GetConfig()
 
-
 	// 테스트
 	// Service 초기화
 	service := NewService()
@@ -151,6 +150,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
 		len(individualImageAttachIds), basePrompt, len(combinationsRaw), userID)
+
+	// 제품 전용 케이스일 때 사람/모델이 들어가지 않도록 프롬프트 보강
+	basePrompt = ensureProductOnlyPrompt(basePrompt, categories)
 
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -284,9 +286,12 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				shotTypeText = "full body shot" // 기본값
 			}
 
-			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-				". Create a single unified photorealistic cinematic composition where the model wears all clothing and accessories together in one complete outfit. " +
-				"Film photography aesthetic with natural storytelling composition."
+			enhancedPrompt := fmt.Sprintf(
+				"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
+				cameraAngleText,
+				shotTypeText,
+				basePrompt,
+			)
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
@@ -387,6 +392,31 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	log.Printf("✅ Single Batch processing completed for job: %s", job.JobID)
+}
+
+// ensureProductOnlyPrompt - 제품만 있는 경우 사람/몸 파츠가 들어가지 않도록 프롬프트에 강제 규칙을 추가한다.
+func ensureProductOnlyPrompt(prompt string, categories *ImageCategories) string {
+	if categories == nil {
+		return prompt
+	}
+
+	hasModel := categories.Model != nil
+	productCount := len(categories.Clothing) + len(categories.Accessories)
+
+	return ensureProductOnlyPromptFromFlags(prompt, hasModel, productCount)
+}
+
+func ensureProductOnlyPromptFromFlags(prompt string, hasModel bool, productCount int) string {
+	if hasModel || productCount == 0 {
+		return prompt
+	}
+
+	productRule := "Use ONLY the provided products; do NOT add any extra items, props, or accessories."
+	if productCount == 1 {
+		productRule = "Show EXACTLY one product (the provided reference) alone. Do NOT add any other items, props, accessories, tags, logos, or text."
+	}
+
+	return "PRODUCT-ONLY SAFETY: Absolutely no people, faces, hands, or body parts. " + productRule + " " + prompt
 }
 
 // minInt - Helper function for minimum of two integers
@@ -534,7 +564,6 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					}
 				}
 
-
 				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
 					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
 					len(stageCategories.Accessories), stageCategories.Background != nil)
@@ -563,11 +592,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			// Stage별 이미지 생성 루프
 			stageGeneratedIds := []int{}
 
+			// 제품 전용이면 프롬프트 보강 (사람/몸 파츠 금지)
+			stagePrompt := ensureProductOnlyPrompt(prompt, stageCategories)
+
 			for i := 0; i < quantity; i++ {
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, stagePrompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
 					continue
@@ -744,7 +776,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			log.Printf("🔄 Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
 			// Gemini API 호출 (카테고리별 이미지 전달)
-			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio)
+			retryPrompt := ensureProductOnlyPrompt(prompt, retryCategories)
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, retryPrompt, aspectRatio)
 			if err != nil {
 				log.Printf("❌ Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
 				continue
@@ -891,7 +924,7 @@ func connectRedis(config *config.Config) *redis.Client {
 		Username:     config.RedisUsername,
 		Password:     config.RedisPassword,
 		TLSConfig:    tlsConfig,
-		DB:           0,              // 기본 DB
+		DB:           0,                // 기본 DB
 		DialTimeout:  10 * time.Second, // 타임아웃 늘림
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -955,6 +988,8 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 
 	// Phase 3: 모든 입력 이미지 다운로드 및 Base64 변환
 	var base64Images []string
+	hasModel := false
+	hasProducts := false
 
 	for i, attachObj := range uploadedAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -974,6 +1009,15 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		log.Printf("📥 Downloading input image %d/%d: AttachID=%d, Type=%s",
 			i+1, len(uploadedAttachIds), attachID, attachType)
 
+		// 제품 전용 여부 체크
+		clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
+		accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+		if attachType == "model" {
+			hasModel = true
+		} else if clothingTypes[attachType] || accessoryTypes[attachType] {
+			hasProducts = true
+		}
+
 		imageData, err := service.DownloadImageFromStorage(attachID)
 		if err != nil {
 			log.Printf("❌ Failed to download image %d: %v", attachID, err)
@@ -990,6 +1034,9 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
 		return
 	}
+
+	// 제품만 있을 때는 사람 금지 규칙을 프롬프트에 추가
+	prompt = ensureProductOnlyPromptFromFlags(prompt, hasModel, hasProducts)
 
 	log.Printf("✅ All %d input images prepared", len(base64Images))
 
