@@ -21,7 +21,6 @@ func StartWorker() {
 
 	cfg := config.GetConfig()
 
-
 	// 테스트
 	// Service 초기화
 	service := NewService()
@@ -166,20 +165,20 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 3: 이미지 다운로드 및 카테고리별 분류 (Beauty 전용)
 	categories := &ImageCategories{
-		Products:    [][]byte{},  // Clothing 대신 Products 사용 (Beauty 전용)
+		Products:    [][]byte{}, // Clothing 대신 Products 사용 (Beauty 전용)
 		Accessories: [][]byte{},
 	}
 
 	// Beauty 전용 타입 정의
 	productTypes := map[string]bool{
-		"product":   true,  // 핵심: 프론트엔드에서 보내는 기본값
-		"lipstick":  true,
-		"cream":     true,
-		"bottle":    true,
-		"compact":   true,
-		"cosmetic":  true,
-		"skincare":  true,
-		"makeup":    true,
+		"product":  true, // 핵심: 프론트엔드에서 보내는 기본값
+		"lipstick": true,
+		"cream":    true,
+		"bottle":   true,
+		"compact":  true,
+		"cosmetic": true,
+		"skincare": true,
+		"makeup":   true,
 	}
 
 	accessoryTypes := map[string]bool{
@@ -311,9 +310,12 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				shotTypeText = "full body shot" // 기본값
 			}
 
-			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-				". Create a single unified photorealistic cinematic composition where the model wears all clothing and accessories together in one complete outfit. " +
-				"Film photography aesthetic with natural storytelling composition."
+			enhancedPrompt := fmt.Sprintf(
+				"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
+				cameraAngleText,
+				shotTypeText,
+				basePrompt,
+			)
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
@@ -511,7 +513,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
-					Products:    [][]byte{},  // Beauty 전용
+					Products:    [][]byte{}, // Beauty 전용
 					Accessories: [][]byte{},
 				}
 
@@ -571,7 +573,6 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						}
 					}
 				}
-
 
 				log.Printf("✅ [Beauty Pipeline] Stage %d: Images classified - Model:%v, Products:%d, Accessories:%d, BG:%v",
 					stageIndex, stageCategories.Model != nil, len(stageCategories.Products),
@@ -934,7 +935,7 @@ func connectRedis(config *config.Config) *redis.Client {
 		Username:     config.RedisUsername,
 		Password:     config.RedisPassword,
 		TLSConfig:    tlsConfig,
-		DB:           0,              // 기본 DB
+		DB:           0,                // 기본 DB
 		DialTimeout:  10 * time.Second, // 타임아웃 늘림
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,

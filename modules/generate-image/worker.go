@@ -17,7 +17,6 @@ func StartWorker() {
 
 	config := GetConfig()
 
-
 	// 테스트
 	// Service 초기화
 	service := NewService()
@@ -280,9 +279,12 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 				shotTypeText = "full body shot" // 기본값
 			}
 
-			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt +
-				". Create a single unified photorealistic cinematic composition where the model wears all clothing and accessories together in one complete outfit. " +
-				"Film photography aesthetic with natural storytelling composition."
+			enhancedPrompt := fmt.Sprintf(
+				"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
+				cameraAngleText,
+				shotTypeText,
+				basePrompt,
+			)
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
@@ -877,7 +879,7 @@ func connectRedis(config *Config) *redis.Client {
 		Username:     config.RedisUsername,
 		Password:     config.RedisPassword,
 		TLSConfig:    tlsConfig,
-		DB:           0,              // 기본 DB
+		DB:           0,                // 기본 DB
 		DialTimeout:  10 * time.Second, // 타임아웃 늘림
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
