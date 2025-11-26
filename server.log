@@ -1,17 +1,1020 @@
-2025/10/29 14:43:58 ✅ Configuration loaded successfully
-2025/10/29 14:43:58    Redis: localhost:6379 (TLS: false)
-2025/10/29 14:43:58    Supabase: https://ftunegfzqsbhtucctaqq.supabase.co
-2025/10/29 14:43:58    Gemini: gemini-2.5-flash-image
-2025/10/29 14:43:58    Credit: 20 per image
-2025/10/29 14:43:58 🔄 Started session cleanup routines (Empty: 5min, Expired: 30min)
-2025/10/29 14:43:58 🚀 Quel Canvas Collaboration Server starting on port 8080
-2025/10/29 14:43:58 📡 WebSocket endpoint: ws://localhost:8080/ws
-2025/10/29 14:43:58 ❤️  Health check: http://localhost:8080/health
-2025/10/29 14:43:58 📊 Metrics: http://localhost:8080/metrics
-2025/10/29 14:43:58 🧹 Admin cleanup: http://localhost:8080/admin/cleanup
-2025/10/29 14:43:58 🔄 Redis Queue Worker starting...
-2025/10/29 14:43:58 ✅ Supabase and Genai clients initialized
-2025/10/29 14:43:58 🔌 Connecting to Redis: localhost:6379
-2025/10/29 14:43:58 🔍 Testing Redis connection...
-2025/10/29 14:43:58 Server failed to start: listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
-exit status 1
+2025/11/26 00:17:43 ✅ Configuration loaded successfully
+2025/11/26 00:17:43    Redis: localhost:6379 (TLS: false)
+2025/11/26 00:17:43    Supabase: https://ftunegfzqsbhtucctaqq.supabase.co
+2025/11/26 00:17:43    Gemini: gemini-2.5-flash-image
+2025/11/26 00:17:43    Credit: 20 per image
+2025/11/26 00:17:43 Started session cleanup routines (Empty: 5min, Expired: 30min)
+2025/11/26 00:17:43 ✅ Modify service initialized (Supabase, Genai)
+2025/11/26 00:17:43 🔄 Redis Queue Worker starting...
+2025/11/26 00:17:43 🔌 Connecting to Redis: localhost:6379
+2025/11/26 00:17:43 ✅ Modify routes registered: /api/modify/submit, /api/modify/status/{jobId}
+2025/11/26 00:17:43 Quel Canvas Collaboration Server starting on port 8080
+2025/11/26 00:17:43 WebSocket endpoint: ws://localhost:8080/ws
+2025/11/26 00:17:43 Health check: http://localhost:8080/health
+2025/11/26 00:17:43 Metrics: http://localhost:8080/metrics
+2025/11/26 00:17:43 Admin cleanup: http://localhost:8080/admin/cleanup
+2025/11/26 00:17:43 Modify submit: http://localhost:8080/api/modify/submit
+2025/11/26 00:17:43 Modify status: http://localhost:8080/api/modify/status/{jobId}
+2025/11/26 00:17:43 🔍 Testing Redis connection...
+2025/11/26 00:17:43 ✅ Redis connected successfully
+2025/11/26 00:17:43 👀 Watching queue: jobs:queue
+2025/11/26 01:03:20 🎯 Received new job: 0cce34c2-1eac-4fbe-b52a-0b13469480ad
+2025/11/26 01:03:20 🚀 Processing job: 0cce34c2-1eac-4fbe-b52a-0b13469480ad
+2025/11/26 01:03:20 🔍 Fetching job from Supabase: 0cce34c2-1eac-4fbe-b52a-0b13469480ad
+2025/11/26 01:03:20 ✅ Job fetched successfully: 0cce34c2-1eac-4fbe-b52a-0b13469480ad (status: pending, total_images: 2)
+2025/11/26 01:03:20 📦 Job Data:
+2025/11/26 01:03:20    JobID: 0cce34c2-1eac-4fbe-b52a-0b13469480ad
+2025/11/26 01:03:20    JobType: single_batch
+2025/11/26 01:03:20    QuelProductionPath: fashion
+2025/11/26 01:03:20    Status: pending
+2025/11/26 01:03:20    TotalImages: 2
+2025/11/26 01:03:20    ProductionID: 2d9956a4-5c7a-4f0d-89cc-73f364a062e7
+2025/11/26 01:03:20 🔀 Routing to module: fashion
+2025/11/26 01:03:20 👗 Routing to Fashion module
+2025/11/26 01:03:20 👗 [FASHION MODULE] Job 0cce34c2-1eac-4fbe-b52a-0b13469480ad started (quel_production_path: fashion)
+2025/11/26 01:03:20 ✅ Supabase and Genai clients initialized
+2025/11/26 01:03:20 Starting Single Batch processing for job: 0cce34c2-1eac-4fbe-b52a-0b13469480ad
+2025/11/26 01:03:20 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 들거나 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:03:20 📝 Updating job 0cce34c2-1eac-4fbe-b52a-0b13469480ad status to: processing
+2025/11/26 01:03:20 ✅ Job 0cce34c2-1eac-4fbe-b52a-0b13469480ad status updated to: processing
+2025/11/26 01:03:20 📝 Updating production 2d9956a4-5c7a-4f0d-89cc-73f364a062e7 status to: processing
+2025/11/26 01:03:20 ✅ Production 2d9956a4-5c7a-4f0d-89cc-73f364a062e7 status updated to: processing
+2025/11/26 01:03:20 Downloading image 1/1: AttachID=24103, Type=none
+2025/11/26 01:03:20 🔍 Fetching attach info: 24103
+2025/11/26 01:03:20 ✅ Attach info fetched: ID=24103, Path=upload-2025-11-25T16-03-11-467Z.webp
+2025/11/26 01:03:20 🔍 Using attach_file_path: upload-2025-11-25T16-03-11-467Z.webp
+2025/11/26 01:03:20 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-03-11-467Z.webp
+2025/11/26 01:03:20 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-03-11-467Z.webp
+2025/11/26 01:03:20    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:03:20    📁 File Path: uploads/upload-2025-11-25T16-03-11-467Z.webp
+2025/11/26 01:03:21 ✅ Image downloaded successfully: 20122 bytes
+2025/11/26 01:03:21 Image added as default accessory (type: none)
+2025/11/26 01:03:21 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:03:21 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:03:21 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:03:21 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:03:21 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:03:21 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:03:21 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:03:21 ✅ Single image - returning original
+2025/11/26 01:03:21 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:03:21 📝 Generated dynamic prompt (5963 chars)
+2025/11/26 01:03:21 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:03:21 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:03:21 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:03:21 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:03:21 ✅ Single image - returning original
+2025/11/26 01:03:21 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:03:21 📝 Generated dynamic prompt (5963 chars)
+2025/11/26 01:03:21 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:03:21 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:03:21 Combination 1/1 completed: 2 images generated
+2025/11/26 01:03:21 All combinations completed in parallel
+2025/11/26 01:03:21 Job 0cce34c2-1eac-4fbe-b52a-0b13469480ad finished: 0/2 images completed
+2025/11/26 01:03:21 📝 Updating job 0cce34c2-1eac-4fbe-b52a-0b13469480ad status to: failed
+2025/11/26 01:03:21 ✅ Job 0cce34c2-1eac-4fbe-b52a-0b13469480ad status updated to: failed
+2025/11/26 01:03:21 📝 Updating production 2d9956a4-5c7a-4f0d-89cc-73f364a062e7 status to: failed
+2025/11/26 01:03:21 ✅ Production 2d9956a4-5c7a-4f0d-89cc-73f364a062e7 status updated to: failed
+2025/11/26 01:03:21 Single Batch processing completed for job: 0cce34c2-1eac-4fbe-b52a-0b13469480ad
+2025/11/26 01:03:21 ✅ Job 0cce34c2-1eac-4fbe-b52a-0b13469480ad processing completed
+2025/11/26 01:07:49 🎯 Received new job: e445a9b7-6ec2-4792-9a16-3d68145808f5
+2025/11/26 01:07:49 🚀 Processing job: e445a9b7-6ec2-4792-9a16-3d68145808f5
+2025/11/26 01:07:49 🔍 Fetching job from Supabase: e445a9b7-6ec2-4792-9a16-3d68145808f5
+2025/11/26 01:07:49 ✅ Job fetched successfully: e445a9b7-6ec2-4792-9a16-3d68145808f5 (status: pending, total_images: 2)
+2025/11/26 01:07:49 📦 Job Data:
+2025/11/26 01:07:49    JobID: e445a9b7-6ec2-4792-9a16-3d68145808f5
+2025/11/26 01:07:49    JobType: single_batch
+2025/11/26 01:07:49    QuelProductionPath: fashion
+2025/11/26 01:07:49    Status: pending
+2025/11/26 01:07:49    TotalImages: 2
+2025/11/26 01:07:49    ProductionID: b0552e93-f898-4b8c-b49b-7090e28fb34c
+2025/11/26 01:07:49 🔀 Routing to module: fashion
+2025/11/26 01:07:49 👗 Routing to Fashion module
+2025/11/26 01:07:49 👗 [FASHION MODULE] Job e445a9b7-6ec2-4792-9a16-3d68145808f5 started (quel_production_path: fashion)
+2025/11/26 01:07:49 ✅ Supabase and Genai clients initialized
+2025/11/26 01:07:49 Starting Single Batch processing for job: e445a9b7-6ec2-4792-9a16-3d68145808f5
+2025/11/26 01:07:49 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 들거나 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:07:49 📝 Updating job e445a9b7-6ec2-4792-9a16-3d68145808f5 status to: processing
+2025/11/26 01:07:49 ✅ Job e445a9b7-6ec2-4792-9a16-3d68145808f5 status updated to: processing
+2025/11/26 01:07:49 📝 Updating production b0552e93-f898-4b8c-b49b-7090e28fb34c status to: processing
+2025/11/26 01:07:49 ✅ Production b0552e93-f898-4b8c-b49b-7090e28fb34c status updated to: processing
+2025/11/26 01:07:49 Downloading image 1/1: AttachID=24104, Type=none
+2025/11/26 01:07:49 🔍 Fetching attach info: 24104
+2025/11/26 01:07:49 ✅ Attach info fetched: ID=24104, Path=upload-2025-11-25T16-07-24-906Z.webp
+2025/11/26 01:07:49 🔍 Using attach_file_path: upload-2025-11-25T16-07-24-906Z.webp
+2025/11/26 01:07:49 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-07-24-906Z.webp
+2025/11/26 01:07:49 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-07-24-906Z.webp
+2025/11/26 01:07:49    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:07:49    📁 File Path: uploads/upload-2025-11-25T16-07-24-906Z.webp
+2025/11/26 01:07:50 ✅ Image downloaded successfully: 20122 bytes
+2025/11/26 01:07:50 Image added as default accessory (type: none)
+2025/11/26 01:07:50 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:07:50 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:07:50 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:07:50 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:07:50 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:07:50 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:07:50 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:07:50 ✅ Single image - returning original
+2025/11/26 01:07:50 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:07:50 📝 Generated dynamic prompt (5963 chars)
+2025/11/26 01:07:50 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:07:50 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:07:50 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:07:50 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:07:50 ✅ Single image - returning original
+2025/11/26 01:07:50 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:07:50 📝 Generated dynamic prompt (5963 chars)
+2025/11/26 01:07:50 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:07:50 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:07:50 Combination 1/1 completed: 2 images generated
+2025/11/26 01:07:50 All combinations completed in parallel
+2025/11/26 01:07:50 Job e445a9b7-6ec2-4792-9a16-3d68145808f5 finished: 0/2 images completed
+2025/11/26 01:07:50 📝 Updating job e445a9b7-6ec2-4792-9a16-3d68145808f5 status to: failed
+2025/11/26 01:07:51 ✅ Job e445a9b7-6ec2-4792-9a16-3d68145808f5 status updated to: failed
+2025/11/26 01:07:51 📝 Updating production b0552e93-f898-4b8c-b49b-7090e28fb34c status to: failed
+2025/11/26 01:07:51 ✅ Production b0552e93-f898-4b8c-b49b-7090e28fb34c status updated to: failed
+2025/11/26 01:07:51 Single Batch processing completed for job: e445a9b7-6ec2-4792-9a16-3d68145808f5
+2025/11/26 01:07:51 ✅ Job e445a9b7-6ec2-4792-9a16-3d68145808f5 processing completed
+2025/11/26 01:15:33 🎯 Received new job: de3abdf7-3b9e-4347-b862-7a260635ac11
+2025/11/26 01:15:33 🚀 Processing job: de3abdf7-3b9e-4347-b862-7a260635ac11
+2025/11/26 01:15:33 🔍 Fetching job from Supabase: de3abdf7-3b9e-4347-b862-7a260635ac11
+2025/11/26 01:15:34 ✅ Job fetched successfully: de3abdf7-3b9e-4347-b862-7a260635ac11 (status: pending, total_images: 2)
+2025/11/26 01:15:34 📦 Job Data:
+2025/11/26 01:15:34    JobID: de3abdf7-3b9e-4347-b862-7a260635ac11
+2025/11/26 01:15:34    JobType: single_batch
+2025/11/26 01:15:34    QuelProductionPath: fashion
+2025/11/26 01:15:34    Status: pending
+2025/11/26 01:15:34    TotalImages: 2
+2025/11/26 01:15:34    ProductionID: 86b6663a-0748-443f-b31a-a2f42bc95452
+2025/11/26 01:15:34 🔀 Routing to module: fashion
+2025/11/26 01:15:34 👗 Routing to Fashion module
+2025/11/26 01:15:34 👗 [FASHION MODULE] Job de3abdf7-3b9e-4347-b862-7a260635ac11 started (quel_production_path: fashion)
+2025/11/26 01:15:34 ✅ Supabase and Genai clients initialized
+2025/11/26 01:15:34 Starting Single Batch processing for job: de3abdf7-3b9e-4347-b862-7a260635ac11
+2025/11/26 01:15:34 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:15:34 📝 Updating job de3abdf7-3b9e-4347-b862-7a260635ac11 status to: processing
+2025/11/26 01:15:34 ✅ Job de3abdf7-3b9e-4347-b862-7a260635ac11 status updated to: processing
+2025/11/26 01:15:34 📝 Updating production 86b6663a-0748-443f-b31a-a2f42bc95452 status to: processing
+2025/11/26 01:15:34 ✅ Production 86b6663a-0748-443f-b31a-a2f42bc95452 status updated to: processing
+2025/11/26 01:15:34 Downloading image 1/1: AttachID=24108, Type=acce
+2025/11/26 01:15:34 🔍 Fetching attach info: 24108
+2025/11/26 01:15:34 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:15:34 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:15:34 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:15:34 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:15:34    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:15:34    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:15:35 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:15:35 Accessory image added (type: acce)
+2025/11/26 01:15:35 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:15:35 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:15:35 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:15:35 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:15:35 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:15:35 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:15:35 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:15:35 ✅ Single image - returning original
+2025/11/26 01:15:35 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:15:35 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:15:35 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:15:35 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:15:35 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:15:35 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:15:35 ✅ Single image - returning original
+2025/11/26 01:15:35 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:15:35 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:15:35 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:15:35 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:15:35 Combination 1/1 completed: 2 images generated
+2025/11/26 01:15:35 All combinations completed in parallel
+2025/11/26 01:15:35 Job de3abdf7-3b9e-4347-b862-7a260635ac11 finished: 0/2 images completed
+2025/11/26 01:15:35 📝 Updating job de3abdf7-3b9e-4347-b862-7a260635ac11 status to: failed
+2025/11/26 01:15:35 ✅ Job de3abdf7-3b9e-4347-b862-7a260635ac11 status updated to: failed
+2025/11/26 01:15:35 📝 Updating production 86b6663a-0748-443f-b31a-a2f42bc95452 status to: failed
+2025/11/26 01:15:35 ✅ Production 86b6663a-0748-443f-b31a-a2f42bc95452 status updated to: failed
+2025/11/26 01:15:35 Single Batch processing completed for job: de3abdf7-3b9e-4347-b862-7a260635ac11
+2025/11/26 01:15:35 ✅ Job de3abdf7-3b9e-4347-b862-7a260635ac11 processing completed
+2025/11/26 01:22:39 🎯 Received new job: c29ead1d-18b3-4d18-952d-49d10cc14f7b
+2025/11/26 01:22:39 🚀 Processing job: c29ead1d-18b3-4d18-952d-49d10cc14f7b
+2025/11/26 01:22:39 🔍 Fetching job from Supabase: c29ead1d-18b3-4d18-952d-49d10cc14f7b
+2025/11/26 01:22:39 ✅ Job fetched successfully: c29ead1d-18b3-4d18-952d-49d10cc14f7b (status: pending, total_images: 2)
+2025/11/26 01:22:39 📦 Job Data:
+2025/11/26 01:22:39    JobID: c29ead1d-18b3-4d18-952d-49d10cc14f7b
+2025/11/26 01:22:39    JobType: single_batch
+2025/11/26 01:22:39    QuelProductionPath: fashion
+2025/11/26 01:22:39    Status: pending
+2025/11/26 01:22:39    TotalImages: 2
+2025/11/26 01:22:39    ProductionID: 1adbd47f-ab1b-4ac7-b2a5-c4b22583f44b
+2025/11/26 01:22:39 🔀 Routing to module: fashion
+2025/11/26 01:22:39 👗 Routing to Fashion module
+2025/11/26 01:22:39 👗 [FASHION MODULE] Job c29ead1d-18b3-4d18-952d-49d10cc14f7b started (quel_production_path: fashion)
+2025/11/26 01:22:39 ✅ Supabase and Genai clients initialized
+2025/11/26 01:22:39 Starting Single Batch processing for job: c29ead1d-18b3-4d18-952d-49d10cc14f7b
+2025/11/26 01:22:39 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:22:39 📝 Updating job c29ead1d-18b3-4d18-952d-49d10cc14f7b status to: processing
+2025/11/26 01:22:39 ✅ Job c29ead1d-18b3-4d18-952d-49d10cc14f7b status updated to: processing
+2025/11/26 01:22:39 📝 Updating production 1adbd47f-ab1b-4ac7-b2a5-c4b22583f44b status to: processing
+2025/11/26 01:22:39 ✅ Production 1adbd47f-ab1b-4ac7-b2a5-c4b22583f44b status updated to: processing
+2025/11/26 01:22:39 Downloading image 1/1: AttachID=24108, Type=acce
+2025/11/26 01:22:39 🔍 Fetching attach info: 24108
+2025/11/26 01:22:39 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:22:39 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:22:39 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:22:39 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:22:39    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:22:39    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:22:40 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:22:40 Accessory image added (type: acce)
+2025/11/26 01:22:40 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:22:40 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:22:40 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:22:40 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:22:40 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:22:40 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:22:40 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:22:40 ✅ Single image - returning original
+2025/11/26 01:22:40 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:22:40 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:22:40 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:22:40 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:22:40 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:22:40 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:22:40 ✅ Single image - returning original
+2025/11/26 01:22:40 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:22:40 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:22:40 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:22:40 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:22:40 Combination 1/1 completed: 2 images generated
+2025/11/26 01:22:40 All combinations completed in parallel
+2025/11/26 01:22:40 Job c29ead1d-18b3-4d18-952d-49d10cc14f7b finished: 0/2 images completed
+2025/11/26 01:22:40 📝 Updating job c29ead1d-18b3-4d18-952d-49d10cc14f7b status to: failed
+2025/11/26 01:22:40 ✅ Job c29ead1d-18b3-4d18-952d-49d10cc14f7b status updated to: failed
+2025/11/26 01:22:40 📝 Updating production 1adbd47f-ab1b-4ac7-b2a5-c4b22583f44b status to: failed
+2025/11/26 01:22:40 ✅ Production 1adbd47f-ab1b-4ac7-b2a5-c4b22583f44b status updated to: failed
+2025/11/26 01:22:40 Single Batch processing completed for job: c29ead1d-18b3-4d18-952d-49d10cc14f7b
+2025/11/26 01:22:40 ✅ Job c29ead1d-18b3-4d18-952d-49d10cc14f7b processing completed
+2025/11/26 01:24:43 🎯 Received new job: 1f755ef2-0754-4606-8f40-7825127f99a4
+2025/11/26 01:24:43 🚀 Processing job: 1f755ef2-0754-4606-8f40-7825127f99a4
+2025/11/26 01:24:43 🔍 Fetching job from Supabase: 1f755ef2-0754-4606-8f40-7825127f99a4
+2025/11/26 01:24:43 ✅ Job fetched successfully: 1f755ef2-0754-4606-8f40-7825127f99a4 (status: pending, total_images: 2)
+2025/11/26 01:24:43 📦 Job Data:
+2025/11/26 01:24:43    JobID: 1f755ef2-0754-4606-8f40-7825127f99a4
+2025/11/26 01:24:43    JobType: single_batch
+2025/11/26 01:24:43    QuelProductionPath: fashion
+2025/11/26 01:24:43    Status: pending
+2025/11/26 01:24:43    TotalImages: 2
+2025/11/26 01:24:43    ProductionID: 0eae9094-9983-4d13-8cab-6eeb2609d738
+2025/11/26 01:24:43 🔀 Routing to module: fashion
+2025/11/26 01:24:43 👗 Routing to Fashion module
+2025/11/26 01:24:43 👗 [FASHION MODULE] Job 1f755ef2-0754-4606-8f40-7825127f99a4 started (quel_production_path: fashion)
+2025/11/26 01:24:43 ✅ Supabase and Genai clients initialized
+2025/11/26 01:24:43 Starting Single Batch processing for job: 1f755ef2-0754-4606-8f40-7825127f99a4
+2025/11/26 01:24:43 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:24:43 📝 Updating job 1f755ef2-0754-4606-8f40-7825127f99a4 status to: processing
+2025/11/26 01:24:43 ✅ Job 1f755ef2-0754-4606-8f40-7825127f99a4 status updated to: processing
+2025/11/26 01:24:43 📝 Updating production 0eae9094-9983-4d13-8cab-6eeb2609d738 status to: processing
+2025/11/26 01:24:43 ✅ Production 0eae9094-9983-4d13-8cab-6eeb2609d738 status updated to: processing
+2025/11/26 01:24:43 Downloading image 1/1: AttachID=24108, Type=product
+2025/11/26 01:24:43 🔍 Fetching attach info: 24108
+2025/11/26 01:24:43 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:24:43 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:24:43 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:24:43 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:24:43    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:24:43    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:24:44 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:24:44 Image added as default accessory (type: product)
+2025/11/26 01:24:44 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:24:44 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:24:44 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:24:44 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:24:44 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:24:44 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:24:44 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:24:44 ✅ Single image - returning original
+2025/11/26 01:24:44 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:24:44 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:24:44 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:24:44 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:24:44 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:24:44 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:24:44 ✅ Single image - returning original
+2025/11/26 01:24:44 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:24:44 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:24:44 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:24:45 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:24:45 Combination 1/1 completed: 2 images generated
+2025/11/26 01:24:45 All combinations completed in parallel
+2025/11/26 01:24:45 Job 1f755ef2-0754-4606-8f40-7825127f99a4 finished: 0/2 images completed
+2025/11/26 01:24:45 📝 Updating job 1f755ef2-0754-4606-8f40-7825127f99a4 status to: failed
+2025/11/26 01:24:45 ✅ Job 1f755ef2-0754-4606-8f40-7825127f99a4 status updated to: failed
+2025/11/26 01:24:45 📝 Updating production 0eae9094-9983-4d13-8cab-6eeb2609d738 status to: failed
+2025/11/26 01:24:45 ✅ Production 0eae9094-9983-4d13-8cab-6eeb2609d738 status updated to: failed
+2025/11/26 01:24:45 Single Batch processing completed for job: 1f755ef2-0754-4606-8f40-7825127f99a4
+2025/11/26 01:24:45 ✅ Job 1f755ef2-0754-4606-8f40-7825127f99a4 processing completed
+2025/11/26 01:30:02 🎯 Received new job: c263ae39-5269-4cbf-b7ea-e84cb607588c
+2025/11/26 01:30:02 🚀 Processing job: c263ae39-5269-4cbf-b7ea-e84cb607588c
+2025/11/26 01:30:02 🔍 Fetching job from Supabase: c263ae39-5269-4cbf-b7ea-e84cb607588c
+2025/11/26 01:30:02 ✅ Job fetched successfully: c263ae39-5269-4cbf-b7ea-e84cb607588c (status: pending, total_images: 2)
+2025/11/26 01:30:02 📦 Job Data:
+2025/11/26 01:30:02    JobID: c263ae39-5269-4cbf-b7ea-e84cb607588c
+2025/11/26 01:30:02    JobType: single_batch
+2025/11/26 01:30:02    QuelProductionPath: fashion
+2025/11/26 01:30:02    Status: pending
+2025/11/26 01:30:02    TotalImages: 2
+2025/11/26 01:30:02    ProductionID: af520590-1d57-441a-b89f-214f38ec1c5f
+2025/11/26 01:30:02 🔀 Routing to module: fashion
+2025/11/26 01:30:02 👗 Routing to Fashion module
+2025/11/26 01:30:02 👗 [FASHION MODULE] Job c263ae39-5269-4cbf-b7ea-e84cb607588c started (quel_production_path: fashion)
+2025/11/26 01:30:02 ✅ Supabase and Genai clients initialized
+2025/11/26 01:30:02 Starting Single Batch processing for job: c263ae39-5269-4cbf-b7ea-e84cb607588c
+2025/11/26 01:30:02 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:30:02 📝 Updating job c263ae39-5269-4cbf-b7ea-e84cb607588c status to: processing
+2025/11/26 01:30:02 ✅ Job c263ae39-5269-4cbf-b7ea-e84cb607588c status updated to: processing
+2025/11/26 01:30:02 📝 Updating production af520590-1d57-441a-b89f-214f38ec1c5f status to: processing
+2025/11/26 01:30:02 ✅ Production af520590-1d57-441a-b89f-214f38ec1c5f status updated to: processing
+2025/11/26 01:30:02 Downloading image 1/1: AttachID=24108, Type=product
+2025/11/26 01:30:02 🔍 Fetching attach info: 24108
+2025/11/26 01:30:02 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:30:02 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:30:02 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:30:02 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:30:02    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:30:02    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:30:03 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:30:03 Image added as default accessory (type: product)
+2025/11/26 01:30:03 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:30:03 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:30:03 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:30:03 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:30:03 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:30:03 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:30:03 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:30:03 ✅ Single image - returning original
+2025/11/26 01:30:03 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:30:03 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:30:03 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:30:04 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:30:04 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:30:04 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:30:04 ✅ Single image - returning original
+2025/11/26 01:30:04 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:30:04 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:30:04 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:30:04 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:30:04 Combination 1/1 completed: 2 images generated
+2025/11/26 01:30:04 All combinations completed in parallel
+2025/11/26 01:30:04 Job c263ae39-5269-4cbf-b7ea-e84cb607588c finished: 0/2 images completed
+2025/11/26 01:30:04 📝 Updating job c263ae39-5269-4cbf-b7ea-e84cb607588c status to: failed
+2025/11/26 01:30:04 ✅ Job c263ae39-5269-4cbf-b7ea-e84cb607588c status updated to: failed
+2025/11/26 01:30:04 📝 Updating production af520590-1d57-441a-b89f-214f38ec1c5f status to: failed
+2025/11/26 01:30:04 ✅ Production af520590-1d57-441a-b89f-214f38ec1c5f status updated to: failed
+2025/11/26 01:30:04 Single Batch processing completed for job: c263ae39-5269-4cbf-b7ea-e84cb607588c
+2025/11/26 01:30:04 ✅ Job c263ae39-5269-4cbf-b7ea-e84cb607588c processing completed
+2025/11/26 01:34:03 🎯 Received new job: 897550f8-6191-49c6-9510-aa2b13001f5f
+2025/11/26 01:34:03 🚀 Processing job: 897550f8-6191-49c6-9510-aa2b13001f5f
+2025/11/26 01:34:03 🔍 Fetching job from Supabase: 897550f8-6191-49c6-9510-aa2b13001f5f
+2025/11/26 01:34:04 ✅ Job fetched successfully: 897550f8-6191-49c6-9510-aa2b13001f5f (status: pending, total_images: 2)
+2025/11/26 01:34:04 📦 Job Data:
+2025/11/26 01:34:04    JobID: 897550f8-6191-49c6-9510-aa2b13001f5f
+2025/11/26 01:34:04    JobType: single_batch
+2025/11/26 01:34:04    QuelProductionPath: fashion
+2025/11/26 01:34:04    Status: pending
+2025/11/26 01:34:04    TotalImages: 2
+2025/11/26 01:34:04    ProductionID: b134def7-5e18-4deb-b073-20cd96482827
+2025/11/26 01:34:04 🔀 Routing to module: fashion
+2025/11/26 01:34:04 👗 Routing to Fashion module
+2025/11/26 01:34:04 👗 [FASHION MODULE] Job 897550f8-6191-49c6-9510-aa2b13001f5f started (quel_production_path: fashion)
+2025/11/26 01:34:04 ✅ Supabase and Genai clients initialized
+2025/11/26 01:34:04 Starting Single Batch processing for job: 897550f8-6191-49c6-9510-aa2b13001f5f
+2025/11/26 01:34:04 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:34:04 📝 Updating job 897550f8-6191-49c6-9510-aa2b13001f5f status to: processing
+2025/11/26 01:34:04 ✅ Job 897550f8-6191-49c6-9510-aa2b13001f5f status updated to: processing
+2025/11/26 01:34:04 📝 Updating production b134def7-5e18-4deb-b073-20cd96482827 status to: processing
+2025/11/26 01:34:04 ✅ Production b134def7-5e18-4deb-b073-20cd96482827 status updated to: processing
+2025/11/26 01:34:04 Downloading image 1/1: AttachID=24108, Type=product
+2025/11/26 01:34:04 🔍 Fetching attach info: 24108
+2025/11/26 01:34:04 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:34:04 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:34:04 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:34:04 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:34:04    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:34:04    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:34:04 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:34:04 Image added as default accessory (type: product)
+2025/11/26 01:34:04 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:34:04 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:34:04 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:34:04 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:34:04 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:34:04 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:34:04 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:34:04 ✅ Single image - returning original
+2025/11/26 01:34:04 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:34:04 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:34:04 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:34:04 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:34:04 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:34:04 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:34:04 ✅ Single image - returning original
+2025/11/26 01:34:04 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:34:04 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:34:04 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:34:04 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:34:04 Combination 1/1 completed: 2 images generated
+2025/11/26 01:34:04 All combinations completed in parallel
+2025/11/26 01:34:04 Job 897550f8-6191-49c6-9510-aa2b13001f5f finished: 0/2 images completed
+2025/11/26 01:34:04 📝 Updating job 897550f8-6191-49c6-9510-aa2b13001f5f status to: failed
+2025/11/26 01:34:04 ✅ Job 897550f8-6191-49c6-9510-aa2b13001f5f status updated to: failed
+2025/11/26 01:34:04 📝 Updating production b134def7-5e18-4deb-b073-20cd96482827 status to: failed
+2025/11/26 01:34:04 ✅ Production b134def7-5e18-4deb-b073-20cd96482827 status updated to: failed
+2025/11/26 01:34:04 Single Batch processing completed for job: 897550f8-6191-49c6-9510-aa2b13001f5f
+2025/11/26 01:34:04 ✅ Job 897550f8-6191-49c6-9510-aa2b13001f5f processing completed
+2025/11/26 01:35:06 🎯 Received new job: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3
+2025/11/26 01:35:06 🚀 Processing job: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3
+2025/11/26 01:35:06 🔍 Fetching job from Supabase: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3
+2025/11/26 01:35:06 ✅ Job fetched successfully: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 (status: pending, total_images: 2)
+2025/11/26 01:35:06 📦 Job Data:
+2025/11/26 01:35:06    JobID: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3
+2025/11/26 01:35:06    JobType: single_batch
+2025/11/26 01:35:06    QuelProductionPath: fashion
+2025/11/26 01:35:06    Status: pending
+2025/11/26 01:35:06    TotalImages: 2
+2025/11/26 01:35:06    ProductionID: 20dc074c-20ae-43e8-9aee-d2e0219a344d
+2025/11/26 01:35:06 🔀 Routing to module: fashion
+2025/11/26 01:35:06 👗 Routing to Fashion module
+2025/11/26 01:35:06 👗 [FASHION MODULE] Job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 started (quel_production_path: fashion)
+2025/11/26 01:35:06 ✅ Supabase and Genai clients initialized
+2025/11/26 01:35:06 Starting Single Batch processing for job: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3
+2025/11/26 01:35:06 Input Data: IndividualImages=1, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:35:06 📝 Updating job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 status to: processing
+2025/11/26 01:35:06 ✅ Job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 status updated to: processing
+2025/11/26 01:35:06 📝 Updating production 20dc074c-20ae-43e8-9aee-d2e0219a344d status to: processing
+2025/11/26 01:35:06 ✅ Production 20dc074c-20ae-43e8-9aee-d2e0219a344d status updated to: processing
+2025/11/26 01:35:06 Downloading image 1/1: AttachID=24108, Type=product
+2025/11/26 01:35:06 🔍 Fetching attach info: 24108
+2025/11/26 01:35:06 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:35:06 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:35:06 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:35:06 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:35:06    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:35:06    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:35:06 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:35:06 Image added as default accessory (type: product)
+2025/11/26 01:35:06 Images classified - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:35:06 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:35:06 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:35:06 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:35:06 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:35:06 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:35:06 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:35:06 ✅ Single image - returning original
+2025/11/26 01:35:06 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:35:06 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:35:06 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:35:06 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:35:06 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:35:06 🎨 Calling Gemini API with categories - Model:false, Clothing:0, Accessories:1, BG:false
+2025/11/26 01:35:06 ✅ Single image - returning original
+2025/11/26 01:35:06 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:35:06 📝 Generated dynamic prompt (5953 chars)
+2025/11/26 01:35:06 📤 Sending request to Gemini API with 2 parts...
+2025/11/26 01:35:07 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:35:07 Combination 1/1 completed: 2 images generated
+2025/11/26 01:35:07 All combinations completed in parallel
+2025/11/26 01:35:07 Job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 finished: 0/2 images completed
+2025/11/26 01:35:07 📝 Updating job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 status to: failed
+2025/11/26 01:35:07 ✅ Job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 status updated to: failed
+2025/11/26 01:35:07 📝 Updating production 20dc074c-20ae-43e8-9aee-d2e0219a344d status to: failed
+2025/11/26 01:35:07 ✅ Production 20dc074c-20ae-43e8-9aee-d2e0219a344d status updated to: failed
+2025/11/26 01:35:07 Single Batch processing completed for job: 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3
+2025/11/26 01:35:07 ✅ Job 9fdf0bff-a46a-4ae4-b520-ecc9fc6e30b3 processing completed
+2025/11/26 01:38:09 🎯 Received new job: 1b8136b7-4b34-456b-a22a-d6559852750d
+2025/11/26 01:38:09 🚀 Processing job: 1b8136b7-4b34-456b-a22a-d6559852750d
+2025/11/26 01:38:09 🔍 Fetching job from Supabase: 1b8136b7-4b34-456b-a22a-d6559852750d
+2025/11/26 01:38:10 ✅ Job fetched successfully: 1b8136b7-4b34-456b-a22a-d6559852750d (status: pending, total_images: 2)
+2025/11/26 01:38:10 📦 Job Data:
+2025/11/26 01:38:10    JobID: 1b8136b7-4b34-456b-a22a-d6559852750d
+2025/11/26 01:38:10    JobType: single_batch
+2025/11/26 01:38:10    QuelProductionPath: fashion
+2025/11/26 01:38:10    Status: pending
+2025/11/26 01:38:10    TotalImages: 2
+2025/11/26 01:38:10    ProductionID: b1faf9c5-f197-4570-8d18-c33ae5567023
+2025/11/26 01:38:10 🔀 Routing to module: fashion
+2025/11/26 01:38:10 👗 Routing to Fashion module
+2025/11/26 01:38:10 👗 [FASHION MODULE] Job 1b8136b7-4b34-456b-a22a-d6559852750d started (quel_production_path: fashion)
+2025/11/26 01:38:10 ✅ Supabase and Genai clients initialized
+2025/11/26 01:38:10 Starting Single Batch processing for job: 1b8136b7-4b34-456b-a22a-d6559852750d
+2025/11/26 01:38:10 Input Data: IndividualImages=3, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 01:38:10 📝 Updating job 1b8136b7-4b34-456b-a22a-d6559852750d status to: processing
+2025/11/26 01:38:10 ✅ Job 1b8136b7-4b34-456b-a22a-d6559852750d status updated to: processing
+2025/11/26 01:38:10 📝 Updating production b1faf9c5-f197-4570-8d18-c33ae5567023 status to: processing
+2025/11/26 01:38:10 ✅ Production b1faf9c5-f197-4570-8d18-c33ae5567023 status updated to: processing
+2025/11/26 01:38:10 Downloading image 1/3: AttachID=24108, Type=product
+2025/11/26 01:38:10 🔍 Fetching attach info: 24108
+2025/11/26 01:38:10 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:38:10 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:38:10 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:38:10 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:38:10    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:38:10    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 01:38:11 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 01:38:11 Image added as default accessory (type: product)
+2025/11/26 01:38:11 Downloading image 2/3: AttachID=24105, Type=bg
+2025/11/26 01:38:11 🔍 Fetching attach info: 24105
+2025/11/26 01:38:11 ✅ Attach info fetched: ID=24105, Path=upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 01:38:11 🔍 Using attach_file_path: upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 01:38:11 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 01:38:11 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 01:38:11    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:38:11    📁 File Path: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 01:38:11 ✅ Image downloaded successfully: 95694 bytes
+2025/11/26 01:38:11 Background image added
+2025/11/26 01:38:11 Downloading image 3/3: AttachID=24106, Type=model
+2025/11/26 01:38:11 🔍 Fetching attach info: 24106
+2025/11/26 01:38:11 ✅ Attach info fetched: ID=24106, Path=upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 01:38:11 🔍 Using attach_file_path: upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 01:38:11 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 01:38:11 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 01:38:11    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 01:38:11    📁 File Path: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 01:38:12 ✅ Image downloaded successfully: 10652 bytes
+2025/11/26 01:38:12 Model image added
+2025/11/26 01:38:12 Images classified - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 01:38:12 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 01:38:12 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 01:38:12 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 01:38:12 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 01:38:12 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 01:38:12 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 01:38:12 ✅ Single image - returning original
+2025/11/26 01:38:12 ✅ Single image - returning original
+2025/11/26 01:38:12 📎 Added Model image (resized)
+2025/11/26 01:38:12 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:38:12 ✅ Single image - returning original
+2025/11/26 01:38:12 📎 Added Background image (resized)
+2025/11/26 01:38:12 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 01:38:12 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 01:38:12 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:38:12 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 01:38:12 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 01:38:12 ✅ Single image - returning original
+2025/11/26 01:38:12 ✅ Single image - returning original
+2025/11/26 01:38:12 📎 Added Model image (resized)
+2025/11/26 01:38:12 📎 Added Accessories image (merged from 1 items)
+2025/11/26 01:38:12 ✅ Single image - returning original
+2025/11/26 01:38:12 📎 Added Background image (resized)
+2025/11/26 01:38:12 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 01:38:12 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 01:38:12 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 01:38:12 Combination 1/1 completed: 2 images generated
+2025/11/26 01:38:12 All combinations completed in parallel
+2025/11/26 01:38:12 Job 1b8136b7-4b34-456b-a22a-d6559852750d finished: 0/2 images completed
+2025/11/26 01:38:12 📝 Updating job 1b8136b7-4b34-456b-a22a-d6559852750d status to: failed
+2025/11/26 01:38:12 ✅ Job 1b8136b7-4b34-456b-a22a-d6559852750d status updated to: failed
+2025/11/26 01:38:12 📝 Updating production b1faf9c5-f197-4570-8d18-c33ae5567023 status to: failed
+2025/11/26 01:38:12 ✅ Production b1faf9c5-f197-4570-8d18-c33ae5567023 status updated to: failed
+2025/11/26 01:38:12 Single Batch processing completed for job: 1b8136b7-4b34-456b-a22a-d6559852750d
+2025/11/26 01:38:12 ✅ Job 1b8136b7-4b34-456b-a22a-d6559852750d processing completed
+2025/11/26 02:30:59 🎯 Received new job: 78895ab9-15a1-44c2-acfa-3589b223c3fa
+2025/11/26 02:30:59 🚀 Processing job: 78895ab9-15a1-44c2-acfa-3589b223c3fa
+2025/11/26 02:30:59 🔍 Fetching job from Supabase: 78895ab9-15a1-44c2-acfa-3589b223c3fa
+2025/11/26 02:31:00 ✅ Job fetched successfully: 78895ab9-15a1-44c2-acfa-3589b223c3fa (status: pending, total_images: 2)
+2025/11/26 02:31:00 📦 Job Data:
+2025/11/26 02:31:00    JobID: 78895ab9-15a1-44c2-acfa-3589b223c3fa
+2025/11/26 02:31:00    JobType: single_batch
+2025/11/26 02:31:00    QuelProductionPath: fashion
+2025/11/26 02:31:00    Status: pending
+2025/11/26 02:31:00    TotalImages: 2
+2025/11/26 02:31:00    ProductionID: 781fc864-d3e9-44c5-9972-46c46142c6d8
+2025/11/26 02:31:00 🔀 Routing to module: fashion
+2025/11/26 02:31:00 👗 Routing to Fashion module
+2025/11/26 02:31:00 👗 [FASHION MODULE] Job 78895ab9-15a1-44c2-acfa-3589b223c3fa started (quel_production_path: fashion)
+2025/11/26 02:31:00 ✅ Supabase and Genai clients initialized
+2025/11/26 02:31:00 Starting Single Batch processing for job: 78895ab9-15a1-44c2-acfa-3589b223c3fa
+2025/11/26 02:31:00 Input Data: IndividualImages=3, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 02:31:00 📝 Updating job 78895ab9-15a1-44c2-acfa-3589b223c3fa status to: processing
+2025/11/26 02:31:00 ✅ Job 78895ab9-15a1-44c2-acfa-3589b223c3fa status updated to: processing
+2025/11/26 02:31:00 📝 Updating production 781fc864-d3e9-44c5-9972-46c46142c6d8 status to: processing
+2025/11/26 02:31:00 ✅ Production 781fc864-d3e9-44c5-9972-46c46142c6d8 status updated to: processing
+2025/11/26 02:31:00 Downloading image 1/3: AttachID=24108, Type=product
+2025/11/26 02:31:00 🔍 Fetching attach info: 24108
+2025/11/26 02:31:00 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:00 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:00 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:00 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:00    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:31:00    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:00 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 02:31:00 Image added as default accessory (type: product)
+2025/11/26 02:31:00 Downloading image 2/3: AttachID=24105, Type=bg
+2025/11/26 02:31:00 🔍 Fetching attach info: 24105
+2025/11/26 02:31:00 ✅ Attach info fetched: ID=24105, Path=upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:00 🔍 Using attach_file_path: upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:00 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:00 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:00    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:31:00    📁 File Path: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:00 ✅ Image downloaded successfully: 95694 bytes
+2025/11/26 02:31:00 Background image added
+2025/11/26 02:31:00 Downloading image 3/3: AttachID=24106, Type=model
+2025/11/26 02:31:00 🔍 Fetching attach info: 24106
+2025/11/26 02:31:00 ✅ Attach info fetched: ID=24106, Path=upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:00 🔍 Using attach_file_path: upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:00 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:00 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:00    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:31:00    📁 File Path: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:00 ✅ Image downloaded successfully: 10652 bytes
+2025/11/26 02:31:00 Model image added
+2025/11/26 02:31:00 Images classified - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:31:00 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 02:31:00 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 02:31:00 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 02:31:00 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 02:31:00 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 02:31:00 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:31:00 ✅ Single image - returning original
+2025/11/26 02:31:00 ✅ Single image - returning original
+2025/11/26 02:31:00 📎 Added Model image (resized)
+2025/11/26 02:31:00 📎 Added Accessories image (merged from 1 items)
+2025/11/26 02:31:00 ✅ Single image - returning original
+2025/11/26 02:31:00 📎 Added Background image (resized)
+2025/11/26 02:31:00 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 02:31:00 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 02:31:00 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 02:31:00 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 02:31:00 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:31:00 ✅ Single image - returning original
+2025/11/26 02:31:00 ✅ Single image - returning original
+2025/11/26 02:31:00 📎 Added Model image (resized)
+2025/11/26 02:31:00 📎 Added Accessories image (merged from 1 items)
+2025/11/26 02:31:00 ✅ Single image - returning original
+2025/11/26 02:31:00 📎 Added Background image (resized)
+2025/11/26 02:31:00 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 02:31:00 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 02:31:01 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 02:31:01 Combination 1/1 completed: 2 images generated
+2025/11/26 02:31:01 All combinations completed in parallel
+2025/11/26 02:31:01 Job 78895ab9-15a1-44c2-acfa-3589b223c3fa finished: 0/2 images completed
+2025/11/26 02:31:01 📝 Updating job 78895ab9-15a1-44c2-acfa-3589b223c3fa status to: failed
+2025/11/26 02:31:01 ✅ Job 78895ab9-15a1-44c2-acfa-3589b223c3fa status updated to: failed
+2025/11/26 02:31:01 📝 Updating production 781fc864-d3e9-44c5-9972-46c46142c6d8 status to: failed
+2025/11/26 02:31:01 ✅ Production 781fc864-d3e9-44c5-9972-46c46142c6d8 status updated to: failed
+2025/11/26 02:31:01 Single Batch processing completed for job: 78895ab9-15a1-44c2-acfa-3589b223c3fa
+2025/11/26 02:31:01 ✅ Job 78895ab9-15a1-44c2-acfa-3589b223c3fa processing completed
+2025/11/26 02:31:04 🎯 Received new job: 91f61f75-a54b-4ea8-9800-64af52bc2537
+2025/11/26 02:31:04 🚀 Processing job: 91f61f75-a54b-4ea8-9800-64af52bc2537
+2025/11/26 02:31:04 🔍 Fetching job from Supabase: 91f61f75-a54b-4ea8-9800-64af52bc2537
+2025/11/26 02:31:04 ✅ Job fetched successfully: 91f61f75-a54b-4ea8-9800-64af52bc2537 (status: pending, total_images: 2)
+2025/11/26 02:31:04 📦 Job Data:
+2025/11/26 02:31:04    JobID: 91f61f75-a54b-4ea8-9800-64af52bc2537
+2025/11/26 02:31:04    JobType: single_batch
+2025/11/26 02:31:04    QuelProductionPath: fashion
+2025/11/26 02:31:04    Status: pending
+2025/11/26 02:31:04    TotalImages: 2
+2025/11/26 02:31:04    ProductionID: e5b47d17-5164-4910-a77a-6c0fa8872a11
+2025/11/26 02:31:04 🔀 Routing to module: fashion
+2025/11/26 02:31:04 👗 Routing to Fashion module
+2025/11/26 02:31:04 👗 [FASHION MODULE] Job 91f61f75-a54b-4ea8-9800-64af52bc2537 started (quel_production_path: fashion)
+2025/11/26 02:31:04 ✅ Supabase and Genai clients initialized
+2025/11/26 02:31:04 Starting Single Batch processing for job: 91f61f75-a54b-4ea8-9800-64af52bc2537
+2025/11/26 02:31:04 Input Data: IndividualImages=3, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 02:31:04 📝 Updating job 91f61f75-a54b-4ea8-9800-64af52bc2537 status to: processing
+2025/11/26 02:31:04 ✅ Job 91f61f75-a54b-4ea8-9800-64af52bc2537 status updated to: processing
+2025/11/26 02:31:04 📝 Updating production e5b47d17-5164-4910-a77a-6c0fa8872a11 status to: processing
+2025/11/26 02:31:04 ✅ Production e5b47d17-5164-4910-a77a-6c0fa8872a11 status updated to: processing
+2025/11/26 02:31:04 Downloading image 1/3: AttachID=24108, Type=product
+2025/11/26 02:31:04 🔍 Fetching attach info: 24108
+2025/11/26 02:31:04 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:04 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:04 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:04 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:04    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:31:04    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:31:04 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 02:31:04 Image added as default accessory (type: product)
+2025/11/26 02:31:04 Downloading image 2/3: AttachID=24105, Type=bg
+2025/11/26 02:31:04 🔍 Fetching attach info: 24105
+2025/11/26 02:31:04 ✅ Attach info fetched: ID=24105, Path=upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:04 🔍 Using attach_file_path: upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:04 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:04 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:04    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:31:04    📁 File Path: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:31:04 ✅ Image downloaded successfully: 95694 bytes
+2025/11/26 02:31:04 Background image added
+2025/11/26 02:31:04 Downloading image 3/3: AttachID=24106, Type=model
+2025/11/26 02:31:04 🔍 Fetching attach info: 24106
+2025/11/26 02:31:05 ✅ Attach info fetched: ID=24106, Path=upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:05 🔍 Using attach_file_path: upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:05 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:05 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:05    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:31:05    📁 File Path: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:31:05 ✅ Image downloaded successfully: 10652 bytes
+2025/11/26 02:31:05 Model image added
+2025/11/26 02:31:05 Images classified - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:31:05 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 02:31:05 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 02:31:05 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 02:31:05 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 02:31:05 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 02:31:05 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:31:05 ✅ Single image - returning original
+2025/11/26 02:31:05 ✅ Single image - returning original
+2025/11/26 02:31:05 📎 Added Model image (resized)
+2025/11/26 02:31:05 📎 Added Accessories image (merged from 1 items)
+2025/11/26 02:31:05 ✅ Single image - returning original
+2025/11/26 02:31:05 📎 Added Background image (resized)
+2025/11/26 02:31:05 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 02:31:05 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 02:31:05 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 02:31:05 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 02:31:05 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:31:05 ✅ Single image - returning original
+2025/11/26 02:31:05 ✅ Single image - returning original
+2025/11/26 02:31:05 📎 Added Model image (resized)
+2025/11/26 02:31:05 📎 Added Accessories image (merged from 1 items)
+2025/11/26 02:31:05 ✅ Single image - returning original
+2025/11/26 02:31:05 📎 Added Background image (resized)
+2025/11/26 02:31:05 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 02:31:05 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 02:31:05 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 02:31:05 Combination 1/1 completed: 2 images generated
+2025/11/26 02:31:05 All combinations completed in parallel
+2025/11/26 02:31:05 Job 91f61f75-a54b-4ea8-9800-64af52bc2537 finished: 0/2 images completed
+2025/11/26 02:31:05 📝 Updating job 91f61f75-a54b-4ea8-9800-64af52bc2537 status to: failed
+2025/11/26 02:31:05 ✅ Job 91f61f75-a54b-4ea8-9800-64af52bc2537 status updated to: failed
+2025/11/26 02:31:05 📝 Updating production e5b47d17-5164-4910-a77a-6c0fa8872a11 status to: failed
+2025/11/26 02:31:05 ✅ Production e5b47d17-5164-4910-a77a-6c0fa8872a11 status updated to: failed
+2025/11/26 02:31:05 Single Batch processing completed for job: 91f61f75-a54b-4ea8-9800-64af52bc2537
+2025/11/26 02:31:05 ✅ Job 91f61f75-a54b-4ea8-9800-64af52bc2537 processing completed
+2025/11/26 02:36:45 🎯 Received new job: 903dbb12-d599-4047-9e98-3c699a5c62de
+2025/11/26 02:36:45 🚀 Processing job: 903dbb12-d599-4047-9e98-3c699a5c62de
+2025/11/26 02:36:45 🔍 Fetching job from Supabase: 903dbb12-d599-4047-9e98-3c699a5c62de
+2025/11/26 02:36:45 ✅ Job fetched successfully: 903dbb12-d599-4047-9e98-3c699a5c62de (status: pending, total_images: 2)
+2025/11/26 02:36:45 📦 Job Data:
+2025/11/26 02:36:45    JobID: 903dbb12-d599-4047-9e98-3c699a5c62de
+2025/11/26 02:36:45    JobType: single_batch
+2025/11/26 02:36:45    QuelProductionPath: fashion
+2025/11/26 02:36:45    Status: pending
+2025/11/26 02:36:45    TotalImages: 2
+2025/11/26 02:36:45    ProductionID: a79ccf73-7dd0-44e9-9ccc-1a86a44eaa18
+2025/11/26 02:36:45 🔀 Routing to module: fashion
+2025/11/26 02:36:45 👗 Routing to Fashion module
+2025/11/26 02:36:45 👗 [FASHION MODULE] Job 903dbb12-d599-4047-9e98-3c699a5c62de started (quel_production_path: fashion)
+2025/11/26 02:36:45 ✅ Supabase and Genai clients initialized
+2025/11/26 02:36:45 Starting Single Batch processing for job: 903dbb12-d599-4047-9e98-3c699a5c62de
+2025/11/26 02:36:45 Input Data: IndividualImages=3, BasePrompt=front, full. Fashion photography style. Professional runway lighting. High-end fashion editorial composition. Model wearing designer clothing. ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides. 모자를 쓰고 있는 모습
+
+[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:
+- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides
+- NO grid, NO collage, NO comparison view, NO before/after layout
+- NO vertical dividing line, NO center split, NO symmetrical duplication
+- NO white/gray borders, NO letterboxing, NO empty margins on any side
+- NO multiple identical poses, NO mirrored images, NO panel divisions
+- NO vertical portrait orientation with side margins
+
+[REQUIRED - MUST GENERATE THIS WAY]:
+- ONE single continuous photograph taken with ONE camera shutter
+- ONE unified moment in time - NOT two or more moments combined
+- FILL entire frame edge-to-edge with NO empty space
+- Natural asymmetric composition - left side MUST be different from right side
+- Professional editorial style - real single-shot photography only. IMPORTANT: No split layouts, no grid layouts, no separate product shots. Each image must be a single unified composition with the model wearing/using all items., Combinations=1, UserID=c5f77567-1c55-4561-aef3-411027b9360c
+2025/11/26 02:36:45 📝 Updating job 903dbb12-d599-4047-9e98-3c699a5c62de status to: processing
+2025/11/26 02:36:45 ✅ Job 903dbb12-d599-4047-9e98-3c699a5c62de status updated to: processing
+2025/11/26 02:36:45 📝 Updating production a79ccf73-7dd0-44e9-9ccc-1a86a44eaa18 status to: processing
+2025/11/26 02:36:45 ✅ Production a79ccf73-7dd0-44e9-9ccc-1a86a44eaa18 status updated to: processing
+2025/11/26 02:36:45 Downloading image 1/3: AttachID=24108, Type=product
+2025/11/26 02:36:45 🔍 Fetching attach info: 24108
+2025/11/26 02:36:45 ✅ Attach info fetched: ID=24108, Path=upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:36:45 🔍 Using attach_file_path: upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:36:45 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:36:45 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:36:45    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:36:45    📁 File Path: uploads/upload-2025-11-25T16-13-38-571Z.webp
+2025/11/26 02:36:45 ✅ Image downloaded successfully: 6098 bytes
+2025/11/26 02:36:45 Image added as default accessory (type: product)
+2025/11/26 02:36:45 Downloading image 2/3: AttachID=24105, Type=bg
+2025/11/26 02:36:45 🔍 Fetching attach info: 24105
+2025/11/26 02:36:45 ✅ Attach info fetched: ID=24105, Path=upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:36:45 🔍 Using attach_file_path: upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:36:45 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:36:45 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:36:45    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:36:45    📁 File Path: uploads/upload-2025-11-25T16-12-44-294Z.webp
+2025/11/26 02:36:46 ✅ Image downloaded successfully: 95694 bytes
+2025/11/26 02:36:46 Background image added
+2025/11/26 02:36:46 Downloading image 3/3: AttachID=24106, Type=model
+2025/11/26 02:36:46 🔍 Fetching attach info: 24106
+2025/11/26 02:36:46 ✅ Attach info fetched: ID=24106, Path=upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:36:46 🔍 Using attach_file_path: upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:36:46 🔧 Auto-fixed path to include uploads/ folder: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:36:46 📥 Downloading image from: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:36:46    🔗 Base URL: https://ftunegfzqsbhtucctaqq.supabase.co/storage/v1/object/public/attachments/
+2025/11/26 02:36:46    📁 File Path: uploads/upload-2025-11-25T16-12-59-305Z.webp
+2025/11/26 02:36:46 ✅ Image downloaded successfully: 10652 bytes
+2025/11/26 02:36:46 Model image added
+2025/11/26 02:36:46 Images classified - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:36:46 Starting parallel processing for 1 combinations (max 2 concurrent)
+2025/11/26 02:36:46 ⏳ Waiting for all 1 combinations to complete...
+2025/11/26 02:36:46 Combination 1/1: angle=front, shot=full, quantity=2 (parallel)
+2025/11/26 02:36:46 Combination 1 Enhanced Prompt: Cinematic front-facing angle, direct eye contact with camera, film photography composition, Cinemati
+2025/11/26 02:36:46 Combination 1: Generating image 1/2 for [front + full]...
+2025/11/26 02:36:46 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:36:46 ✅ Single image - returning original
+2025/11/26 02:36:46 ✅ Single image - returning original
+2025/11/26 02:36:46 📎 Added Model image (resized)
+2025/11/26 02:36:46 📎 Added Accessories image (merged from 1 items)
+2025/11/26 02:36:46 ✅ Single image - returning original
+2025/11/26 02:36:46 📎 Added Background image (resized)
+2025/11/26 02:36:46 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 02:36:46 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 02:36:47 Combination 1: Gemini API failed for image 1: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 02:36:47 Combination 1: Generating image 2/2 for [front + full]...
+2025/11/26 02:36:47 🎨 Calling Gemini API with categories - Model:true, Clothing:0, Accessories:1, BG:true
+2025/11/26 02:36:47 ✅ Single image - returning original
+2025/11/26 02:36:47 ✅ Single image - returning original
+2025/11/26 02:36:47 📎 Added Model image (resized)
+2025/11/26 02:36:47 📎 Added Accessories image (merged from 1 items)
+2025/11/26 02:36:47 ✅ Single image - returning original
+2025/11/26 02:36:47 📎 Added Background image (resized)
+2025/11/26 02:36:47 📝 Generated dynamic prompt (7031 chars)
+2025/11/26 02:36:47 📤 Sending request to Gemini API with 4 parts...
+2025/11/26 02:36:47 Combination 1: Gemini API failed for image 2: Gemini API call failed: Error 403, Message: Your API key was reported as leaked. Please use another API key., Status: PERMISSION_DENIED, Details: []
+2025/11/26 02:36:47 Combination 1/1 completed: 2 images generated
+2025/11/26 02:36:47 All combinations completed in parallel
+2025/11/26 02:36:47 Job 903dbb12-d599-4047-9e98-3c699a5c62de finished: 0/2 images completed
+2025/11/26 02:36:47 📝 Updating job 903dbb12-d599-4047-9e98-3c699a5c62de status to: failed
+2025/11/26 02:36:47 ✅ Job 903dbb12-d599-4047-9e98-3c699a5c62de status updated to: failed
+2025/11/26 02:36:47 📝 Updating production a79ccf73-7dd0-44e9-9ccc-1a86a44eaa18 status to: failed
+2025/11/26 02:36:47 ✅ Production a79ccf73-7dd0-44e9-9ccc-1a86a44eaa18 status updated to: failed
+2025/11/26 02:36:47 Single Batch processing completed for job: 903dbb12-d599-4047-9e98-3c699a5c62de
+2025/11/26 02:36:47 ✅ Job 903dbb12-d599-4047-9e98-3c699a5c62de processing completed
