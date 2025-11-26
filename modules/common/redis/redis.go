@@ -47,3 +47,35 @@ func Connect(cfg *config.Config) *redis.Client {
 
 	return rdb
 }
+
+// SetJobCancelled - Job 취소 플래그 설정
+func SetJobCancelled(rdb *redis.Client, jobID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 취소 플래그 설정 (1시간 후 자동 만료)
+	key := "job:" + jobID + ":cancelled"
+	return rdb.Set(ctx, key, "true", 1*time.Hour).Err()
+}
+
+// IsJobCancelled - Job 취소 여부 확인
+func IsJobCancelled(rdb *redis.Client, jobID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	key := "job:" + jobID + ":cancelled"
+	result, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		return false // 키가 없으면 취소 안됨
+	}
+	return result == "true"
+}
+
+// ClearJobCancelled - Job 취소 플래그 삭제 (정리용)
+func ClearJobCancelled(rdb *redis.Client, jobID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	key := "job:" + jobID + ":cancelled"
+	return rdb.Del(ctx, key).Err()
+}

@@ -622,6 +622,14 @@ func main() {
 		log.Println("Failed to initialize Modify handler")
 	}
 
+	// Cancel API 라우트 등록
+	cancelHandler := worker.NewCancelHandler()
+	if cancelHandler != nil {
+		cancelHandler.RegisterRoutes(r)
+	} else {
+		log.Println("Failed to initialize Cancel handler")
+	}
+
 
 
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
@@ -637,6 +645,7 @@ func main() {
 	log.Printf("Admin cleanup: http://localhost:%s/admin/cleanup", port)
 	log.Printf("Modify submit: http://localhost:%s/api/modify/submit", port)
 	log.Printf("Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
+	log.Printf("Job cancel: http://localhost:%s/api/jobs/{jobId}/cancel", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {

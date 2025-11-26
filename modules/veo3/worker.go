@@ -2,7 +2,6 @@ package veo3
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 )

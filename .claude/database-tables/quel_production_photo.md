@@ -9,6 +9,7 @@ create table public.quel_production_photo (
   production_id uuid not null default gen_random_uuid (),
   created_at timestamp with time zone not null default now(),
   quel_member_id uuid null,
+  org_id uuid null references quel_organization(org_id),
   production_name character varying(255) null,
   production_description text null,
   production_status public.production_status_enum null default 'pending'::production_status_enum,
@@ -32,6 +33,10 @@ create index IF not exists idx_quel_production_photo_member_status on public.que
   production_status,
   created_at desc
 ) TABLESPACE pg_default;
+
+create index IF not exists idx_quel_production_photo_org_id on public.quel_production_photo using btree (
+  org_id
+) TABLESPACE pg_default;
 ```
 
 ## 📋 Key Columns
@@ -41,6 +46,7 @@ create index IF not exists idx_quel_production_photo_member_status on public.que
 | production_id | uuid | 프로덕션 ID (PK) |
 | created_at | timestamp | 생성 시간 |
 | quel_member_id | uuid | 회원 ID (FK → quel_member) |
+| org_id | uuid | 조직 ID (FK → quel_organization) - nullable |
 | production_name | varchar(255) | 프로덕션 이름 |
 | production_description | text | 프로덕션 설명 |
 | production_status | enum | 상태 (pending/processing/completed/failed) |
@@ -92,4 +98,4 @@ await supabase.from('quel_production_photo').insert({
 
 ---
 
-Last Updated: 2025-11-09
+Last Updated: 2025-11-26
