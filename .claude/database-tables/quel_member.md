@@ -7,15 +7,22 @@
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | quel_member_id | uuid | NO | gen_random_uuid() | 회원 고유 ID (PK) |
-| quel_member_email | varchar | NO | - | 이메일 |
-| quel_member_name | varchar | YES | - | 이름 |
-| quel_member_credit | integer | YES | 0 | 보유 크레딧 |
-| referral_service_code | varchar | YES | - | 등록한 서비스 코드 |
+| quel_email | text | NO | - | 이메일 |
+| quel_name | text | YES | - | 이름 |
+| provider | text | NO | - | OAuth 제공자 (google 등) |
+| provider_sub | text | NO | - | OAuth 제공자 고유 ID |
+| quel_member_credit | bigint | YES | 0 | 보유 크레딧 |
+| referral_service_code | text | YES | - | 등록한 서비스 코드 |
 | service_code_id | uuid | YES | - | 서비스 코드 ID (FK) |
 | tier2_partner_id | uuid | YES | - | Tier 2 파트너 ID (FK) |
 | referral_code_registered_at | timestamp | YES | - | 코드 등록 시간 |
-| created_at | timestamp | YES | now() | 가입 시간 |
-| updated_at | timestamp | YES | now() | 업데이트 시간 |
+| quel_member_status | USER-DEFINED | NO | 'active' | 회원 상태 (active/inactive/deleted 등) |
+| quel_created_at | timestamp with time zone | NO | now() | 가입 시간 |
+| quel_updated_at | timestamp with time zone | NO | now() | 업데이트 시간 |
+| quel_deleted_at | timestamp with time zone | YES | - | 삭제 시간 (soft delete) |
+| quel_avatar_url | text | YES | - | 프로필 이미지 URL |
+| ui_language | text | YES | 'ko' | UI 언어 설정 |
+| ui_scale | text | YES | 'M' | UI 스케일 설정 |
 
 ## 🔗 Relationships
 
@@ -111,6 +118,7 @@ WHERE referral_service_code IS NULL;
 2. **서비스 코드**: 한 번 등록하면 변경 불가 (현재 로직)
 3. **파트너 관계**: `tier2_partner_id`는 직접 연결된 파트너, Tier 1은 `quel_partners.referral_partner_id`로 확인
 4. **OAuth 통합**: Google OAuth 로그인 시 자동으로 회원 생성
+5. **UI 설정**: `ui_language`(ko/en 등), `ui_scale`(S/M/L 등) 사용자별 UI 환경설정
 
 ## 📊 Statistics
 
@@ -133,4 +141,4 @@ SELECT AVG(quel_member_credit) as avg_credits FROM quel_member;
 
 ---
 
-Last Updated: 2025-11-05
+Last Updated: 2025-11-26
