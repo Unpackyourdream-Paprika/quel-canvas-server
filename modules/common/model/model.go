@@ -62,8 +62,9 @@ type Attach struct {
 }
 
 const (
-	StatusPending    = "pending"
-	StatusProcessing = "processing"
-	StatusCompleted  = "completed"
-	StatusFailed     = "failed"
+	StatusPending       = "pending"
+	StatusProcessing    = "processing"
+	StatusCompleted     = "completed"
+	StatusFailed        = "failed"
+	StatusUserCancelled = "user_cancelled"
 )

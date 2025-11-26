@@ -240,6 +240,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	var progressMutex sync.Mutex
 	generatedAttachIds := []int{}
 	completedCount := 0
+	cancelled := false // 취소 플래그
 
 	// Camera Angle 매핑 (시네마틱 톤)
 	cameraAngleTextMap := map[string]string{
@@ -301,6 +302,15 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
+				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Combination %d: Job %s cancelled, stopping generation", idx+1, job.JobID)
+					progressMutex.Lock()
+					cancelled = true
+					progressMutex.Unlock()
+					return
+				}
+
 				log.Printf("Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
@@ -371,11 +381,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 5: 최종 완료 처리
 	finalStatus := model.StatusCompleted
-	if completedCount == 0 {
+	if cancelled {
+		finalStatus = model.StatusUserCancelled
+		log.Printf("🛑 Job %s was user_cancelled: %d/%d images completed (keeping generated images)", job.JobID, completedCount, job.TotalImages)
+	} else if completedCount == 0 {
 		finalStatus = model.StatusFailed
 	}
 
-	log.Printf("Job %s finished: %d/%d images completed", job.JobID, completedCount, job.TotalImages)
+	log.Printf("Job %s finished: %d/%d images completed, status: %s", job.JobID, completedCount, job.TotalImages, finalStatus)
 
 	// Job 상태 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, finalStatus); err != nil {

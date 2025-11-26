@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/kolesa-team/go-webp/encoder"
 	_ "github.com/kolesa-team/go-webp/decoder" // WebP 디코더 등록
 	"github.com/kolesa-team/go-webp/webp"
@@ -26,11 +28,13 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
+	redisutil "quel-canvas-server/modules/common/redis"
 )
 
 type Service struct {
 	supabase    *supabase.Client
 	genaiClient *genai.Client
+	redis       *redis.Client
 }
 
 // ImageCategories - 카테고리별 이미지 분류 구조체 (음식용)
@@ -62,11 +66,26 @@ func NewService() *Service {
 		return nil
 	}
 
+	// Redis 클라이언트 초기화
+	redisClient := redisutil.Connect(cfg)
+	if redisClient == nil {
+		log.Printf("⚠️ Failed to connect to Redis - cancel feature will be disabled")
+	}
+
 	log.Println("✅ Supabase and Genai clients initialized")
 	return &Service{
 		supabase:    supabaseClient,
 		genaiClient: genaiClient,
+		redis:       redisClient,
 	}
+}
+
+// IsJobCancelled - Job 취소 여부 확인
+func (s *Service) IsJobCancelled(jobID string) bool {
+	if s.redis == nil {
+		return false
+	}
+	return redisutil.IsJobCancelled(s.redis, jobID)
 }
 
 // FetchJobFromSupabase - Supabase에서 Job 데이터 조회
