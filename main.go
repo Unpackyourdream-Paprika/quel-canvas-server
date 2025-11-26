@@ -115,7 +115,7 @@ func (sm *SessionManager) getOrCreateSession(sessionId string) *Session {
 		sm.metrics.ActiveSessions++
 		sm.metrics.mutex.Unlock()
 
-		log.Printf("✅ Created new session: %s (Total: %d, Active: %d)",
+		log.Printf("Created new session: %s (Total: %d, Active: %d)",
 			sessionId, sm.metrics.TotalSessions, sm.metrics.ActiveSessions)
 	}
 
@@ -137,7 +137,7 @@ func (s *Session) addClient(client *Client) {
 	sessionManager.metrics.TotalConnections++
 	sessionManager.metrics.mutex.Unlock()
 
-	log.Printf("👤 Client %s joined session %s (Clients: %d, Total Connections: %d)",
+	log.Printf("Client %s joined session %s (Clients: %d, Total Connections: %d)",
 		client.userId, s.id, clientCount, sessionManager.metrics.TotalConnections)
 
 	// user_joined 메시지를 모든 클라이언트에게 브로드캐스트 (mutex 해제 후)
@@ -246,7 +246,7 @@ func (sm *SessionManager) cleanupEmptySessions() {
 			sm.metrics.ActiveSessions--
 			sm.metrics.mutex.Unlock()
 
-			log.Printf("🧹 Cleaned up empty session: %s", sessionId)
+			log.Printf("Cleaned up empty session: %s", sessionId)
 		}
 	}
 
@@ -276,7 +276,7 @@ func (sm *SessionManager) cleanupExpiredSessions() {
 			session.mutex.Lock()
 			for userId, client := range session.clients {
 				close(client.send)
-				log.Printf("🔌 Disconnecting client %s from expired session %s", userId, sessionId)
+				log.Printf("Disconnecting client %s from expired session %s", userId, sessionId)
 			}
 			session.mutex.Unlock()
 
@@ -324,7 +324,7 @@ func (sm *SessionManager) startCleanupRoutine() {
 		}
 	}()
 
-	log.Printf("🔄 Started session cleanup routines (Empty: 5min, Expired: 30min)")
+	log.Printf("Started session cleanup routines (Empty: 5min, Expired: 30min)")
 }
 
 // WebSocket 핸들러
@@ -354,7 +354,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		send:      make(chan []byte, 256),
 	}
 
-	log.Printf("🔍 New WebSocket connection - Session: %s, User: %s", sessionId, userId)
+	log.Printf("New WebSocket connection - Session: %s, User: %s", sessionId, userId)
 
 	// 세션에 클라이언트 추가
 	session := sessionManager.getOrCreateSession(sessionId)
@@ -364,7 +364,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	existingUsers := len(session.clients)
 	session.mutex.RUnlock()
 
-	log.Printf("📊 Session %s has %d existing users before adding new user", sessionId, existingUsers)
+	log.Printf("Session %s has %d existing users before adding new user", sessionId, existingUsers)
 
 	session.addClient(client)
 
@@ -423,7 +423,7 @@ func (c *Client) readPump(session *Session) {
 			log.Printf("User %s updated sections (count: %d)", c.userId, len(message.Sections))
 
 		case "history_visibility_update":
-			log.Printf("📊 Host %s updated history visibility to: %v (productions: %d)",
+			log.Printf("Host %s updated history visibility to: %v (productions: %d)",
 				c.userId, message.ShowCreationHistory, len(message.HostProductions))
 
 		case "user_joined":
@@ -586,7 +586,7 @@ func forceCleanupSessions(w http.ResponseWriter, r *http.Request) {
 func main() {
 	// 환경변수 로드
 	if _, err := config.LoadConfig(); err != nil {
-		log.Fatalf("❌ Failed to load config: %v", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// 정리 루틴 시작
@@ -619,7 +619,7 @@ func main() {
 	if modifyHandler != nil {
 		modifyHandler.RegisterRoutes(r)
 	} else {
-		log.Println("⚠️  Failed to initialize Modify handler")
+		log.Println("Failed to initialize Modify handler")
 	}
 
 
@@ -630,13 +630,13 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("🚀 Quel Canvas Collaboration Server starting on port %s", port)
-	log.Printf("📡 WebSocket endpoint: ws://localhost:%s/ws", port)
-	log.Printf("❤️  Health check: http://localhost:%s/health", port)
-	log.Printf("📊 Metrics: http://localhost:%s/metrics", port)
-	log.Printf("🧹 Admin cleanup: http://localhost:%s/admin/cleanup", port)
-	log.Printf("🎨 Modify submit: http://localhost:%s/api/modify/submit", port)
-	log.Printf("🔍 Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
+	log.Printf("Quel Canvas Collaboration Server starting on port %s", port)
+	log.Printf("WebSocket endpoint: ws://localhost:%s/ws", port)
+	log.Printf("Health check: http://localhost:%s/health", port)
+	log.Printf("Metrics: http://localhost:%s/metrics", port)
+	log.Printf("Admin cleanup: http://localhost:%s/admin/cleanup", port)
+	log.Printf("Modify submit: http://localhost:%s/api/modify/submit", port)
+	log.Printf("Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
