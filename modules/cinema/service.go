@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
-	_ "image/jpeg" // JPEG 디코더 등록
 	"image/draw"
+	_ "image/jpeg" // JPEG 디코더 등록
 	"image/png"
 	"io"
 	"log"
@@ -20,8 +20,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/kolesa-team/go-webp/encoder"
 	_ "github.com/kolesa-team/go-webp/decoder" // WebP 디코더 등록
+	"github.com/kolesa-team/go-webp/encoder"
 	"github.com/kolesa-team/go-webp/webp"
 	"github.com/supabase-community/supabase-go"
 	"google.golang.org/genai"
@@ -218,7 +218,7 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 
 	// 2.5. uploads/ 폴더가 누락된 경우 자동 추가 (upload-로 시작하는 경우)
 	if len(filePath) > 0 && filePath[0] != '/' &&
-	   len(filePath) >= 7 && filePath[:7] == "upload-" {
+		len(filePath) >= 7 && filePath[:7] == "upload-" {
 		filePath = "uploads/" + filePath
 		log.Printf("🔧 Auto-fixed path to include uploads/ folder: %s", filePath)
 	}
@@ -296,8 +296,8 @@ func (s *Service) ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, err
 
 	webpData := webpBuffer.Bytes()
 
-	log.Printf("✅ PNG converted to WebP: %d bytes → %d bytes (%.1f%% reduction)", 
-		len(pngData), len(webpData), 
+	log.Printf("✅ PNG converted to WebP: %d bytes → %d bytes (%.1f%% reduction)",
+		len(pngData), len(webpData),
 		float64(len(pngData)-len(webpData))/float64(len(pngData))*100)
 
 	return webpData, nil
@@ -418,7 +418,7 @@ func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 
 	// Grid 방식으로 배치 (2x2, 2x3 등)
 	numImages := len(decodedImages)
-	cols := int(math.Ceil(math.Sqrt(float64(numImages)))) // 열 개수
+	cols := int(math.Ceil(math.Sqrt(float64(numImages))))      // 열 개수
 	rows := int(math.Ceil(float64(numImages) / float64(cols))) // 행 개수
 
 	// 각 셀의 최대 너비/높이 계산
@@ -621,7 +621,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (LOCATION INSPIRATION): This shows the MOOD and ATMOSPHERE you should recreate - NOT a background to paste. Like a photographer's location scout photo, use this to understand the setting, lighting direction, and visual style. Generate a COMPLETELY NEW environment inspired by this reference that serves as the perfect stage for your subject", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND TO PRESERVE): Use THIS background as the primary set. Maintain its composition, perspective, and major elements; respect the lighting direction. Do NOT replace it with a new scene—keep it recognizable and consistent", imageIndex))
 		imageIndex++
 	}
 
@@ -666,10 +666,10 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
 			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
 			"The photographer CHOSE this environment to complement the subject - not to overwhelm them.\n" +
-			"🎬 Use the background reference as INSPIRATION ONLY:\n" +
-			"   • Recreate the atmosphere, lighting mood, and setting type\n" +
-			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The location serves as a STAGE for the subject's story\n\n" +
+			"🎬 Use the background reference as the ACTUAL set:\n" +
+			"   • Preserve composition, horizon, and key objects from the reference\n" +
+			"   • Keep lighting direction and perspective consistent\n" +
+			"   • The location serves as a STAGE for the subject's story without inventing a new scene\n\n" +
 			"[ABSOLUTE PRIORITY: SUBJECT INTEGRITY]\n" +
 			"⚠️ CRITICAL: The person's body proportions are UNTOUCHABLE\n" +
 			"⚠️ DO NOT distort, stretch, compress, or alter the person to fit the frame\n" +

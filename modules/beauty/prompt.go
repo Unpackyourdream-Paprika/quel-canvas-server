@@ -18,7 +18,8 @@ type PromptCategories struct {
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
-	hasProducts := len(categories.Products) > 0  // Beauty 전용: Products 필드 직접 확인
+	hasProducts := len(categories.Products) > 0 // Beauty 전용: Products 필드 직접 확인
+	singleProduct := len(categories.Products) == 1
 	hasBackground := categories.Background != nil
 
 	// 디버그 로그 추가
@@ -47,7 +48,8 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		mainInstruction = "[BEAUTY PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
 			"You are a world-class cosmetic product photographer.\n" +
 			"The BEAUTY PRODUCTS are the STARS - showcase them as premium cosmetics.\n" +
-			"⚠️ CRITICAL: NO people or models in this shot - beauty products only.\n\n" +
+			"⚠️ CRITICAL: NO people or models in this shot - beauty products only.\n" +
+			"⚠️ USE ONLY the provided product references; do NOT add any extra or fictional products.\n\n" +
 			"Create ONE photorealistic photograph with COSMETIC ELEGANCE:\n" +
 			"• Artistic arrangement of beauty products (lipsticks, makeup, skincare)\n" +
 			"• Soft, diffused lighting that highlights product details\n" +
@@ -85,7 +87,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		} else {
 			// 제품만: 순수 제품 촬영
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS): Cosmetic items to showcase as the main subject - bottles, jars, tubes, compacts, lipsticks, skincare packaging. Display these products artistically with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply", imageIndex))
+				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS): Cosmetic items to showcase as the main subject - bottles, jars, tubes, compacts, lipsticks, skincare packaging. Display ONLY these products (do not invent more) with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply", imageIndex))
 		}
 		imageIndex++
 	}
@@ -126,7 +128,8 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"⚠️ CRITICAL: DO NOT add any people, models, or human figures.\n" +
 			"⚠️ CRITICAL: DO NOT add hands, fingers, or any body parts holding products.\n" +
 			"⚠️ CRITICAL: NO human faces, NO portraits, NO makeup application shots - PRODUCTS ONLY.\n" +
-			"⚠️ Display the beauty products artistically arranged - like high-end cosmetic advertising photography.\n"
+			"⚠️ Display the beauty products artistically arranged - like high-end cosmetic advertising photography.\n" +
+			"⚠️ USE ONLY the provided product references; do NOT invent extra products or variants."
 
 		if hasBackground {
 			compositionInstruction += "The beauty products are placed naturally within the referenced environment - " +
@@ -191,6 +194,15 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	// 공통 금지사항 - 모든 케이스에 적용
 	commonForbidden := "\n\n[CRITICAL: ABSOLUTELY FORBIDDEN - THESE WILL CAUSE IMMEDIATE REJECTION]\n\n" +
+		func() string {
+			if singleProduct {
+				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY the single provided product; do NOT add extra bottles, shades, or duplicates.\n\n"
+			}
+			if hasProducts {
+				return "⚠️ PRODUCT COUNT MUST MATCH: Use ONLY the provided product references; do NOT add extra bottles, shades, or duplicates.\n\n"
+			}
+			return ""
+		}() +
 		"⚠️ NO VERTICAL DIVIDING LINES - ZERO TOLERANCE:\n" +
 		"❌ NO white vertical line down the center\n" +
 		"❌ NO colored vertical line separating the image\n" +
