@@ -167,6 +167,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 3: 이미지 다운로드 및 카테고리별 분류
 	categories := &ImageCategories{
+		Models:      [][]byte{},
 		Clothing:    [][]byte{},
 		Accessories: [][]byte{},
 	}
@@ -201,9 +202,13 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 		// type에 따라 카테고리별로 분류
 		switch attachType {
-		case "model":
-			categories.Model = imageData
-			log.Printf("✅ Model image added")
+		case "model", "character", "actor":
+			if len(categories.Models) < MaxModels {
+				categories.Models = append(categories.Models, imageData)
+				log.Printf("✅ Model/Character image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
+			} else {
+				log.Printf("⚠️ Maximum models reached (%d), skipping additional model", MaxModels)
+			}
 		case "background", "bg":
 			categories.Background = imageData
 			log.Printf("✅ Background image added")
@@ -221,14 +226,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	// 최소한 의류 이미지는 있어야 함
-	if len(categories.Clothing) == 0 && categories.Model == nil {
+	if len(categories.Clothing) == 0 && len(categories.Models) == 0 {
 		log.Printf("❌ No clothing or model images found")
 		service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
 		return
 	}
 
-	log.Printf("✅ Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ Images classified - Models:%d, Clothing:%d, Accessories:%d, BG:%v",
+		len(categories.Models), len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -549,6 +554,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
+					Models:      [][]byte{},
 					Clothing:    [][]byte{},
 					Accessories: [][]byte{},
 				}
@@ -580,9 +586,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 					// type에 따라 카테고리별로 분류
 					switch attachType {
-					case "model":
-						stageCategories.Model = imageData
-						log.Printf("✅ Stage %d: Model image added", stageIndex)
+					case "model", "character", "actor":
+						if len(stageCategories.Models) < MaxModels {
+							stageCategories.Models = append(stageCategories.Models, imageData)
+							log.Printf("✅ Stage %d: Model/Character image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
+						} else {
+							log.Printf("⚠️ Stage %d: Maximum models reached (%d), skipping", stageIndex, MaxModels)
+						}
 					case "bg":
 						stageCategories.Background = imageData
 						log.Printf("✅ Stage %d: Background image added", stageIndex)
@@ -600,8 +610,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 
-				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
+				log.Printf("✅ Stage %d: Images classified - Models:%d, Clothing:%d, Accessories:%d, BG:%v",
+					stageIndex, len(stageCategories.Models), len(stageCategories.Clothing),
 					len(stageCategories.Accessories), stageCategories.Background != nil)
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
@@ -617,6 +627,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				// 레거시 이미지를 Clothing 카테고리로 처리
 				stageCategories = &ImageCategories{
+					Models:      [][]byte{},
 					Clothing:    [][]byte{imageData},
 					Accessories: [][]byte{},
 				}
@@ -866,6 +877,7 @@ MANDATORY TECHNICAL SPECS:
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
 			retryCategories = &ImageCategories{
+				Models:      [][]byte{},
 				Clothing:    [][]byte{},
 				Accessories: [][]byte{},
 			}
@@ -885,8 +897,10 @@ MANDATORY TECHNICAL SPECS:
 				}
 
 				switch attachType {
-				case "model":
-					retryCategories.Model = imageData
+				case "model", "character", "actor":
+					if len(retryCategories.Models) < MaxModels {
+						retryCategories.Models = append(retryCategories.Models, imageData)
+					}
 				case "bg":
 					retryCategories.Background = imageData
 				default:
@@ -906,6 +920,7 @@ MANDATORY TECHNICAL SPECS:
 				continue
 			}
 			retryCategories = &ImageCategories{
+				Models:      [][]byte{},
 				Clothing:    [][]byte{imageData},
 				Accessories: [][]byte{},
 			}

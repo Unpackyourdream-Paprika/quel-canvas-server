@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// ImageCategories - 카테고리별 이미지 분류 구조체
+// PromptCategories - 카테고리별 이미지 분류 구조체 (프롬프트 생성용)
 type PromptCategories struct {
-	Model       []byte   // 모델 이미지 (최대 1장)
+	Models      [][]byte // 모델 이미지 배열 (최대 3명)
 	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
 	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
 	Background  []byte   // 배경 이미지 (최대 1장)
@@ -16,7 +16,8 @@ type PromptCategories struct {
 // GenerateDynamicPrompt - Cinema 모듈 전용 프롬프트 생성
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
-	hasModel := categories.Model != nil
+	hasModels := len(categories.Models) > 0
+	modelCount := len(categories.Models)
 	hasClothing := len(categories.Clothing) > 0
 	hasAccessories := len(categories.Accessories) > 0
 	hasProducts := hasClothing || hasAccessories
@@ -24,25 +25,47 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	// 케이스별 메인 지시사항 - Cinema 전용
 	var mainInstruction string
-	if hasModel {
+	if hasModels {
 		// 모델 있음 → 영화 장면 / 시네마틱 프레임
-		mainInstruction = "⚠️ ABSOLUTE PHOTOREALISM REQUIREMENT - THIS IS NOT OPTIONAL:\n" +
-			"Generate a 100% PHOTOREALISTIC image that looks like it was captured by a REAL CAMERA.\n" +
-			"• ZERO artistic interpretation - pure photography\n" +
-			"• ZERO illustration, painting, or stylized rendering\n" +
-			"• Must look INDISTINGUISHABLE from a real photograph taken on film set\n" +
-			"• Real skin texture, real fabric texture, real lighting physics\n" +
-			"• If someone cannot tell this from a real photo, you succeeded\n\n" +
-			"[CINEMA DIRECTOR'S DRAMATIC FRAME]\n" +
-			"You are a world-class cinematographer shooting a high-budget film scene.\n" +
-			"The CHARACTER is the emotional center - their natural proportions and presence drive the narrative.\n" +
-			"Every frame tells a story through composition, lighting, and atmosphere.\n\n" +
-			"Create ONE photorealistic cinematic film frame with DRAMATIC STORYTELLING:\n" +
-			"• The character exists in a specific moment of the narrative\n" +
-			"• Camera angle and framing create emotional impact\n" +
-			"• Environmental storytelling - location reveals character and mood\n" +
-			"• Cinematic lighting creates depth, drama, and atmosphere\n" +
-			"• This is a FILM STILL from a high-production movie scene\n\n"
+		if modelCount == 1 {
+			mainInstruction = "⚠️ ABSOLUTE PHOTOREALISM REQUIREMENT - THIS IS NOT OPTIONAL:\n" +
+				"Generate a 100% PHOTOREALISTIC image that looks like it was captured by a REAL CAMERA.\n" +
+				"• ZERO artistic interpretation - pure photography\n" +
+				"• ZERO illustration, painting, or stylized rendering\n" +
+				"• Must look INDISTINGUISHABLE from a real photograph taken on film set\n" +
+				"• Real skin texture, real fabric texture, real lighting physics\n" +
+				"• If someone cannot tell this from a real photo, you succeeded\n\n" +
+				"[CINEMA DIRECTOR'S DRAMATIC FRAME]\n" +
+				"You are a world-class cinematographer shooting a high-budget film scene.\n" +
+				"The CHARACTER is the emotional center - their natural proportions and presence drive the narrative.\n" +
+				"Every frame tells a story through composition, lighting, and atmosphere.\n\n" +
+				"Create ONE photorealistic cinematic film frame with DRAMATIC STORYTELLING:\n" +
+				"• The character exists in a specific moment of the narrative\n" +
+				"• Camera angle and framing create emotional impact\n" +
+				"• Environmental storytelling - location reveals character and mood\n" +
+				"• Cinematic lighting creates depth, drama, and atmosphere\n" +
+				"• This is a FILM STILL from a high-production movie scene\n\n"
+		} else {
+			mainInstruction = fmt.Sprintf("⚠️ ABSOLUTE PHOTOREALISM REQUIREMENT - THIS IS NOT OPTIONAL:\n"+
+				"Generate a 100%% PHOTOREALISTIC image that looks like it was captured by a REAL CAMERA.\n"+
+				"• ZERO artistic interpretation - pure photography\n"+
+				"• ZERO illustration, painting, or stylized rendering\n"+
+				"• Must look INDISTINGUISHABLE from a real photograph taken on film set\n"+
+				"• Real skin texture, real fabric texture, real lighting physics\n"+
+				"• If someone cannot tell this from a real photo, you succeeded\n\n"+
+				"[CINEMA DIRECTOR'S DRAMATIC FRAME - %d CHARACTERS]\n"+
+				"You are a world-class cinematographer shooting a high-budget film scene with MULTIPLE CHARACTERS.\n"+
+				"Each CHARACTER is an emotional center - their natural proportions and presence drive the narrative.\n"+
+				"Every frame tells a story through composition, lighting, and atmosphere.\n\n"+
+				"Create ONE photorealistic cinematic film frame with DRAMATIC STORYTELLING featuring %d DISTINCT CHARACTERS:\n"+
+				"• EACH character MUST appear exactly as shown in their reference image\n"+
+				"• Each character has their own unique appearance, pose, and presence\n"+
+				"• Characters interact naturally within the same scene\n"+
+				"• Camera angle and framing create emotional impact for all characters\n"+
+				"• Environmental storytelling - location reveals characters and mood\n"+
+				"• Cinematic lighting creates depth, drama, and atmosphere\n"+
+				"• This is a FILM STILL from a high-production movie scene with MULTIPLE PEOPLE\n\n", modelCount, modelCount)
+		}
 	} else if hasProducts {
 		// 프로덕트만 → 영화 소품 / 시네마틱 오브젝트
 		mainInstruction = "[CINEMATIC PROP PHOTOGRAPHER'S APPROACH]\n" +
@@ -71,10 +94,15 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명
-	if categories.Model != nil {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
+	// 각 카테고리별 명확한 설명 - 다중 모델 지원
+	for i := range categories.Models {
+		if len(categories.Models) == 1 {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
+		} else {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d (CHARACTER %d): This person's face, body shape, skin tone, and physical features - CHARACTER %d MUST appear exactly as shown in this reference", imageIndex, i+1, i+1))
+		}
 		imageIndex++
 	}
 
@@ -100,7 +128,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var compositionInstruction string
 
 	// 케이스 1: 모델 이미지가 있는 경우 → 영화 장면의 캐릭터
-	if hasModel {
+	if hasModels {
 		compositionInstruction = "\n[CINEMATIC FILM SCENE COMPOSITION]\n" +
 			"Generate ONE photorealistic film frame showing the referenced character in a dramatic moment.\n" +
 			"This is a HIGH-BUDGET MOVIE SCENE with the character as the emotional center of the narrative.\n" +
@@ -133,7 +161,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	}
 
 	// 배경 관련 지시사항 - 캐릭터가 있을 때만 추가
-	if hasModel && hasBackground {
+	if hasModels && hasBackground {
 		// 캐릭터 + 배경 케이스 → 영화 장면 환경 통합 지시사항
 		compositionInstruction += " shot on cinematic location with narrative environmental storytelling.\n\n" +
 			"[CINEMATOGRAPHER'S APPROACH TO LOCATION]\n" +
@@ -160,7 +188,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"✓ Cinematic composition rules - rule of thirds, leading lines, dynamic framing\n" +
 			"✓ Depth of field creates focus and separates character from environment\n" +
 			"✓ The environment and character exist in the SAME CINEMATIC REALITY"
-	} else if hasModel && !hasBackground {
+	} else if hasModels && !hasBackground {
 		// 캐릭터만 있고 배경 없음 → 스튜디오 촬영
 		compositionInstruction += " in a controlled studio environment with professional cinematic film lighting."
 	}
@@ -190,7 +218,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"✓ The entire image is ONE COHESIVE PHOTOGRAPH - not a collage or split screen\n" +
 		"✓ Background elements (buildings, sky, ground) must be CONTINUOUS with no breaks or seams\n"
 
-	if hasModel {
+	if hasModels {
 		// 캐릭터 있는 케이스 - 시네마틱 영화 장면 규칙
 		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE CINEMATIC REQUIREMENTS]\n" +
 			"🎯 Character's body proportions are NATURAL and REALISTIC - ZERO tolerance for distortion\n" +
@@ -240,7 +268,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 16:9 비율 전용 추가 지시사항
 	var aspectRatioInstruction string
 	if aspectRatio == "16:9" {
-		if hasModel {
+		if hasModels {
 			// 캐릭터 있는 16:9 케이스 - 시네마스코프 와이드샷
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - FILM NARRATIVE STORYTELLING]\n" +
 				"This is a WIDESCREEN FILM FRAME - use the horizontal space for powerful cinematic narrative.\n\n" +
