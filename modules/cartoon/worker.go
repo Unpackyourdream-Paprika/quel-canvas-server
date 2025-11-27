@@ -166,6 +166,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 3: 이미지 다운로드 및 카테고리별 분류
 	categories := &ImageCategories{
+		Models:      [][]byte{},
 		Clothing:    [][]byte{},
 		Accessories: [][]byte{},
 	}
@@ -200,9 +201,13 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 		// type에 따라 카테고리별로 분류
 		switch attachType {
-		case "model":
-			categories.Model = imageData
-			log.Printf("✅ Model image added")
+		case "model", "character":
+			if len(categories.Models) < MaxModels {
+				categories.Models = append(categories.Models, imageData)
+				log.Printf("✅ Character image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
+			} else {
+				log.Printf("⚠️ Maximum characters reached (%d), skipping additional character", MaxModels)
+			}
 		case "background", "bg":
 			categories.Background = imageData
 			log.Printf("✅ Background image added")
@@ -220,7 +225,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	// Cartoon 모듈 - 캐릭터(Model)가 반드시 필요
-	if categories.Model == nil {
+	if len(categories.Models) == 0 {
 		log.Printf("❌ CRITICAL: Cartoon module requires CHARACTER (Model) image")
 		log.Printf("❌ GLOBAL node must include character appearance reference")
 		log.Printf("❌ Cannot generate webtoon/cartoon without character - Job failed")
@@ -228,8 +233,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		return
 	}
 
-	log.Printf("✅ Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ Images classified - Characters:%d, Clothing:%d, Accessories:%d, BG:%v",
+		len(categories.Models), len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -487,6 +492,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
+					Models:      [][]byte{},
 					Clothing:    [][]byte{},
 					Accessories: [][]byte{},
 				}
@@ -518,9 +524,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 					// type에 따라 카테고리별로 분류
 					switch attachType {
-					case "model":
-						stageCategories.Model = imageData
-						log.Printf("✅ Stage %d: Model image added", stageIndex)
+					case "model", "character":
+						if len(stageCategories.Models) < MaxModels {
+							stageCategories.Models = append(stageCategories.Models, imageData)
+							log.Printf("✅ Stage %d: Character image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
+						} else {
+							log.Printf("⚠️ Stage %d: Maximum characters reached (%d), skipping", stageIndex, MaxModels)
+						}
 					case "bg":
 						stageCategories.Background = imageData
 						log.Printf("✅ Stage %d: Background image added", stageIndex)
@@ -538,8 +548,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 
-				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
+				log.Printf("✅ Stage %d: Images classified - Characters:%d, Clothing:%d, Accessories:%d, BG:%v",
+					stageIndex, len(stageCategories.Models), len(stageCategories.Clothing),
 					len(stageCategories.Accessories), stageCategories.Background != nil)
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
@@ -555,6 +565,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				// 레거시 이미지를 Clothing 카테고리로 처리
 				stageCategories = &ImageCategories{
+					Models:      [][]byte{},
 					Clothing:    [][]byte{imageData},
 					Accessories: [][]byte{},
 				}
@@ -564,7 +575,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			}
 
 			// Cartoon 모듈 - 캐릭터(Model) 검증
-			if stageCategories.Model == nil {
+			if len(stageCategories.Models) == 0 {
 				log.Printf("❌ CRITICAL: Stage %d - Cartoon module requires CHARACTER (Model) image", stageIndex)
 				log.Printf("❌ GLOBAL node must include character appearance reference")
 				log.Printf("❌ Cannot generate webtoon/cartoon without character - Stage skipped")
@@ -701,6 +712,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
 			retryCategories = &ImageCategories{
+				Models:      [][]byte{},
 				Clothing:    [][]byte{},
 				Accessories: [][]byte{},
 			}
@@ -720,8 +732,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 				switch attachType {
-				case "model":
-					retryCategories.Model = imageData
+				case "model", "character":
+					if len(retryCategories.Models) < MaxModels {
+						retryCategories.Models = append(retryCategories.Models, imageData)
+					}
 				case "bg":
 					retryCategories.Background = imageData
 				default:
@@ -741,6 +755,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				continue
 			}
 			retryCategories = &ImageCategories{
+				Models:      [][]byte{},
 				Clothing:    [][]byte{imageData},
 				Accessories: [][]byte{},
 			}

@@ -39,11 +39,14 @@ type Service struct {
 
 // ImageCategories - 카테고리별 이미지 분류 구조체
 type ImageCategories struct {
-	Model       []byte   // 모델 이미지 (최대 1장)
+	Models      [][]byte // 캐릭터 이미지 배열 (최대 3명)
 	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
 	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
 	Background  []byte   // 배경 이미지 (최대 1장)
 }
+
+// MaxModels - 최대 허용 캐릭터 수
+const MaxModels = 3
 
 func NewService() *Service {
 	cfg := config.GetConfig()
@@ -528,7 +531,8 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 // generateDynamicPrompt - 상황별 동적 프롬프트 생성
 func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
-	hasModel := categories.Model != nil
+	hasModels := len(categories.Models) > 0
+	modelCount := len(categories.Models)
 	hasClothing := len(categories.Clothing) > 0
 	hasAccessories := len(categories.Accessories) > 0
 	hasProducts := hasClothing || hasAccessories
@@ -536,18 +540,33 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	// 케이스별 메인 지시사항
 	var mainInstruction string
-	if hasModel {
-		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
-			"You are a world-class fashion photographer shooting an editorial campaign.\n" +
-			"The PERSON is the HERO - their natural proportions are SACRED and CANNOT be distorted.\n" +
-			"The environment serves the subject, NOT the other way around.\n\n" +
-			"Create ONE photorealistic photograph with DRAMATIC CINEMATIC STORYTELLING:\n" +
-			"• The model wears ALL clothing and accessories in ONE complete outfit\n" +
-			"• Dynamic pose and angle - NOT static or stiff\n" +
-			"• Environmental storytelling - use the location for drama\n" +
-			"• Directional lighting creates mood and depth\n" +
-			"• This is a MOMENT full of energy and narrative\n\n"
+	if hasModels {
+		// 캐릭터 있음 → 웹툰/카툰 스타일
+		if modelCount == 1 {
+			mainInstruction = "[WEBTOON/CARTOON ARTIST'S DRAMATIC COMPOSITION]\n" +
+				"You are a world-class webtoon/cartoon artist creating a dynamic scene.\n" +
+				"The CHARACTER is the HERO - their stylized proportions and features are SACRED.\n" +
+				"The environment serves the character, NOT the other way around.\n\n" +
+				"Create ONE high-quality webtoon/cartoon illustration with DRAMATIC STORYTELLING:\n" +
+				"• The character wears ALL clothing and accessories in ONE complete outfit\n" +
+				"• Dynamic pose and angle - NOT static or stiff\n" +
+				"• Environmental storytelling - use the location for drama\n" +
+				"• Stylized lighting creates mood and depth\n" +
+				"• This is a MOMENT full of energy and narrative\n\n"
+		} else {
+			mainInstruction = fmt.Sprintf("[WEBTOON/CARTOON ARTIST'S DRAMATIC COMPOSITION - %d CHARACTERS]\n"+
+				"You are a world-class webtoon/cartoon artist creating a dynamic scene with MULTIPLE CHARACTERS.\n"+
+				"Each CHARACTER is a HERO - their stylized proportions and features are SACRED.\n"+
+				"The environment serves the characters, NOT the other way around.\n\n"+
+				"Create ONE high-quality webtoon/cartoon illustration featuring %d DISTINCT CHARACTERS with DRAMATIC STORYTELLING:\n"+
+				"• EACH character MUST appear exactly as shown in their reference image\n"+
+				"• Each character has their own unique appearance, pose, and presence\n"+
+				"• Characters interact naturally within the same scene\n"+
+				"• Dynamic composition with all characters - NOT static or stiff\n"+
+				"• Environmental storytelling - use the location for drama\n"+
+				"• Stylized lighting creates mood and depth\n"+
+				"• This is a MOMENT full of energy and narrative with MULTIPLE CHARACTERS\n\n", modelCount, modelCount)
+		}
 	} else if hasProducts {
 		// 프로덕트만 → 프로덕트 포토그래피
 		mainInstruction = "[CINEMATIC PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
@@ -576,10 +595,15 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명
-	if categories.Model != nil {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
+	// 각 카테고리별 명확한 설명 - 다중 캐릭터 지원
+	for i := range categories.Models {
+		if len(categories.Models) == 1 {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d (CHARACTER): This character's face, body shape, style, and visual features - use EXACTLY this appearance", imageIndex))
+		} else {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d (CHARACTER %d): This character's face, body shape, style, and visual features - CHARACTER %d MUST appear exactly as shown in this reference", imageIndex, i+1, i+1))
+		}
 		imageIndex++
 	}
 
@@ -604,11 +628,11 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 시네마틱 구성 지시사항
 	var compositionInstruction string
 
-	// 케이스 1: 모델 이미지가 있는 경우 → 모델 착용 샷 (패션 에디토리얼)
-	if hasModel {
-		compositionInstruction = "\n[FASHION EDITORIAL COMPOSITION]\n" +
-			"Generate ONE photorealistic film photograph showing the referenced model wearing the complete outfit (all clothing + accessories).\n" +
-			"This is a high-end fashion editorial shoot with the model as the star."
+	// 케이스 1: 캐릭터 이미지가 있는 경우 → 웹툰/카툰 장면
+	if hasModels {
+		compositionInstruction = "\n[WEBTOON/CARTOON SCENE COMPOSITION]\n" +
+			"Generate ONE high-quality webtoon/cartoon illustration showing the referenced character(s) in a dynamic scene.\n" +
+			"This is a professional webtoon/cartoon artwork with the character(s) as the star."
 	} else if hasProducts {
 		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
 		compositionInstruction = "\n[CINEMATIC PRODUCT PHOTOGRAPHY]\n" +
@@ -636,8 +660,8 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"Generate a high-quality photorealistic image based on the references provided."
 	}
 
-	// 배경 관련 지시사항 - 모델이 있을 때만 추가
-	if hasModel && hasBackground {
+	// 배경 관련 지시사항 - 캐릭터가 있을 때만 추가
+	if hasModels && hasBackground {
 		// 모델 + 배경 케이스 → 환경 통합 지시사항
 		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
 			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
@@ -664,33 +688,33 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"✓ Rule of thirds or dynamic asymmetric composition\n" +
 			"✓ Depth of field focuses attention on the subject\n" +
 			"✓ The environment and subject look like they exist in the SAME REALITY"
-	} else if hasModel && !hasBackground {
-		// 모델만 있고 배경 없음 → 스튜디오
-		compositionInstruction += " in a cinematic studio setting with professional film lighting."
+	} else if hasModels && !hasBackground {
+		// 캐릭터만 있고 배경 없음 → 심플 배경
+		compositionInstruction += " with a clean, stylized background that complements the character(s)."
 	}
 	// 프로덕트 샷이나 배경만 있는 케이스는 위에서 이미 처리됨
 
 	// 핵심 요구사항 - 케이스별로 다르게
 	var criticalRules string
-	if hasModel {
-		// 모델 있는 케이스 - 드라마틱 패션 에디토리얼 규칙
+	if hasModels {
+		// 캐릭터 있는 케이스 - 웹툰/카툰 규칙
 		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Person's body proportions are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
-			"🎯 The subject is the STAR - everything else supports their presence\n" +
+			"🎯 Character's stylized proportions are CONSISTENT - maintain their unique visual style\n" +
+			"🎯 The character(s) are the STAR - everything else supports their presence\n" +
 			"🎯 Dramatic composition with ENERGY and MOVEMENT\n" +
 			"🎯 Environmental storytelling - what's the narrative of this moment?\n" +
 			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
-			"🎯 Single cohesive photograph - looks like ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
+			"🎯 Single cohesive illustration - ONE scene, ONE moment\n" +
+			"🎯 Professional webtoon/cartoon aesthetic - clean lines, vibrant colors\n" +
 			"🎯 Dynamic framing - use negative space creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY distortion of the person's proportions (stretched, compressed, squashed)\n" +
-			"❌ Person looking pasted, floating, or artificially placed\n" +
+			"[FORBIDDEN - THESE WILL RUIN THE ARTWORK]\n" +
+			"❌ ANY inconsistency in character's visual style or proportions\n" +
+			"❌ Character looking pasted, floating, or artificially placed\n" +
 			"❌ Static, boring, catalog-style poses\n" +
 			"❌ Split-screen, collage, or multiple separate images\n" +
 			"❌ Background reference directly pasted or overlaid\n" +
 			"❌ Centered, symmetrical composition without drama\n" +
-			"❌ Flat lighting that doesn't create mood"
+			"❌ Flat shading that doesn't create depth"
 	} else if hasProducts {
 		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
 		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
@@ -728,7 +752,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 16:9 비율 전용 추가 지시사항
 	var aspectRatioInstruction string
 	if aspectRatio == "16:9" {
-		if hasModel {
+		if hasModels {
 			// 모델이 있는 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
 				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
@@ -804,8 +828,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		aspectRatio = "16:9"
 	}
 
-	log.Printf("🎨 Calling Gemini API with categories - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("🎨 Calling Gemini API with categories - Characters:%d, Clothing:%d, Accessories:%d, BG:%v",
+		len(categories.Models), len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
 
 	// 카테고리별 병합 및 resize
 	var mergedClothing []byte
@@ -829,12 +853,13 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	// Gemini Part 배열 구성
 	var parts []*genai.Part
 
-	// 순서: Model → Clothing → Accessories → Background
-	if categories.Model != nil {
-		// Model 이미지도 resize
-		resizedModel, err := mergeImages([][]byte{categories.Model}, aspectRatio)
+	// 순서: Models → Clothing → Accessories → Background
+	// 다중 캐릭터 지원: 각 캐릭터 이미지를 개별적으로 추가
+	for i, modelData := range categories.Models {
+		// 각 캐릭터 이미지를 resize
+		resizedModel, err := mergeImages([][]byte{modelData}, aspectRatio)
 		if err != nil {
-			return "", fmt.Errorf("failed to resize model image: %w", err)
+			return "", fmt.Errorf("failed to resize character image %d: %w", i+1, err)
 		}
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
@@ -842,7 +867,11 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     resizedModel,
 			},
 		})
-		log.Printf("📎 Added Model image (resized)")
+		if len(categories.Models) == 1 {
+			log.Printf("📎 Added Character image (resized)")
+		} else {
+			log.Printf("📎 Added Character image %d/%d (resized)", i+1, len(categories.Models))
+		}
 	}
 
 	if mergedClothing != nil {
