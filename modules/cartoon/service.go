@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
-	_ "image/jpeg" // JPEG 디코더 등록
 	"image/draw"
+	_ "image/jpeg" // JPEG 디코더 등록
 	"image/png"
 	"io"
 	"log"
@@ -20,8 +20,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/kolesa-team/go-webp/encoder"
 	_ "github.com/kolesa-team/go-webp/decoder" // WebP 디코더 등록
+	"github.com/kolesa-team/go-webp/encoder"
 	"github.com/kolesa-team/go-webp/webp"
 	"github.com/supabase-community/supabase-go"
 	"google.golang.org/genai"
@@ -218,7 +218,7 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 
 	// 2.5. uploads/ 폴더가 누락된 경우 자동 추가 (upload-로 시작하는 경우)
 	if len(filePath) > 0 && filePath[0] != '/' &&
-	   len(filePath) >= 7 && filePath[:7] == "upload-" {
+		len(filePath) >= 7 && filePath[:7] == "upload-" {
 		filePath = "uploads/" + filePath
 		log.Printf("🔧 Auto-fixed path to include uploads/ folder: %s", filePath)
 	}
@@ -296,8 +296,8 @@ func (s *Service) ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, err
 
 	webpData := webpBuffer.Bytes()
 
-	log.Printf("✅ PNG converted to WebP: %d bytes → %d bytes (%.1f%% reduction)", 
-		len(pngData), len(webpData), 
+	log.Printf("✅ PNG converted to WebP: %d bytes → %d bytes (%.1f%% reduction)",
+		len(pngData), len(webpData),
 		float64(len(pngData)-len(webpData))/float64(len(pngData))*100)
 
 	return webpData, nil
@@ -418,7 +418,7 @@ func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 
 	// Grid 방식으로 배치 (2x2, 2x3 등)
 	numImages := len(decodedImages)
-	cols := int(math.Ceil(math.Sqrt(float64(numImages)))) // 열 개수
+	cols := int(math.Ceil(math.Sqrt(float64(numImages))))      // 열 개수
 	rows := int(math.Ceil(float64(numImages) / float64(cols))) // 행 개수
 
 	// 각 셀의 최대 너비/높이 계산
@@ -569,27 +569,28 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		}
 	} else if hasProducts {
 		// 프로덕트만 → 프로덕트 포토그래피
-		mainInstruction = "[CINEMATIC PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class product photographer creating editorial-style still life.\n" +
-			"The PRODUCTS are the STARS - showcase them as beautiful objects with perfect details.\n" +
-			"⚠️ CRITICAL: NO people or models in this shot - products only.\n\n" +
-			"Create ONE photorealistic photograph with ARTISTIC STORYTELLING:\n" +
+		mainInstruction = "[CARTOON PRODUCT ILLUSTRATOR'S APPROACH]\n" +
+			"You are a world-class cartoon/webtoon illustrator creating editorial-style still life in consistent cartoon style.\n" +
+			"The PRODUCTS are the STARS - showcase ONLY the provided objects with stylized, drawn look.\n" +
+			"⚠️ CRITICAL: NO people or models in this shot - products only.\n" +
+			"⚠️ CRITICAL: Apply the SAME cartoon/illustration rendering to every element (products and background).\n\n" +
+			"Create ONE high-quality cartoon illustration with ARTISTIC STORYTELLING:\n" +
 			"• Artistic arrangement of all items - creative composition\n" +
-			"• Dramatic lighting that highlights textures and materials\n" +
-			"• Environmental context (if location provided) or studio elegance\n" +
-			"• Directional lighting creates depth and mood\n" +
-			"• This is high-end product photography with cinematic quality\n\n"
+			"• Stylized lighting that highlights shapes without photoreal textures\n" +
+			"• If a location is provided, render it in the SAME cartoon style; otherwise use a simple illustrated set\n" +
+			"• This is high-end illustrated product art with cinematic framing, not a photo\n\n"
 	} else {
 		// 배경만 → 환경 포토그래피
-		mainInstruction = "[CINEMATIC ENVIRONMENTAL PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class environmental photographer capturing pure atmosphere.\n" +
-			"The LOCATION is the SUBJECT - showcase its mood, scale, and character.\n" +
-			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n\n" +
-			"Create ONE photorealistic photograph with ATMOSPHERIC STORYTELLING:\n" +
-			"• Dramatic composition that captures the location's essence\n" +
+		mainInstruction = "[CARTOON ENVIRONMENT ARTIST'S APPROACH]\n" +
+			"You are a world-class cartoon/background artist capturing pure atmosphere in illustrated style.\n" +
+			"The LOCATION is the SUBJECT - showcase its mood, scale, and character in cartoon/webtoon rendering.\n" +
+			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n" +
+			"⚠️ CRITICAL: Convert the provided background into the SAME cartoon style; do NOT leave it photorealistic.\n\n" +
+			"Create ONE high-quality cartoon environment illustration with ATMOSPHERIC STORYTELLING:\n" +
+			"• Composition that respects the original layout and perspective\n" +
 			"• Layers of depth - foreground, midground, background\n" +
-			"• Directional lighting creates mood and drama\n" +
-			"• This is cinematic environmental photography with narrative quality\n\n"
+			"• Stylized lighting creates mood and drama without photoreal textures\n" +
+			"• This is cinematic environmental art with narrative quality\n\n"
 	}
 
 	var instructions []string
@@ -621,7 +622,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (LOCATION INSPIRATION): This shows the MOOD and ATMOSPHERE you should recreate - NOT a background to paste. Like a photographer's location scout photo, use this to understand the setting, lighting direction, and visual style. Generate a COMPLETELY NEW environment inspired by this reference that serves as the perfect stage for your subject", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND TO CARTOONIZE): Convert this background into the SAME cartoon/webtoon style. Preserve layout, horizon, and major shapes; keep lighting direction; do NOT leave it photorealistic; avoid inventing a new scene unrelated to this layout", imageIndex))
 		imageIndex++
 	}
 
@@ -632,28 +633,30 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	if hasModels {
 		compositionInstruction = "\n[WEBTOON/CARTOON SCENE COMPOSITION]\n" +
 			"Generate ONE high-quality webtoon/cartoon illustration showing the referenced character(s) in a dynamic scene.\n" +
-			"This is a professional webtoon/cartoon artwork with the character(s) as the star."
+			"This is a professional webtoon/cartoon artwork with the character(s) as the star.\n" +
+			"Apply the SAME cartoon/anime rendering to characters AND background; no photoreal elements."
 	} else if hasProducts {
 		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
-		compositionInstruction = "\n[CINEMATIC PRODUCT PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic product photograph showcasing the clothing and accessories as OBJECTS.\n" +
+		compositionInstruction = "\n[CARTOON PRODUCT ILLUSTRATION]\n" +
+			"Generate ONE cartoon/webtoon-style product illustration showcasing the clothing and accessories as OBJECTS.\n" +
 			"⚠️ DO NOT add any people, models, or human figures.\n" +
-			"⚠️ Display the items artistically arranged - like high-end product photography.\n"
+			"⚠️ Display the items artistically arranged - like high-end product artwork.\n" +
+			"⚠️ Render ALL elements (items + background) in the SAME cartoon style; no photoreal sections.\n"
 
 		if hasBackground {
 			compositionInstruction += "The products are placed naturally within the referenced environment - " +
-				"as if styled by a professional photographer on location.\n" +
-				"The items interact with the space (resting on surfaces, hanging naturally, artfully positioned)."
+				"as if styled by a professional illustrator on location.\n" +
+				"The items interact with the space (resting on surfaces, hanging naturally, artfully positioned) in cartoon style."
 		} else {
 			compositionInstruction += "Create a stunning studio product shot with professional lighting and composition.\n" +
-				"The items are arranged artistically - flat lay, suspended, or elegantly displayed."
+				"The items are arranged artistically - flat lay, suspended, or elegantly displayed - all in cartoon rendering."
 		}
 	} else if hasBackground {
 		// 케이스 3: 배경만 → 환경 사진
-		compositionInstruction = "\n[CINEMATIC ENVIRONMENTAL PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic cinematic photograph of the referenced environment.\n" +
+		compositionInstruction = "\n[CARTOON ENVIRONMENT ILLUSTRATION]\n" +
+			"Generate ONE cartoon/webtoon background illustration of the referenced environment.\n" +
 			"⚠️ DO NOT add any people, models, or products to this scene.\n" +
-			"Focus on capturing the atmosphere, lighting, and mood of the location itself."
+			"Convert the provided layout and perspective into the SAME cartoon style; focus on atmosphere, lighting, and mood."
 	} else {
 		// 케이스 4: 아무것도 없는 경우 (에러 케이스)
 		compositionInstruction = "\n[CINEMATIC COMPOSITION]\n" +
