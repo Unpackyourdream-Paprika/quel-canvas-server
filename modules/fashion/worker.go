@@ -393,6 +393,16 @@ func normalizeFashionCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
+	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
+	hasAnyImage := categories.Model != nil || len(categories.Clothing) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	if !hasAnyImage {
+		log.Printf("🔧 No images provided - will generate with text prompt only")
+		if prompt != nil {
+			*prompt = strings.TrimSpace(*prompt + "\nGenerate a completely new image based on the text description only.")
+		}
+		return
+	}
+
 	if categories.Model == nil {
 		switch {
 		case len(categories.Clothing) > 0:
@@ -405,8 +415,8 @@ func normalizeFashionCategories(categories *ImageCategories, prompt *string) {
 			categories.Model = categories.Background
 			log.Printf("🔧 Using background image as model placeholder")
 		default:
-			categories.Model = fallback.PlaceholderBytes()
-			log.Printf("🔧 Using placeholder image for model slot")
+			// 🔧 더 이상 1x1 placeholder 사용 안 함 - Model nil 유지
+			log.Printf("🔧 No model image available - will use text-only generation")
 		}
 
 		if prompt != nil {
@@ -414,9 +424,10 @@ func normalizeFashionCategories(categories *ImageCategories, prompt *string) {
 		}
 	}
 
-	if len(categories.Clothing) == 0 && len(categories.Accessories) == 0 {
-		categories.Clothing = append(categories.Clothing, categories.Model)
-		log.Printf("🔧 No clothing or accessories provided; reusing model placeholder as reference")
+	// Clothing/Accessories가 없어도 placeholder 추가하지 않음
+	if len(categories.Clothing) == 0 && len(categories.Accessories) == 0 && categories.Model != nil {
+		// Model만 있는 경우 - Model을 그대로 사용
+		log.Printf("🔧 Only model image provided; will use model as reference")
 	}
 }
 

@@ -401,6 +401,16 @@ func normalizeBeautyCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
+	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
+	hasAnyImage := categories.Model != nil || len(categories.Products) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	if !hasAnyImage {
+		log.Printf("🔧 [Beauty] No images provided - will generate with text prompt only")
+		if prompt != nil {
+			*prompt = strings.TrimSpace(*prompt + "\nGenerate a completely new image based on the text description only.")
+		}
+		return
+	}
+
 	if len(categories.Products) == 0 {
 		switch {
 		case categories.Model != nil:
@@ -413,8 +423,8 @@ func normalizeBeautyCategories(categories *ImageCategories, prompt *string) {
 			categories.Products = append(categories.Products, categories.Background)
 			log.Printf("🔧 [Beauty] Using background image as product placeholder")
 		default:
-			categories.Products = append(categories.Products, fallback.PlaceholderBytes())
-			log.Printf("🔧 [Beauty] Using placeholder image for missing product")
+			// 🔧 더 이상 1x1 placeholder 사용 안 함
+			log.Printf("🔧 [Beauty] No product image available - will use text-only generation")
 		}
 		if prompt != nil {
 			*prompt = strings.TrimSpace(*prompt + "\nIf no product is supplied, still render a hero product focus.")
