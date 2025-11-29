@@ -10,6 +10,7 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/modify"
+	"quel-canvas-server/modules/preview"
 	"quel-canvas-server/modules/worker"
 
 	"github.com/gorilla/mux"
@@ -36,10 +37,10 @@ type Client struct {
 
 // 세션 관리
 type Session struct {
-	id        string
-	clients   map[string]*Client
-	mutex     sync.RWMutex
-	createdAt time.Time
+	id           string
+	clients      map[string]*Client
+	mutex        sync.RWMutex
+	createdAt    time.Time
 	lastActivity time.Time
 }
 
@@ -52,9 +53,9 @@ type SessionManager struct {
 
 // 서버 메트릭
 type ServerMetrics struct {
-	TotalSessions    int `json:"totalSessions"`
-	ActiveSessions   int `json:"activeSessions"`
-	TotalConnections int `json:"totalConnections"`
+	TotalSessions    int       `json:"totalSessions"`
+	ActiveSessions   int       `json:"activeSessions"`
+	TotalConnections int       `json:"totalConnections"`
 	StartTime        time.Time `json:"startTime"`
 	mutex            sync.RWMutex
 }
@@ -68,25 +69,25 @@ var sessionManager = &SessionManager{
 
 // 메시지 타입
 type Message struct {
-	Type        string                 `json:"type"`
-	SessionId   string                 `json:"sessionId"`
-	UserId      string                 `json:"userId"`
-	UserInfo    map[string]interface{} `json:"userInfo"`
-	ItemIds     []string               `json:"itemIds,omitempty"`
-	SectionIds  []string               `json:"sectionIds,omitempty"`
-	ItemUpdates map[string]interface{} `json:"itemUpdates,omitempty"`
+	Type           string                 `json:"type"`
+	SessionId      string                 `json:"sessionId"`
+	UserId         string                 `json:"userId"`
+	UserInfo       map[string]interface{} `json:"userInfo"`
+	ItemIds        []string               `json:"itemIds,omitempty"`
+	SectionIds     []string               `json:"sectionIds,omitempty"`
+	ItemUpdates    map[string]interface{} `json:"itemUpdates,omitempty"`
 	SectionUpdates map[string]interface{} `json:"sectionUpdates,omitempty"`
-	ItemId      string                 `json:"itemId,omitempty"`
-	SectionId   string                 `json:"sectionId,omitempty"`
-	Label       string                 `json:"label,omitempty"`
-	Title       string                 `json:"title,omitempty"`
+	ItemId         string                 `json:"itemId,omitempty"`
+	SectionId      string                 `json:"sectionId,omitempty"`
+	Label          string                 `json:"label,omitempty"`
+	Title          string                 `json:"title,omitempty"`
 
 	// 새로운 필드들
-	CanvasItems []interface{}          `json:"canvasItems,omitempty"`    // 캔버스 아이템들
-	Sections    []interface{}          `json:"sections,omitempty"`       // 섹션들
-	CursorX     float64                `json:"cursorX,omitempty"`        // 마우스 커서 X
-	CursorY     float64                `json:"cursorY,omitempty"`        // 마우스 커서 Y
-	IsHost      bool                   `json:"isHost,omitempty"`         // 호스트 여부
+	CanvasItems []interface{} `json:"canvasItems,omitempty"` // 캔버스 아이템들
+	Sections    []interface{} `json:"sections,omitempty"`    // 섹션들
+	CursorX     float64       `json:"cursorX,omitempty"`     // 마우스 커서 X
+	CursorY     float64       `json:"cursorY,omitempty"`     // 마우스 커서 Y
+	IsHost      bool          `json:"isHost,omitempty"`      // 호스트 여부
 
 	// Creation History 관련 필드들
 	ShowCreationHistory bool          `json:"showCreationHistory,omitempty"` // 히스토리 표시 여부
@@ -483,7 +484,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "healthy",
+		"status":  "healthy",
 		"service": "quel-canvas-collaboration",
 	})
 }
@@ -595,10 +596,7 @@ func main() {
 	// Redis Queue Worker 시작 (백그라운드)
 	go worker.StartWorker()
 
-   // Worker 모듈 초기화 완료
-
-
-
+	// Worker 모듈 초기화 완료
 
 	// 라우터 설정
 	r := mux.NewRouter()
@@ -622,6 +620,14 @@ func main() {
 		log.Println("Failed to initialize Modify handler")
 	}
 
+	// Preview 라우트 등록 (슬래시 노드 프리뷰 용도)
+	previewHandler := preview.NewPreviewHandler()
+	if previewHandler != nil {
+		previewHandler.RegisterRoutes(r)
+	} else {
+		log.Println("Failed to initialize Preview handler")
+	}
+
 	// Cancel API 라우트 등록
 	cancelHandler := worker.NewCancelHandler()
 	if cancelHandler != nil {
@@ -629,8 +635,6 @@ func main() {
 	} else {
 		log.Println("Failed to initialize Cancel handler")
 	}
-
-
 
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
