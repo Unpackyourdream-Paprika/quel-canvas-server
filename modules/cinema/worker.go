@@ -435,6 +435,16 @@ func normalizeCinemaCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
+	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
+	hasAnyImage := len(categories.Models) > 0 || len(categories.Clothing) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	if !hasAnyImage {
+		log.Printf("🔧 [Cinema] No images provided - will generate with text prompt only")
+		if prompt != nil {
+			*prompt = strings.TrimSpace(*prompt + "\nGenerate a completely new image based on the text description only.")
+		}
+		return
+	}
+
 	if len(categories.Models) == 0 {
 		switch {
 		case len(categories.Clothing) > 0:
@@ -447,8 +457,8 @@ func normalizeCinemaCategories(categories *ImageCategories, prompt *string) {
 			categories.Models = append(categories.Models, categories.Background)
 			log.Printf("🔧 Using background image as model placeholder")
 		default:
-			categories.Models = append(categories.Models, fallback.PlaceholderBytes())
-			log.Printf("🔧 Using placeholder image for model slot")
+			// 🔧 더 이상 1x1 placeholder 사용 안 함
+			log.Printf("🔧 [Cinema] No model image available - will use text-only generation")
 		}
 
 		if prompt != nil {
@@ -456,6 +466,7 @@ func normalizeCinemaCategories(categories *ImageCategories, prompt *string) {
 		}
 	}
 
+	// Models가 있을 때만 Clothing 채우기
 	if len(categories.Clothing) == 0 && len(categories.Accessories) == 0 && len(categories.Models) > 0 {
 		categories.Clothing = append(categories.Clothing, categories.Models[0])
 		log.Printf("🔧 No clothing/accessories provided; reusing model reference")

@@ -387,6 +387,16 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
+	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
+	hasAnyImage := categories.Model != nil || len(categories.Clothing) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	if !hasAnyImage {
+		log.Printf("🔧 [Eats] No images provided - will generate with text prompt only")
+		if prompt != nil {
+			*prompt = strings.TrimSpace(*prompt + "\nGenerate a completely new image based on the text description only.")
+		}
+		return
+	}
+
 	if categories.Model == nil {
 		switch {
 		case len(categories.Clothing) > 0:
@@ -399,8 +409,8 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 			categories.Model = categories.Background
 			log.Printf("🔧 Using background image as main dish placeholder")
 		default:
-			categories.Model = fallback.PlaceholderBytes()
-			log.Printf("🔧 Using placeholder image for missing main dish")
+			// 🔧 더 이상 1x1 placeholder 사용 안 함
+			log.Printf("🔧 [Eats] No main dish image available - will use text-only generation")
 		}
 
 		if prompt != nil {
@@ -408,7 +418,8 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		}
 	}
 
-	if len(categories.Clothing) == 0 {
+	// Model이 있을 때만 Clothing 채우기
+	if len(categories.Clothing) == 0 && categories.Model != nil {
 		categories.Clothing = append(categories.Clothing, categories.Model)
 		log.Printf("🔧 No ingredient/side images provided; reusing main reference")
 	}
