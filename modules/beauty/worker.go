@@ -330,13 +330,13 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 					continue
 				}
 
-				// 크레딧 차감
+				// 크레딧 차감 (조직/개인 구분)
 				if job.ProductionID != nil && userID != "" {
-					go func(attachID int, prodID string) {
-						if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+					go func(attachID int, prodID string, orgID *string) {
+						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
 							log.Printf("⚠️  Combination %d: Failed to deduct credits for attach %d: %v", idx+1, attachID, err)
 						}
-					}(attachID, *job.ProductionID)
+					}(attachID, *job.ProductionID, job.OrgID)
 				}
 
 				// 성공 카운트 및 ID 수집 (thread-safe)
@@ -660,13 +660,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					continue
 				}
 
-				// 크레딧 차감 (Attach 성공 직후)
+				// 크레딧 차감 (조직/개인 구분)
 				if job.ProductionID != nil && userID != "" {
-					go func(attachID int, prodID string) {
-						if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+					go func(attachID int, prodID string, orgID *string) {
+						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
 							log.Printf("⚠️  Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
 						}
-					}(attachID, *job.ProductionID)
+					}(attachID, *job.ProductionID, job.OrgID)
 				}
 
 				// Stage별 배열에 추가
@@ -840,13 +840,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				continue
 			}
 
-			// 크레딧 차감
+			// 크레딧 차감 (조직/개인 구분)
 			if job.ProductionID != nil && userID != "" {
-				go func(aID int, prodID string) {
-					if err := service.DeductCredits(context.Background(), userID, prodID, []int{aID}); err != nil {
+				go func(aID int, prodID string, orgID *string) {
+					if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}); err != nil {
 						log.Printf("⚠️  Stage %d: Failed to deduct credits for retry attach %d: %v", stageIdx, aID, err)
 					}
-				}(attachID, *job.ProductionID)
+				}(attachID, *job.ProductionID, job.OrgID)
 			}
 
 			// results에 추가
@@ -1094,13 +1094,13 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 			continue
 		}
 
-		// 4.5: 크레딧 차감 (Attach 성공 직후 즉시 처리)
+		// 4.5: 크레딧 차감 (조직/개인 구분)
 		if job.ProductionID != nil && userID != "" {
-			go func(attachID int, prodID string) {
-				if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+			go func(attachID int, prodID string, orgID *string) {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
 					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
 				}
-			}(attachID, *job.ProductionID)
+			}(attachID, *job.ProductionID, job.OrgID)
 		}
 
 		// 4.6: 성공 카운트 및 ID 수집
@@ -1242,13 +1242,13 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 			continue
 		}
 
-		// 3.6: 크레딧 차감 (Attach 성공 직후 즉시 처리)
+		// 3.6: 크레딧 차감 (조직/개인 구분)
 		if job.ProductionID != nil && userID != "" {
-			go func(attachID int, prodID string) {
-				if err := service.DeductCredits(context.Background(), userID, prodID, []int{attachID}); err != nil {
+			go func(attachID int, prodID string, orgID *string) {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
 					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
 				}
-			}(attachID, *job.ProductionID)
+			}(attachID, *job.ProductionID, job.OrgID)
 		}
 
 		// 3.7: 성공 카운트 및 ID 수집

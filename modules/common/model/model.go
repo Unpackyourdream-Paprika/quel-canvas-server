@@ -6,7 +6,7 @@ import "time"
 type ProductionJob struct {
 	JobID              string                 `json:"job_id"`
 	ProductionID       *string                `json:"production_id"`
-	QuelProductionPath string                 `json:"quel_production_path"` // ⭐ 추가: 카테고리 경로
+	QuelProductionPath string                 `json:"quel_production_path"` // 카테고리 경로
 	JobType            string                 `json:"job_type"`
 	StageIndex         *int                   `json:"stage_index"`
 	StageName          *string                `json:"stage_name"`
@@ -23,6 +23,9 @@ type ProductionJob struct {
 	StartedAt          *time.Time             `json:"started_at"`
 	CompletedAt        *time.Time             `json:"completed_at"`
 	UpdatedAt          time.Time              `json:"updated_at"`
+	QuelMemberID       *string                `json:"quel_member_id"`       // 멤버 ID
+	OrgID              *string                `json:"org_id"`               // 조직 ID (조직 크레딧 사용 시)
+	EstimatedCredits   int                    `json:"estimated_credits"`    // 예상 크레딧
 }
 
 // Combination - Camera Angle & Shot Type 조합
