@@ -5,15 +5,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
-	_ "image/jpeg" // JPEG 디코더 등록
 	"image/draw"
+	_ "image/jpeg" // JPEG 디코더 등록
 	"image/png"
 	"log"
 	"math"
 
-	"github.com/kolesa-team/go-webp/encoder"
-	_ "github.com/kolesa-team/go-webp/decoder" // WebP 디코더 등록
-	"github.com/kolesa-team/go-webp/webp"
+	"github.com/gen2brain/webp"
 )
 
 // ConvertImageToBase64 - 이미지 바이너리를 base64로 변환
@@ -36,14 +34,9 @@ func ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, error) {
 		return nil, fmt.Errorf("failed to decode PNG: %w", err)
 	}
 
-	// WebP 인코딩
-	options, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, quality)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create WebP encoder options: %w", err)
-	}
-
+	// WebP 인코딩 (gen2brain/webp 사용)
 	var webpBuffer bytes.Buffer
-	err = webp.Encode(&webpBuffer, img, options)
+	err = webp.Encode(&webpBuffer, img, webp.Options{Quality: int(quality)})
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode WebP: %w", err)
 	}

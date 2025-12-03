@@ -18,9 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kolesa-team/go-webp/encoder"
-	_ "github.com/kolesa-team/go-webp/decoder" // WebP 디코더 등록
-	"github.com/kolesa-team/go-webp/webp"
+	"github.com/gen2brain/webp"
 	"github.com/supabase-community/supabase-go"
 	"google.golang.org/genai"
 )
@@ -257,14 +255,9 @@ func (s *Service) ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, err
 		return nil, fmt.Errorf("failed to decode PNG: %w", err)
 	}
 
-	// WebP 인코딩
-	options, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, quality)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create WebP encoder options: %w", err)
-	}
-
+	// WebP 인코딩 (gen2brain/webp 사용)
 	var webpBuffer bytes.Buffer
-	err = webp.Encode(&webpBuffer, img, options)
+	err = webp.Encode(&webpBuffer, img, webp.Options{Quality: int(quality)})
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode WebP: %w", err)
 	}
