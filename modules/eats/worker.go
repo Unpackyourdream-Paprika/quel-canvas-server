@@ -135,6 +135,13 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
 		len(individualImageAttachIds), basePrompt, len(combinations), userID)
 
+	// 🔍 DEBUG: 받은 이미지 데이터 상세 출력
+	for i, attachObj := range individualImageAttachIds {
+		if attachMap, ok := attachObj.(map[string]interface{}); ok {
+			log.Printf("🔍 [DEBUG] Image[%d]: attachId=%v, type=%v", i, attachMap["attachId"], attachMap["type"])
+		}
+	}
+
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
 		log.Printf("❌ Failed to update job status: %v", err)
@@ -153,8 +160,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		Accessories: [][]byte{},
 	}
 
-	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
+	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true}
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -183,9 +190,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 		// type에 따라 카테고리별로 분류
 		switch attachType {
-		case "model":
+		case "model", "food", "dish", "main", "product":
 			categories.Model = imageData
-			log.Printf("✅ Model image added")
+			log.Printf("✅ Model/Food image added (type: %s)", attachType)
 		case "background", "bg":
 			categories.Background = imageData
 			log.Printf("✅ Background image added")
@@ -530,8 +537,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					Accessories: [][]byte{},
 				}
 
-				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
+				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true}
 
 				for i, attachObj := range individualIds {
 					attachMap, ok := attachObj.(map[string]interface{})
@@ -557,9 +564,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 					// type에 따라 카테고리별로 분류
 					switch attachType {
-					case "model":
+					case "model", "food", "dish", "main":
 						stageCategories.Model = imageData
-						log.Printf("✅ Stage %d: Model image added", stageIndex)
+						log.Printf("✅ Stage %d: Model/Food image added", stageIndex)
 					case "bg":
 						stageCategories.Background = imageData
 						log.Printf("✅ Stage %d: Background image added", stageIndex)
@@ -732,8 +739,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
-			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
+			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -748,7 +755,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 				switch attachType {
-				case "model":
+				case "model", "food", "dish", "main":
 					retryCategories.Model = imageData
 				case "bg":
 					retryCategories.Background = imageData
