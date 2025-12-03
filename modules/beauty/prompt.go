@@ -128,6 +128,12 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		} else {
 			// 제품만: 순수 제품 촬영 - 개수 명시
 			var countDesc string
+			// Check if user prompt indicates a grid or multiple products
+			lowerPrompt := strings.ToLower(userPrompt)
+			isGridInput := strings.Contains(lowerPrompt, "grid") ||
+				strings.Contains(lowerPrompt, "4 products") ||
+				strings.Contains(lowerPrompt, "four products") ||
+				strings.Contains(lowerPrompt, "multiple products")
 			switch productCount {
 			case 1:
 				if isGridInput {
