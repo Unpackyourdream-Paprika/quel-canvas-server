@@ -1194,6 +1194,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 		// 트랜잭션 기록 - 조직 크레딧
 		for _, attachID := range attachIds {
 			transactionData := map[string]interface{}{
+				"user_id":            userID,
 				"org_id":             *orgID,
 				"used_by_member_id":  userID,
 				"transaction_type":   "DEDUCT",
