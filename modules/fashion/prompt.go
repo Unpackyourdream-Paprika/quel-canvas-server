@@ -95,7 +95,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (LOCATION INSPIRATION): This shows the MOOD and ATMOSPHERE you should recreate - NOT a background to paste. Like a photographer's location scout photo, use this to understand the setting, lighting direction, and visual style. Generate a COMPLETELY NEW environment inspired by this reference that serves as the perfect stage for your subject", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND/LOCATION): This is the EXACT environment/setting to use. Place the subject naturally within this specific location. Use the actual background elements, colors, lighting, and atmosphere from this reference image", imageIndex))
 		imageIndex++
 	}
 
@@ -137,30 +137,31 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 배경 관련 지시사항 - 모델이 있을 때만 추가
 	if hasModel && hasBackground {
 		// 모델 + 배경 케이스 → 환경 통합 지시사항
-		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
-			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
-			"The photographer CHOSE this environment to complement the subject - not to overwhelm them.\n" +
-			"🎬 Use the background reference as INSPIRATION ONLY:\n" +
-			"   • Recreate the atmosphere, lighting mood, and setting type\n" +
-			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The location serves as a STAGE for the subject's story\n\n" +
+		compositionInstruction += " shot on location with the referenced background environment.\n\n" +
+			"[BACKGROUND INTEGRATION]\n" +
+			"The referenced background image shows the EXACT setting to use.\n" +
+			"🎬 Use the background reference as the ACTUAL location:\n" +
+			"   • Place the subject within THIS specific environment\n" +
+			"   • Use the actual colors, lighting, and atmosphere from the background reference\n" +
+			"   • The background should look like the reference image - use its elements, style, and mood\n" +
+			"   • Integrate the subject naturally into THIS location\n\n" +
 			"[ABSOLUTE PRIORITY: SUBJECT INTEGRITY]\n" +
 			"⚠️ CRITICAL: The person's body proportions are UNTOUCHABLE\n" +
 			"⚠️ DO NOT distort, stretch, compress, or alter the person to fit the frame\n" +
-			"⚠️ The background adapts to showcase the subject - NEVER the reverse\n\n" +
+			"⚠️ The person must look natural and correctly proportioned in this environment\n\n" +
 			"[DRAMATIC ENVIRONMENTAL INTEGRATION]\n" +
-			"✓ Subject positioned naturally in the space (standing, sitting, moving)\n" +
+			"✓ Subject positioned naturally in the referenced space (standing, sitting, moving)\n" +
 			"✓ Realistic ground contact with natural shadows\n" +
-			"✓ Background elements create DEPTH - use foreground/midground/background layers\n" +
-			"✓ Directional lighting from the environment enhances drama\n" +
+			"✓ Background elements from the reference create DEPTH\n" +
+			"✓ Lighting matches the background reference's lighting direction\n" +
 			"✓ Environmental light wraps around the subject naturally\n" +
 			"✓ Atmospheric perspective adds cinematic depth\n" +
-			"✓ Shot composition tells a STORY - what is happening in this moment?\n\n" +
+			"✓ Shot composition tells a STORY within this specific location\n\n" +
 			"[TECHNICAL EXECUTION]\n" +
 			"✓ Single camera angle - this is ONE photograph\n" +
 			"✓ Film photography aesthetic with natural color grading\n" +
 			"✓ Rule of thirds or dynamic asymmetric composition\n" +
-			"✓ Depth of field focuses attention on the subject\n" +
+			"✓ Depth of field focuses attention on the subject while showing the background\n" +
 			"✓ The environment and subject look like they exist in the SAME REALITY"
 	} else if hasModel && !hasBackground {
 		// 모델만 있고 배경 없음 → 스튜디오

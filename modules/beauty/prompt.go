@@ -19,7 +19,6 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
 	hasProducts := len(categories.Products) > 0 // Beauty 전용: Products 필드 직접 확인
-	singleProduct := len(categories.Products) == 1
 	hasBackground := categories.Background != nil
 
 	// 디버그 로그 추가
@@ -44,13 +43,54 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"• High-end cosmetic editorial quality\n" +
 			"• This is about BEAUTY and MAKEUP, not fashion or outfits\n\n"
 	} else if hasProducts {
-		// 프로덕트만 → 뷰티 프로덕트 (화장품/제품)
+		// 프로덕트만 → 뷰티 프로덕트 (화장품/제품) - 개수에 따라 동적 프롬프트
+		productCount := len(categories.Products)
+		var productCountInstruction string
+
+		// Check if user prompt indicates a grid or multiple products (for pre-merged inputs)
+		isGridInput := false
+		lowerPrompt := strings.ToLower(userPrompt)
+		if strings.Contains(lowerPrompt, "grid") || 
+		   strings.Contains(lowerPrompt, "4 products") || 
+		   strings.Contains(lowerPrompt, "four products") ||
+		   strings.Contains(lowerPrompt, "multiple products") {
+			isGridInput = true
+		}
+
+		switch productCount {
+		case 1:
+			if isGridInput {
+				productCountInstruction = "⚠️ CRITICAL: The reference image is a GRID containing MULTIPLE products.\n" +
+					"⚠️ YOU MUST SHOW ALL PRODUCTS visible in the reference grid.\n" +
+					"⚠️ Do not select just one. Show the entire set as presented.\n"
+			} else {
+				// Allow flexibility if it might be a grid but not explicitly stated, 
+				// but prioritize single product if it looks like one.
+				productCountInstruction = "⚠️ CRITICAL: Show the product(s) exactly as shown in the reference.\n" +
+					"⚠️ If the reference is a GRID of multiple items, SHOW ALL OF THEM.\n" +
+					"⚠️ If it is a single item, show exactly one.\n"
+			}
+		case 2:
+			productCountInstruction = "⚠️ CRITICAL: Show EXACTLY 2 (TWO) products - both items from the reference must appear.\n" +
+				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY 2 products.\n"
+		case 3:
+			productCountInstruction = "⚠️ CRITICAL: Show EXACTLY 3 (THREE) products - all three items from the reference must appear.\n" +
+				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY 3 products.\n"
+		case 4:
+			productCountInstruction = "⚠️ CRITICAL: Show EXACTLY 4 (FOUR) products - all four items from the reference must appear.\n" +
+				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY 4 products.\n" +
+				"⚠️ ARRANGE them naturally in the scene (e.g., a group composition), NOT as a 2x2 grid.\n"
+		default:
+			productCountInstruction = fmt.Sprintf("⚠️ CRITICAL: Show EXACTLY %d products - ALL items from the reference must appear.\n"+
+				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY %d products.\n", productCount, productCount)
+		}
+
 		mainInstruction = "[BEAUTY PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
 			"You are a world-class cosmetic product photographer.\n" +
 			"The BEAUTY PRODUCTS are the STARS - showcase them as premium cosmetics.\n" +
 			"⚠️ CRITICAL: NO people or models in this shot - beauty products only.\n" +
-			"⚠️ USE ONLY the provided product references; do NOT add any extra or fictional products.\n\n" +
-			"Create ONE photorealistic photograph with COSMETIC ELEGANCE:\n" +
+			productCountInstruction +
+			"\nCreate ONE photorealistic photograph with COSMETIC ELEGANCE:\n" +
 			"• Artistic arrangement of beauty products (lipsticks, makeup, skincare)\n" +
 			"• Soft, diffused lighting that highlights product details\n" +
 			"• Premium cosmetic brand photography style\n" +
@@ -80,14 +120,32 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	}
 
 	if len(categories.Products) > 0 {
+		productCount := len(categories.Products)
 		if hasModel {
 			// 모델 + 제품: 메이크업 레퍼런스로 사용
 			instructions = append(instructions,
 				fmt.Sprintf("Reference Image %d (MAKEUP/COSMETIC REFERENCE): These beauty products show the makeup style and color palette to apply to the model's face - lipstick shade, eyeshadow tones, skin finish. Use these as inspiration for the model's makeup look, NOT as products to place in the shot", imageIndex))
 		} else {
-			// 제품만: 순수 제품 촬영
+			// 제품만: 순수 제품 촬영 - 개수 명시
+			var countDesc string
+			switch productCount {
+			case 1:
+				if isGridInput {
+					countDesc = "This reference is a GRID showing multiple products. Show ALL products visible in the grid."
+				} else {
+					countDesc = "This reference shows the product(s). If it is a grid, show ALL items. If single, show one."
+				}
+			case 2:
+				countDesc = "This reference shows 2 products arranged in a grid. Show EXACTLY these TWO products - both must appear."
+			case 3:
+				countDesc = "This reference shows 3 products arranged in a grid. Show EXACTLY these THREE products - all three must appear."
+			case 4:
+				countDesc = "This reference shows 4 products arranged in a 2x2 grid. Show EXACTLY these FOUR products - all four must appear."
+			default:
+				countDesc = fmt.Sprintf("This reference shows %d products. Show EXACTLY all %d products - every single one must appear.", productCount, productCount)
+			}
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS): Cosmetic items to showcase as the main subject - bottles, jars, tubes, compacts, lipsticks, skincare packaging. Display ONLY these products (do not invent more) with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply", imageIndex))
+				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS - %d ITEMS): %s These are cosmetic items to showcase as the main subject. Display ONLY these products with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply.", imageIndex, productCount, countDesc))
 		}
 		imageIndex++
 	}
@@ -100,7 +158,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (LIGHTING/MOOD INSPIRATION): This shows the LIGHTING MOOD and ATMOSPHERE for the beauty portrait - NOT a background to paste. Use this to understand the lighting direction, color temperature, and visual mood. The background should be SOFT and OUT OF FOCUS, serving only as atmospheric context for the face", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND/SETTING): This is the EXACT environment/setting to use for the beauty portrait. Use the actual background elements, colors, lighting, and atmosphere from this reference. The background should be SOFT and OUT OF FOCUS (shallow depth of field), but it should match the reference image's colors, mood, and elements", imageIndex))
 		imageIndex++
 	}
 
@@ -132,9 +190,11 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"⚠️ USE ONLY the provided product references; do NOT invent extra products or variants."
 
 		if hasBackground {
-			compositionInstruction += "The beauty products are placed naturally within the referenced environment - " +
-				"as if styled by a professional beauty photographer on location.\n" +
-				"The items interact with the space (resting on surfaces, elegantly positioned with soft lighting).\n" +
+			compositionInstruction += "The beauty products are placed naturally within a NEWLY CREATED 3D SPACE inspired by the background reference.\n" +
+				"⚠️ DO NOT just paste the products on the background image.\n" +
+				"⚠️ REINTERPRET the background: Use its lighting, colors, and textures to build a realistic environment.\n" +
+				"⚠️ Create realistic DEPTH and PERSPECTIVE: The products should sit on a surface, cast shadows, and interact with the light.\n" +
+				"⚠️ The background reference is a STYLE GUIDE, not a flat backdrop. Build a cohesive scene around the products.\n" +
 				"This is STILL LIFE product photography - absolutely no people, just beautiful cosmetic product arrangement like Chanel or Dior ads."
 		} else {
 			compositionInstruction += "Create a stunning studio beauty product shot with soft, diffused lighting and clean composition.\n" +
@@ -156,32 +216,32 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 배경 관련 지시사항 - 모델이 있을 때만 추가
 	if hasModel && hasBackground {
 		// 모델 + 배경 케이스 → 뷰티 환경 통합
-		compositionInstruction += " shot on location with environmental lighting.\n\n" +
-			"[BEAUTY PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
-			"The environment provides MOOD and LIGHTING for the beauty portrait.\n" +
+		compositionInstruction += " shot on location with the referenced background environment.\n\n" +
+			"[BEAUTY PORTRAIT WITH BACKGROUND]\n" +
+			"The referenced background image shows the EXACT setting to use.\n" +
 			"⚠️ CRITICAL: Even with a background, this is still a CLOSE-UP BEAUTY PORTRAIT.\n" +
 			"⚠️ MANDATORY: Face and shoulders composition - NOT full body.\n\n" +
-			"🎬 Use the background reference as ATMOSPHERE INSPIRATION:\n" +
-			"   • Recreate the lighting mood and color palette\n" +
+			"🎬 Use the background reference as the ACTUAL location:\n" +
+			"   • Use the actual colors, elements, and atmosphere from the background reference\n" +
 			"   • Background should be SOFT and OUT OF FOCUS (shallow depth of field)\n" +
-			"   • Face remains the PRIMARY FOCUS - background is secondary\n" +
-			"   • Generate a NEW scene inspired by the reference\n\n" +
+			"   • Face remains the PRIMARY FOCUS - background is secondary but matches the reference\n" +
+			"   • The blurred background should still show recognizable elements from the reference image\n\n" +
 			"[BEAUTY PORTRAIT PRIORITY]\n" +
 			"⚠️ CRITICAL: The face fills 60-80% of the frame\n" +
-			"⚠️ Background is BLURRED and serves as atmospheric context only\n" +
+			"⚠️ Background is BLURRED (shallow depth) but matches the reference image's colors and elements\n" +
 			"⚠️ Soft, flattering lighting from the environment\n\n" +
 			"[BEAUTY PORTRAIT EXECUTION]\n" +
 			"✓ Close-up composition - head and shoulders only\n" +
-			"✓ Shallow depth of field - face is sharp, background is soft\n" +
+			"✓ Shallow depth of field - face is sharp, background is soft but recognizable from reference\n" +
 			"✓ Soft, diffused lighting flatters the skin\n" +
 			"✓ Environmental light creates subtle rim or fill light\n" +
-			"✓ Background provides color and mood, not distraction\n\n" +
+			"✓ Background colors and mood match the reference, just out of focus\n\n" +
 			"[TECHNICAL EXECUTION]\n" +
 			"✓ Beauty photography lens (85mm-135mm equivalent)\n" +
 			"✓ Shallow depth of field (f/2.8 or wider)\n" +
 			"✓ Soft, natural color grading for skin tones\n" +
 			"✓ Focus on eyes and facial features\n" +
-			"✓ This is BEAUTY EDITORIAL, not environmental portraiture"
+			"✓ This is BEAUTY EDITORIAL with a specific background setting"
 	} else if hasModel && !hasBackground {
 		// 모델만 있고 배경 없음 → 뷰티 스튜디오
 		compositionInstruction += " in a professional beauty studio with soft, flattering lighting.\n" +
@@ -195,11 +255,21 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 공통 금지사항 - 모든 케이스에 적용
 	commonForbidden := "\n\n[CRITICAL: ABSOLUTELY FORBIDDEN - THESE WILL CAUSE IMMEDIATE REJECTION]\n\n" +
 		func() string {
-			if singleProduct {
-				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY the single provided product; do NOT add extra bottles, shades, or duplicates.\n\n"
+			productCount := len(categories.Products)
+			if productCount == 1 {
+				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 1 (ONE) product - the single provided product; do NOT add extra bottles, shades, or duplicates.\n\n"
 			}
-			if hasProducts {
-				return "⚠️ PRODUCT COUNT MUST MATCH: Use ONLY the provided product references; do NOT add extra bottles, shades, or duplicates.\n\n"
+			if productCount == 2 {
+				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 2 (TWO) products - both products from the reference must appear; do NOT add extra or omit any.\n\n"
+			}
+			if productCount == 3 {
+				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 3 (THREE) products - all three products from the reference must appear; do NOT add extra or omit any.\n\n"
+			}
+			if productCount == 4 {
+				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 4 (FOUR) products - all four products from the reference must appear; do NOT add extra or omit any.\n\n"
+			}
+			if productCount > 0 {
+				return fmt.Sprintf("⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY %d products - ALL products from the reference must appear; do NOT add extra or omit any.\n\n", productCount)
 			}
 			return ""
 		}() +

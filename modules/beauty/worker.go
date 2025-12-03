@@ -135,6 +135,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
 		len(individualImageAttachIds), basePrompt, len(combinations), userID)
 
+	if len(individualImageAttachIds) == 1 && len(combinations) > 1 {
+		log.Printf("ℹ️ [Single Batch] Detected 1 input image with %d output combinations. Assuming input is a merged grid or single reference for multiple variations.", len(combinations))
+	}
+
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
 		log.Printf("❌ Failed to update job status: %v", err)
@@ -211,9 +215,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			} else if accessoryTypes[attachType] {
 				categories.Accessories = append(categories.Accessories, imageData)
 				log.Printf("✅ [Beauty] Accessory image added (type: '%s')", attachType)
-			} else if attachType != "none" {
-				// 알 수 없는 타입도 제품으로 처리 (안전장치)
-				log.Printf("⚠️  [Beauty] Unknown type '%s', treating as product (safety fallback)", attachType)
+			} else {
+				// ⚠️ Beauty 모듈: 알 수 없는 타입 또는 'none'도 제품으로 처리
+				// 이미지가 버려지는 것을 방지 (엉뚱한 생성 결과 방지)
+				log.Printf("⚠️  [Beauty] Type '%s' treated as product (fallback to prevent image loss)", attachType)
 				categories.Products = append(categories.Products, imageData)
 			}
 		}
@@ -431,9 +436,10 @@ func normalizeBeautyCategories(categories *ImageCategories, prompt *string) {
 		}
 	}
 
+	// ⚠️ Beauty 모듈: Model이 없으면 Product-only 모드로 동작
+	// Product 이미지를 Model 슬롯에 복사하지 않음 (엉뚱한 모델 생성 방지)
 	if categories.Model == nil && len(categories.Products) > 0 {
-		categories.Model = categories.Products[0]
-		log.Printf("🔧 [Beauty] Filling missing model slot from product reference")
+		log.Printf("🔧 [Beauty] No model provided - running in Product-only mode (no model image will be used)")
 	}
 }
 
@@ -532,6 +538,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				Products:    [][]byte{}, // Beauty 전용
 				Accessories: [][]byte{},
 			}
+			backgrounds := [][]byte{}
 
 			if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 				// 새 방식: individualImageAttachIds로 카테고리별 분류
@@ -583,17 +590,20 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						stageCategories.Model = imageData
 						log.Printf("✅ [Beauty Pipeline] Stage %d: Model image added", stageIndex)
 					case "bg", "background":
-						stageCategories.Background = imageData
-						log.Printf("✅ [Beauty Pipeline] Stage %d: Background image added", stageIndex)
+						backgrounds = append(backgrounds, imageData)
+						log.Printf("✅ [Beauty Pipeline] Stage %d: Background image added (Total: %d)", stageIndex, len(backgrounds))
 					default:
 						if productTypes[attachType] {
 							stageCategories.Products = append(stageCategories.Products, imageData)
 							log.Printf("✅ [Beauty Pipeline] Stage %d: Product image added (type: %s)", stageIndex, attachType)
 						} else if accessoryTypes[attachType] {
-							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
-							log.Printf("✅ [Beauty Pipeline] Stage %d: Accessory image added (type: %s)", stageIndex, attachType)
-						} else if attachType != "none" {
-							log.Printf("⚠️  [Beauty Pipeline] Stage %d: Unknown type '%s', treating as product", stageIndex, attachType)
+							// ⚠️ CRITICAL FIX: Treat 'acce' (Accessory) as Product for now to ensure all user uploads appear.
+							// The user expects all 4 images to be products, but some are tagged as 'acce'.
+							stageCategories.Products = append(stageCategories.Products, imageData)
+							log.Printf("✅ [Beauty Pipeline] Stage %d: Product image added (remapped from accessory type: %s)", stageIndex, attachType)
+						} else {
+							// ⚠️ Beauty 모듈: 알 수 없는 타입 또는 'none'도 제품으로 처리
+							log.Printf("⚠️  [Beauty Pipeline] Stage %d: Type '%s' treated as product (fallback)", stageIndex, attachType)
 							stageCategories.Products = append(stageCategories.Products, imageData)
 						}
 					}
@@ -630,6 +640,11 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
+				// Rotate backgrounds if multiple exist
+				if len(backgrounds) > 0 {
+					stageCategories.Background = backgrounds[i%len(backgrounds)]
+				}
+
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
@@ -752,6 +767,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			Products:    [][]byte{},
 			Accessories: [][]byte{},
 		}
+		backgrounds := [][]byte{}
 
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류 (Beauty 전용)
@@ -777,7 +793,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				case "model":
 					retryCategories.Model = imageData
 				case "bg", "background":
-					retryCategories.Background = imageData
+					backgrounds = append(backgrounds, imageData)
 				default:
 					if productTypes[attachType] {
 						retryCategories.Products = append(retryCategories.Products, imageData)
@@ -810,6 +826,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		// 재시도 루프
 		retrySuccess := 0
 		for i := 0; i < missing; i++ {
+			// Rotate backgrounds if multiple exist
+			if len(backgrounds) > 0 {
+				retryCategories.Background = backgrounds[i%len(backgrounds)]
+			}
 			log.Printf("🔄 Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
 			// Gemini API 호출 (카테고리별 이미지 전달)
