@@ -85,7 +85,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (RESTAURANT/SETTING INSPIRATION): This shows the ATMOSPHERE and DINING ENVIRONMENT you should recreate. Use this to understand the setting mood, lighting style, and restaurant ambiance. Generate a COMPLETELY NEW environment inspired by this reference", imageIndex))
+			fmt.Sprintf("Reference Image %d (RESTAURANT/SETTING INSPIRATION): This is a STYLE GUIDE for the environment. DO NOT use this as a flat background. Generate a FULLY RE-RENDERED 3D ENVIRONMENT based on this ambiance. YOU HAVE FULL CREATIVE FREEDOM to change the layout, lighting direction, and perspective to BEST SHOWCASE THE DISH. The DISH MUST be the central hero placed IN this environment.", imageIndex))
 		imageIndex++
 	}
 
@@ -107,7 +107,9 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		if hasRestaurant {
 			compositionInstruction += "The ingredients are placed naturally within the referenced restaurant environment - " +
 				"as if styled by a professional food photographer on location.\n" +
-				"The items interact with the space (resting on wooden boards, marble counters, rustic tables)."
+				"The items interact with the space (resting on wooden boards, marble counters, rustic tables).\n" +
+				"✓ AMBIENT OCCLUSION: Ingredients cast realistic shadows on the surface.\n" +
+				"✓ LIGHT WRAP: Environment light wraps around the textures."
 		} else {
 			compositionInstruction += "Create a stunning culinary still life with professional lighting and composition.\n" +
 				"The ingredients are arranged artistically - overhead flat lay, rustic board, or elegantly displayed."
@@ -132,7 +134,13 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"🎬 Use the restaurant reference as INSPIRATION ONLY:\n" +
 			"   • Recreate the dining atmosphere, lighting mood, and interior style\n" +
 			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The restaurant serves as a STAGE for the culinary presentation\n\n" +
+			"   • The restaurant serves as a STAGE for the culinary presentation\n" +
+			"   • YOU MUST PLACE THE DISH INTO THIS SCENE.\n\n" +
+			"[LIGHTING & INTEGRATION - CRITICAL]\n" +
+			"✓ AMBIENT OCCLUSION: The dish must cast natural shadows onto the table.\n" +
+			"✓ LIGHT WRAP: The restaurant's ambient light must wrap around the edges of the food.\n" +
+			"✓ COLOR BLEED: The warm tones of the restaurant must subtly reflect on the dish's highlights.\n" +
+			"✓ The dish must look PHYSICALLY PRESENT in the space, not like a sticker.\n\n" +
 			"[ABSOLUTE PRIORITY: DISH INTEGRITY]\n" +
 			"⚠️ CRITICAL: The dish's colors and textures are UNTOUCHABLE\n" +
 			"⚠️ DO NOT distort, over-saturate, or artificially enhance the food\n" +
