@@ -137,18 +137,18 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			switch productCount {
 			case 1:
 				if isGridInput {
-					countDesc = "This reference is a GRID showing multiple products. Show ALL products visible in the grid."
+					countDesc = "The reference shows multiple products in a grid. Show ALL of them arranged naturally together."
 				} else {
-					countDesc = "This reference shows the product(s). If it is a grid, show ALL items. If single, show one."
+					countDesc = "The reference shows the product. Show it naturally in the scene."
 				}
 			case 2:
-				countDesc = "This reference shows 2 products arranged in a grid. Show EXACTLY these TWO products - both must appear."
+				countDesc = "The reference shows 2 products (in a grid). Arrange these TWO products naturally together in the scene. DO NOT copy the grid layout."
 			case 3:
-				countDesc = "This reference shows 3 products arranged in a grid. Show EXACTLY these THREE products - all three must appear."
+				countDesc = "The reference shows 3 products (in a grid). Arrange these THREE products naturally together as a group. DO NOT copy the grid layout."
 			case 4:
-				countDesc = "This reference shows 4 products arranged in a 2x2 grid. Show EXACTLY these FOUR products - all four must appear."
+				countDesc = "The reference shows 4 products (in a grid). Arrange these FOUR products naturally together as a group. DO NOT copy the grid layout."
 			default:
-				countDesc = fmt.Sprintf("This reference shows %d products. Show EXACTLY all %d products - every single one must appear.", productCount, productCount)
+				countDesc = fmt.Sprintf("The reference shows %d products. Arrange ALL %d products naturally together in the scene. DO NOT copy the grid layout.", productCount, productCount)
 			}
 			instructions = append(instructions,
 				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS - %d ITEMS): %s These are cosmetic items to showcase as the main subject. Display ONLY these products with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply.", imageIndex, productCount, countDesc))
@@ -164,7 +164,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BACKGROUND/SETTING): This is the EXACT environment/setting to use for the beauty portrait. Use the actual background elements, colors, lighting, and atmosphere from this reference. The background should be SOFT and OUT OF FOCUS (shallow depth of field), but it should match the reference image's colors, mood, and elements", imageIndex))
+			fmt.Sprintf("Reference Image %d (ENVIRONMENT STYLE GUIDE): Use this image as a STYLE REFERENCE to GENERATE a new matching environment. Do not copy it pixel-for-pixel. Re-create this atmosphere in 3D.", imageIndex))
 		imageIndex++
 	}
 
@@ -196,12 +196,16 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"⚠️ USE ONLY the provided product references; do NOT invent extra products or variants."
 
 		if hasBackground {
-			compositionInstruction += "The beauty products are placed naturally within a NEWLY CREATED 3D SPACE inspired by the background reference.\n" +
-				"⚠️ DO NOT just paste the products on the background image.\n" +
-				"⚠️ REINTERPRET the background: Use its lighting, colors, and textures to build a realistic environment.\n" +
-				"⚠️ Create realistic DEPTH and PERSPECTIVE: The products should sit on a surface, cast shadows, and interact with the light.\n" +
-				"⚠️ The background reference is a STYLE GUIDE, not a flat backdrop. Build a cohesive scene around the products.\n" +
-				"This is STILL LIFE product photography - absolutely no people, just beautiful cosmetic product arrangement like Chanel or Dior ads."
+			compositionInstruction += "The beauty products are placed in a FULLY RE-RENDERED 3D ENVIRONMENT inspired by the background reference.\n" +
+				"⚠️ CRITICAL: The background reference is ONLY for mood, colors, and texture. IT IS NOT A TEMPLATE.\n" +
+				"⚠️ YOU HAVE FULL CREATIVE FREEDOM to change the background layout, geometry, and perspective to best fit the products.\n" +
+				"⚠️ DO NOT try to match the reference background's shape or object placement. CREATE A NEW SCENE.\n" +
+				"⚠️ GLOBAL ILLUMINATION: The light source from the generated environment must interact realistically with the products.\n" +
+				"⚠️ AMBIENT OCCLUSION: Create deep, realistic contact shadows where the products touch the surface to avoid the 'floating sticker' look.\n" +
+				"⚠️ LIGHT WRAP: Let the background light softly wrap around the product edges to blend them naturally into the scene.\n" +
+				"⚠️ COLOR BLEED: Allow the background colors (e.g., green from leaves) to subtly reflect on the product surfaces for true integration.\n" +
+				"⚠️ The products and the new background must be rendered TOGETHER as one single 3D scene.\n" +
+				"This is a completely NEW photograph where the background is re-created to perfectly fit the products."
 		} else {
 			compositionInstruction += "Create a stunning studio beauty product shot with soft, diffused lighting and clean composition.\n" +
 				"The cosmetic items are arranged artistically - flat lay, clean display, or elegantly positioned with beauty editorial aesthetic.\n" +
@@ -258,99 +262,40 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 핵심 요구사항 - 케이스별로 다르게
 	var criticalRules string
 
-	// 공통 금지사항 - 모든 케이스에 적용
-	commonForbidden := "\n\n[CRITICAL: ABSOLUTELY FORBIDDEN - THESE WILL CAUSE IMMEDIATE REJECTION]\n\n" +
+	// 공통 금지사항 - 간결하게 통합
+	commonForbidden := "\n\n[CRITICAL: SINGLE UNIFIED SCENE ONLY]\n" +
+		"⚠️ NO SPLIT SCREENS, NO GRIDS, NO COLLAGES.\n" +
+		"⚠️ ONE continuous composition with ONE background.\n" +
+		"⚠️ NO vertical or horizontal dividing lines.\n" +
 		func() string {
 			productCount := len(categories.Products)
-			if productCount == 1 {
-				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 1 (ONE) product - the single provided product; do NOT add extra bottles, shades, or duplicates.\n\n"
-			}
-			if productCount == 2 {
-				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 2 (TWO) products - both products from the reference must appear; do NOT add extra or omit any.\n\n"
-			}
-			if productCount == 3 {
-				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 3 (THREE) products - all three products from the reference must appear; do NOT add extra or omit any.\n\n"
-			}
-			if productCount == 4 {
-				return "⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY 4 (FOUR) products - all four products from the reference must appear; do NOT add extra or omit any.\n\n"
-			}
 			if productCount > 0 {
-				return fmt.Sprintf("⚠️ PRODUCT COUNT MUST MATCH: Show EXACTLY %d products - ALL products from the reference must appear; do NOT add extra or omit any.\n\n", productCount)
+				return fmt.Sprintf("⚠️ ABSOLUTE RULE: The reference contains EXACTLY %d products. YOU MUST SHOW ALL %d PRODUCTS.\n⚠️ COUNT THEM: 1, 2, ... %d. IF ANY ARE MISSING, THE IMAGE IS WRONG.\n⚠️ Do not add extra products. Do not remove any.\n", productCount, productCount, productCount)
 			}
 			return ""
-		}() +
-		"⚠️ NO VERTICAL DIVIDING LINES - ZERO TOLERANCE:\n" +
-		"❌ NO white vertical line down the center\n" +
-		"❌ NO colored vertical line separating the image\n" +
-		"❌ NO border or separator dividing left and right\n" +
-		"❌ NO panel division or comic book split layout\n" +
-		"❌ The image must be ONE continuous scene without ANY vertical dividers\n\n" +
-		"⚠️ NO DUAL/SPLIT COMPOSITION - THIS IS NOT A COMPARISON IMAGE:\n" +
-		"❌ DO NOT show the same character twice (left side vs right side)\n" +
-		"❌ DO NOT create before/after, comparison, or variation layouts\n" +
-		"❌ DO NOT duplicate the subject on both sides with different colors/styles\n" +
-		"❌ This is ONE SINGLE MOMENT with ONE CHARACTER in ONE UNIFIED SCENE\n" +
-		"❌ Left side and right side must be PART OF THE SAME ENVIRONMENT, not separate panels\n\n" +
-		"⚠️ SINGLE UNIFIED COMPOSITION ONLY:\n" +
-		"✓ ONE continuous background that flows naturally across the entire frame\n" +
-		"✓ ONE character in ONE pose at ONE moment in time\n" +
-		"✓ NO repeating elements on left and right sides\n" +
-		"✓ The entire image is ONE COHESIVE PHOTOGRAPH - not a collage or split screen\n" +
-		"✓ Background elements (buildings, sky, ground) must be CONTINUOUS with no breaks or seams\n"
+		}()
 
 	if hasModel {
 		// 모델 있는 케이스 - 뷰티 클로즈업 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE BEAUTY PORTRAIT REQUIREMENTS]\n" +
-			"🎯 CLOSE-UP PORTRAIT ONLY - face fills 60-80% of the frame\n" +
-			"🎯 Head and shoulders composition - NO full body shots\n" +
-			"🎯 The FACE is the STAR - focus on skin, makeup, and features\n" +
-			"🎯 Facial features are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
-			"🎯 Soft, flattering beauty lighting (butterfly, loop, or Rembrandt)\n" +
-			"🎯 Flawless skin texture with natural detail preservation\n" +
-			"🎯 Professional beauty photography composition\n" +
-			"🎯 High-end cosmetic editorial quality\n" +
-			"🎯 This is BEAUTY/MAKEUP photography, NOT fashion photography\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE BEAUTY SHOT]\n" +
-			"❌ ANY full body shots or fashion model poses\n" +
-			"❌ ANY distortion of facial features (stretched, compressed, squashed face)\n" +
-			"❌ Fashion editorial composition (full body, runway, outfit showcase)\n" +
-			"❌ Person looking pasted, floating, or artificially placed\n" +
-			"❌ Harsh, unflattering lighting that emphasizes skin flaws\n" +
-			"❌ Wide shots that don't focus on the face\n" +
-			"❌ Cluttered composition that distracts from facial features"
+		criticalRules = commonForbidden + "\n[BEAUTY PORTRAIT RULES]\n" +
+			"🎯 CLOSE-UP PORTRAIT ONLY (Face & Shoulders). Face fills 60-80% of frame.\n" +
+			"🎯 NO full body shots. NO fashion poses.\n" +
+			"🎯 Perfect, natural facial features and skin texture.\n" +
+			"🎯 Soft, flattering beauty lighting.\n"
 	} else if hasProducts {
 		// 뷰티 프로덕트 샷 케이스 - 화장품 촬영 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE BEAUTY PRODUCT REQUIREMENTS]\n" +
-			"🎯 Showcase the beauty products as elegant OBJECTS with perfect details\n" +
-			"🎯 Artistic arrangement - creative composition like high-end cosmetic advertising\n" +
-			"🎯 Soft, diffused lighting that highlights product packaging and textures\n" +
-			"🎯 Clean, elegant aesthetic typical of beauty product photography\n" +
-			"🎯 ALL cosmetic items displayed clearly and beautifully\n" +
-			"🎯 Single cohesive photograph - ONE shot from ONE camera\n" +
-			"🎯 Professional beauty editorial aesthetic - clean and sophisticated\n" +
-			"🎯 Elegant framing - use negative space and minimalism\n" +
-			"🎯 This is STILL LIFE photography - products are inanimate objects\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE BEAUTY PRODUCT SHOT - ZERO TOLERANCE]\n" +
-			"❌ ANY people, models, or human figures in the frame\n" +
-			"❌ ANY hands, fingers, arms, or body parts touching/holding products\n" +
-			"❌ ANY faces, portraits, or makeup application scenes\n" +
-			"❌ ANY human skin, lips, eyes, or facial features\n" +
-			"❌ Products looking pasted or artificially placed\n" +
-			"❌ Cluttered composition without focal point\n" +
-			"❌ Harsh lighting that creates unflattering shadows\n" +
-			"❌ Messy or chaotic arrangement\n" +
-			"❌ ANY suggestion of human presence - this is OBJECT photography ONLY"
+		criticalRules = commonForbidden + "\n[BEAUTY PRODUCT RULES]\n" +
+			"🎯 SHOWCASE products as premium objects. NO people/hands/faces.\n" +
+			"🎯 Artistic, elegant arrangement. Soft, diffused lighting.\n" +
+			"🎯 Products must sit naturally in the scene (shadows, reflections).\n" +
+			"🎯 DO NOT copy the grid layout from the reference. Group them naturally.\n" +
+			"🎯 NO sticker effect. Lighting on products MUST match the background.\n" +
+			"🎯 RE-GENERATE the background. Do not use it as a static image.\n" +
+			"🎯 MISSING PRODUCTS ARE UNACCEPTABLE. Count them before finalizing.\n"
 	} else {
-		// 배경만 있는 케이스 - 환경 촬영 규칙
-		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Capture the pure atmosphere and mood of the location\n" +
-			"🎯 Dramatic composition with depth and visual interest\n" +
-			"🎯 Environmental storytelling - what story does this place tell?\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and layers creatively\n\n" +
-			"[FORBIDDEN]\n" +
-			"❌ DO NOT add people, models, or products to the scene\n" +
-			"❌ Flat, boring composition without depth"
+		// 배경만 있는 케이스
+		criticalRules = commonForbidden + "\n[ENVIRONMENT RULES]\n" +
+			"🎯 Capture atmosphere and mood. NO people/products.\n"
 	}
 
 	// 16:9 비율 전용 추가 지시사항
