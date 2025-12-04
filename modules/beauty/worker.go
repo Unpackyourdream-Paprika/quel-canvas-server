@@ -235,70 +235,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 (시네마틱 톤 + Beauty 전용 앵글)
-	cameraAngleTextMap := map[string]string{
-		// Fashion 기본 앵글
-		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
-		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
-		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
-		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
-
-		// Beauty 전용 앵글
-		"3/4": "Three-quarter angle, face turned slightly showing both frontal and side features, classic beauty portrait composition, elegant and flattering perspective",
-	}
-
-	// Shot Type 매핑 (시네마틱 톤 + Beauty 전용 샷)
-	shotTypeTextMap := map[string]string{
-		// Fashion 기본 샷
-		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
-		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
-		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
-
-		// Beauty 전용 샷 타입
-		"closeup": "Beauty closeup shot, tight framing on face highlighting makeup and skin texture, professional beauty photography, emphasizes facial features and cosmetics",
-		"upper":   "Upper body shot, framing from chest up, beauty editorial composition, shows face, neck, and shoulders with makeup and styling details",
-		"detail":  "Extreme detail shot, macro focus on specific feature (eyes, lips, skin), high-end beauty photography, showcases makeup artistry and product details",
-	}
-
-	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
-
-	// Semaphore: 최대 2개 조합만 동시 처리
-	semaphore := make(chan struct{}, 2)
-
-	for comboIdx, combo := range combinations {
-		wg.Add(1)
-
-		go func(idx int, combo map[string]interface{}) {
-			defer wg.Done()
-
-			// Semaphore 획득 (최대 2개까지만)
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }() // 완료 시 반환
-
-			angle := fallback.SafeString(combo["angle"], "front")
-			shot := fallback.SafeString(combo["shot"], "full")
-			quantity := fallback.SafeInt(combo["quantity"], 1)
-
-			log.Printf("🎯 Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
-				idx+1, len(combinations), angle, shot, quantity)
-
-			// 조합별 프롬프트 생성
-			cameraAngleText := cameraAngleTextMap[angle]
-			if cameraAngleText == "" {
-				cameraAngleText = "Front view" // 기본값
-			}
-
-			shotTypeText := shotTypeTextMap[shot]
-			if shotTypeText == "" {
-				shotTypeText = "full body shot" // 기본값
-			}
-
-			enhancedPrompt := fmt.Sprintf(
-				"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
-				cameraAngleText,
-				shotTypeText,
-				basePrompt,
-			)
+			// 앵글/샷 정보만 간단히 추가
+			enhancedPrompt := fmt.Sprintf("SHOT TYPE: %s\nCAMERA ANGLE: %s\n\nSCENE: %s\n\nMANDATORY TECHNICAL SPECS:\n- High-end beauty photography\n- Professional lighting and makeup details",
+				shot, angle, basePrompt)
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 

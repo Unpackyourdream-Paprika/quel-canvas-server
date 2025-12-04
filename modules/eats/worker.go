@@ -161,7 +161,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true}
+	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -538,7 +538,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true}
+				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
 
 				for i, attachObj := range individualIds {
 					attachMap, ok := attachObj.(map[string]interface{})
@@ -740,7 +740,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
 			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true}
+			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})

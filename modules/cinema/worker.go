@@ -155,7 +155,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -184,10 +184,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 		// type에 따라 카테고리별로 분류
 		switch attachType {
-		case "model", "character", "actor":
+		case "model", "character", "actor", "face":
 			if len(categories.Models) < MaxModels {
 				categories.Models = append(categories.Models, imageData)
-				log.Printf("✅ Model/Character image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
+				log.Printf("✅ Model/Character/Face image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
 			} else {
 				log.Printf("⚠️ Maximum models reached (%d), skipping additional model", MaxModels)
 			}
@@ -218,98 +218,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 - 간결한 라벨만
-	cameraAngleTextMap := map[string]string{
-		"front":         "Front-facing angle",
-		"side":          "Side profile 90-degree angle",
-		"profile":       "Profile angle",
-		"back":          "Back view angle",
-		"eye-level":     "Eye-level angle",
-		"low-angle":     "Low-angle (camera below subject looking up)",
-		"high-angle":    "High-angle (camera above subject looking down)",
-		"over-shoulder": "Over-the-shoulder angle",
-		"dutch-angle":   "Dutch angle (tilted)",
-		"birds-eye":     "Bird's eye view (top-down)",
-	}
-
-	// Shot Type 매핑 - 간결한 라벨만
-	shotTypeTextMap := map[string]string{
-		"tight":  "Tight shot",
-		"middle": "Medium shot",
-		"full":   "Full body shot",
-		"ECU":    "ECU (Extreme Close-Up)",
-		"CU":     "CU (Close-Up)",
-		"MS":     "MS (Medium Shot)",
-		"FS":     "FS (Full Shot)",
-		"WS":     "WS (Wide Shot)",
-	}
-
-	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
-
-	// Semaphore: 최대 2개 조합만 동시 처리
-	semaphore := make(chan struct{}, 2)
-
-	for comboIdx, combo := range combinations {
-		wg.Add(1)
-
-		go func(idx int, combo map[string]interface{}) {
-			defer wg.Done()
-
-			// Semaphore 획득 (최대 2개까지만)
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }() // 완료 시 반환
-
-			angle := fallback.SafeString(combo["angle"], "front")
-			shot := fallback.SafeString(combo["shot"], "full")
-			quantity := fallback.SafeInt(combo["quantity"], 1)
-
-			log.Printf("🎯 Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
-				idx+1, len(combinations), angle, shot, quantity)
-
-			// 조합별 프롬프트 생성
-			cameraAngleText := cameraAngleTextMap[angle]
-			if cameraAngleText == "" {
-				cameraAngleText = "Front view" // 기본값
-			}
-
-			shotTypeText := shotTypeTextMap[shot]
-			if shotTypeText == "" {
-				shotTypeText = "full body shot" // 기본값
-			}
-
-			// 샷 타입별 프레이밍 지시 - 극도로 간결하게
-			var frameInstruction string
-			if shot == "ECU" {
-				frameInstruction = "FRAME ONLY THE EYES (or hands/lips if specified). Eyes fill 80-90% of entire frame. Ultra-tight macro crop."
-			} else if shot == "CU" {
-				frameInstruction = "FRAME FROM NECK UP. Full face fills 70-80% of frame. Head top to neck/shoulders bottom."
-			} else if shot == "MS" {
-				frameInstruction = "FRAME FROM WAIST UP. Upper body and head visible. Bottom cuts at waist level."
-			} else if shot == "FS" {
-				frameInstruction = "FRAME ENTIRE BODY HEAD TO TOE. Full person fits in frame with small margins."
-			} else if shot == "WS" {
-				frameInstruction = "FRAME SUBJECT SMALL IN ENVIRONMENT. Person 20-40% of frame, environment dominates."
-			} else {
-				frameInstruction = "Standard cinematic framing."
-			}
-
-			// 앵글 지시 - 간결하게
-			var angleInstruction string
-			if angle == "eye-level" {
-				angleInstruction = "Camera at subject's eye height."
-			} else if angle == "low-angle" {
-				angleInstruction = "Camera below subject looking up."
-			} else if angle == "high-angle" {
-				angleInstruction = "Camera above subject looking down."
-			} else if angle == "over-shoulder" {
-				angleInstruction = "Camera behind subject's shoulder."
-			} else if angle == "dutch-angle" {
-				angleInstruction = "Camera tilted for diagonal horizon."
-			} else if angle == "birds-eye" {
-				angleInstruction = "Camera directly overhead looking straight down."
-			} else {
-				angleInstruction = cameraAngleText
-			}
+			// 앵글/샷 정보만 간단히 추가
+			enhancedPrompt := fmt.Sprintf("SHOT TYPE: %s\nCAMERA ANGLE: %s\n\nSCENE: %s\n\nMANDATORY TECHNICAL SPECS:\n- 100%% photorealistic\n- Cinematic film production aesthetic\n- Natural lighting and shadows",
+				shot, angle, basePrompt)
 
 			enhancedPrompt := fmt.Sprintf(`SHOT TYPE: %s
 FRAMING: %s
@@ -586,7 +497,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 				for i, attachObj := range individualIds {
 					attachMap, ok := attachObj.(map[string]interface{})
@@ -612,10 +523,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 					// type에 따라 카테고리별로 분류
 					switch attachType {
-					case "model", "character", "actor":
+					case "model", "character", "actor", "face":
 						if len(stageCategories.Models) < MaxModels {
 							stageCategories.Models = append(stageCategories.Models, imageData)
-							log.Printf("✅ Stage %d: Model/Character image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
+							log.Printf("✅ Stage %d: Model/Character/Face image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
 						} else {
 							log.Printf("⚠️ Stage %d: Maximum models reached (%d), skipping", stageIndex, MaxModels)
 						}
@@ -681,75 +592,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			var enhancedPrompt string
 
 			if cameraAngle != "" && shotType != "" {
-				// Camera Angle 매핑
-				cameraAngleTextMap := map[string]string{
-					"front":         "Front-facing angle",
-					"side":          "Side profile 90-degree angle",
-					"profile":       "Profile angle",
-					"back":          "Back view angle",
-					"eye-level":     "Eye-level angle",
-					"low-angle":     "Low-angle (camera below subject looking up)",
-					"high-angle":    "High-angle (camera above subject looking down)",
-					"over-shoulder": "Over-the-shoulder angle",
-					"dutch-angle":   "Dutch angle (tilted)",
-					"birds-eye":     "Bird's eye view (top-down)",
-				}
-
-				// Shot Type 매핑
-				shotTypeTextMap := map[string]string{
-					"tight":  "Tight shot",
-					"middle": "Medium shot",
-					"full":   "Full body shot",
-					"ECU":    "ECU (Extreme Close-Up)",
-					"CU":     "CU (Close-Up)",
-					"MS":     "MS (Medium Shot)",
-					"FS":     "FS (Full Shot)",
-					"WS":     "WS (Wide Shot)",
-				}
-
-				cameraAngleText := cameraAngleTextMap[cameraAngle]
-				if cameraAngleText == "" {
-					cameraAngleText = "Front view"
-				}
-
-				shotTypeText := shotTypeTextMap[shotType]
-				if shotTypeText == "" {
-					shotTypeText = "full body shot"
-				}
-
-				// 샷 타입별 프레이밍 지시
-				var frameInstruction string
-				if shotType == "ECU" {
-					frameInstruction = "FRAME ONLY THE EYES (or hands/lips if specified). Eyes fill 80-90% of entire frame. Ultra-tight macro crop."
-				} else if shotType == "CU" {
-					frameInstruction = "FRAME FROM NECK UP. Full face fills 70-80% of frame. Head top to neck/shoulders bottom."
-				} else if shotType == "MS" {
-					frameInstruction = "FRAME FROM WAIST UP. Upper body and head visible. Bottom cuts at waist level."
-				} else if shotType == "FS" {
-					frameInstruction = "FRAME ENTIRE BODY HEAD TO TOE. Full person fits in frame with small margins."
-				} else if shotType == "WS" {
-					frameInstruction = "FRAME SUBJECT SMALL IN ENVIRONMENT. Person 20-40% of frame, environment dominates."
-				} else {
-					frameInstruction = "Standard cinematic framing."
-				}
-
-				// 앵글 지시
-				var angleInstruction string
-				if cameraAngle == "eye-level" {
-					angleInstruction = "Camera at subject's eye height."
-				} else if cameraAngle == "low-angle" {
-					angleInstruction = "Camera below subject looking up."
-				} else if cameraAngle == "high-angle" {
-					angleInstruction = "Camera above subject looking down."
-				} else if cameraAngle == "over-shoulder" {
-					angleInstruction = "Camera behind subject's shoulder."
-				} else if cameraAngle == "dutch-angle" {
-					angleInstruction = "Camera tilted for diagonal horizon."
-				} else if cameraAngle == "birds-eye" {
-					angleInstruction = "Camera directly overhead looking straight down."
-				} else {
-					angleInstruction = cameraAngleText
-				}
+				// 앵글/샷 정보만 간단히 추가
+				enhancedPrompt = fmt.Sprintf("SHOT TYPE: %s\nCAMERA ANGLE: %s\n\nSCENE: %s\n\nMANDATORY TECHNICAL SPECS:\n- 100%% photorealistic\n- Cinematic film production aesthetic\n- Natural lighting and shadows",
+					shotType, cameraAngle, cleanedBasePrompt)
 
 				enhancedPrompt = fmt.Sprintf(`SHOT TYPE: %s
 FRAMING: %s
@@ -905,7 +750,7 @@ MANDATORY TECHNICAL SPECS:
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
 			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -920,7 +765,7 @@ MANDATORY TECHNICAL SPECS:
 				}
 
 				switch attachType {
-				case "model", "character", "actor":
+				case "model", "character", "actor", "face":
 					if len(retryCategories.Models) < MaxModels {
 						retryCategories.Models = append(retryCategories.Models, imageData)
 					}
