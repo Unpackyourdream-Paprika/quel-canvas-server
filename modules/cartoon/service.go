@@ -536,29 +536,27 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	if hasModels {
 		// 캐릭터 있음 → 웹툰/카툰 스타일
 		if modelCount == 1 {
-			mainInstruction = "[WEBTOON/CARTOON ARTIST'S DRAMATIC COMPOSITION]\n" +
-				"You are a world-class webtoon/cartoon artist creating a dynamic scene.\n" +
-				"The CHARACTER is the HERO - their stylized proportions and features are SACRED.\n" +
-				"The environment serves the character, NOT the other way around.\n\n" +
-				"Create ONE high-quality webtoon/cartoon illustration with DRAMATIC STORYTELLING:\n" +
-				"• The character wears ALL clothing and accessories in ONE complete outfit\n" +
-				"• Dynamic pose and angle - NOT static or stiff\n" +
-				"• Environmental storytelling - use the location for drama\n" +
-				"• Stylized lighting creates mood and depth\n" +
-				"• This is a MOMENT full of energy and narrative\n\n"
+			mainInstruction = "[WEBTOON/CARTOON STYLE - UNIFIED MASTERPIECE]\n" +
+				"You are a professional webtoon artist creating a SINGLE, COHESIVE illustration.\n" +
+				"The character and background must be rendered TOGETHER as one unified piece of art.\n" +
+				"Do NOT paste the character onto the background. Paint them into the scene.\n" +
+				"Apply a GLOBAL COLOR PALETTE and LIGHTING SCHEME that affects both the character and the environment equally.\n\n" +
+				"Create ONE high-quality webtoon illustration:\n" +
+				"• The character is anchored firmly in the scene (feet on ground, interacting with objects)\n" +
+				"• Shadows from the character fall naturally on the background elements\n" +
+				"• Ambient light from the background reflects on the character\n" +
+				"• The entire image has a consistent artistic style (line weight, shading, color saturation)\n\n"
 		} else {
-			mainInstruction = fmt.Sprintf("[WEBTOON/CARTOON ARTIST'S DRAMATIC COMPOSITION - %d CHARACTERS]\n"+
-				"You are a world-class webtoon/cartoon artist creating a dynamic scene with MULTIPLE CHARACTERS.\n"+
-				"Each CHARACTER is a HERO - their stylized proportions and features are SACRED.\n"+
-				"The environment serves the characters, NOT the other way around.\n\n"+
-				"Create ONE high-quality webtoon/cartoon illustration featuring %d DISTINCT CHARACTERS with DRAMATIC STORYTELLING:\n"+
+			mainInstruction = fmt.Sprintf("[WEBTOON/CARTOON STYLE - UNIFIED MASTERPIECE - %d CHARACTERS]\n"+
+				"You are a professional webtoon artist creating a SINGLE, COHESIVE illustration with MULTIPLE CHARACTERS.\n"+
+				"The characters and background must be rendered TOGETHER as one unified piece of art.\n"+
+				"Do NOT paste characters onto the background. Paint them into the scene.\n"+
+				"Apply a GLOBAL COLOR PALETTE and LIGHTING SCHEME that affects both the characters and the environment equally.\n\n"+
+				"Create ONE high-quality webtoon illustration featuring %d DISTINCT CHARACTERS:\n"+
 				"• EACH character MUST appear exactly as shown in their reference image\n"+
-				"• Each character has their own unique appearance, pose, and presence\n"+
-				"• Characters interact naturally within the same scene\n"+
-				"• Dynamic composition with all characters - NOT static or stiff\n"+
-				"• Environmental storytelling - use the location for drama\n"+
-				"• Stylized lighting creates mood and depth\n"+
-				"• This is a MOMENT full of energy and narrative with MULTIPLE CHARACTERS\n\n", modelCount, modelCount)
+				"• Characters are anchored firmly in the scene\n"+
+				"• Shadows from characters fall naturally on the background elements\n"+
+				"• The entire image has a consistent artistic style\n\n", modelCount, modelCount)
 		}
 	} else if hasProducts {
 		// 프로덕트만 → 프로덕트 포토그래피
@@ -615,7 +613,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BACKGROUND TO CARTOONIZE): Convert this background into the SAME cartoon/webtoon style. Preserve layout, horizon, and major shapes; keep lighting direction; do NOT leave it photorealistic; avoid inventing a new scene unrelated to this layout", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND INSPIRATION): Use this image as a loose reference for setting and atmosphere. Do NOT copy the layout exactly. Create a background that fits the character naturally.", imageIndex))
 		imageIndex++
 	}
 
@@ -659,31 +657,17 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 배경 관련 지시사항 - 캐릭터가 있을 때만 추가
 	if hasModels && hasBackground {
 		// 모델 + 배경 케이스 → 환경 통합 지시사항
-		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
-			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
-			"The photographer CHOSE this environment to complement the subject - not to overwhelm them.\n" +
-			"🎬 Use the background reference as INSPIRATION ONLY:\n" +
-			"   • Recreate the atmosphere, lighting mood, and setting type\n" +
-			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The location serves as a STAGE for the subject's story\n\n" +
-			"[ABSOLUTE PRIORITY: SUBJECT INTEGRITY]\n" +
-			"⚠️ CRITICAL: The person's body proportions are UNTOUCHABLE\n" +
-			"⚠️ DO NOT distort, stretch, compress, or alter the person to fit the frame\n" +
-			"⚠️ The background adapts to showcase the subject - NEVER the reverse\n\n" +
-			"[DRAMATIC ENVIRONMENTAL INTEGRATION]\n" +
-			"✓ Subject positioned naturally in the space (standing, sitting, moving)\n" +
-			"✓ Realistic ground contact with natural shadows\n" +
-			"✓ Background elements create DEPTH - use foreground/midground/background layers\n" +
-			"✓ Directional lighting from the environment enhances drama\n" +
-			"✓ Environmental light wraps around the subject naturally\n" +
-			"✓ Atmospheric perspective adds cinematic depth\n" +
-			"✓ Shot composition tells a STORY - what is happening in this moment?\n\n" +
+		compositionInstruction += " shot on location with UNIFIED RENDERING.\n\n" +
+			"[GLOBAL UNITY]\n" +
+			"Treat this as a single painting.\n" +
+			"🎬 UNITY RULES:\n" +
+			"   • ATMOSPHERIC BLENDING: The character must feel like they are breathing the same air as the background.\n" +
+			"   • GLOBAL ILLUMINATION: Light and color must be consistent across the entire image.\n" +
+			"   • NO STICKERS: The character is PART of the scene, not pasted on top.\n" +
+			"   • BACKGROUND FREEDOM: Adjust the background layout if needed to make the character fit better.\n\n" +
 			"[TECHNICAL EXECUTION]\n" +
-			"✓ Single camera angle - this is ONE photograph\n" +
-			"✓ Film photography aesthetic with natural color grading\n" +
-			"✓ Rule of thirds or dynamic asymmetric composition\n" +
-			"✓ Depth of field focuses attention on the subject\n" +
-			"✓ The environment and subject look like they exist in the SAME REALITY"
+			"✓ Single cohesive illustration\n" +
+			"✓ Consistent artistic style"
 	} else if hasModels && !hasBackground {
 		// 캐릭터만 있고 배경 없음 → 심플 배경
 		compositionInstruction += " with a clean, stylized background that complements the character(s)."
@@ -695,22 +679,18 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	if hasModels {
 		// 캐릭터 있는 케이스 - 웹툰/카툰 규칙
 		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Character's stylized proportions are CONSISTENT - maintain their unique visual style\n" +
-			"🎯 The character(s) are the STAR - everything else supports their presence\n" +
-			"🎯 Dramatic composition with ENERGY and MOVEMENT\n" +
-			"🎯 Environmental storytelling - what's the narrative of this moment?\n" +
+			"🎯 UNIFIED ARTWORK - Must look like one single painting\n" +
+			"🎯 Character's stylized proportions are CONSISTENT\n" +
+			"🎯 PERFECT INTEGRATION - Character must be anchored in the scene\n" +
+			"🎯 Realistic shadows and lighting interaction\n" +
 			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
-			"🎯 Single cohesive illustration - ONE scene, ONE moment\n" +
-			"🎯 Professional webtoon/cartoon aesthetic - clean lines, vibrant colors\n" +
-			"🎯 Dynamic framing - use negative space creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE ARTWORK]\n" +
-			"❌ ANY inconsistency in character's visual style or proportions\n" +
-			"❌ Character looking pasted, floating, or artificially placed\n" +
-			"❌ Static, boring, catalog-style poses\n" +
-			"❌ Split-screen, collage, or multiple separate images\n" +
-			"❌ Background reference directly pasted or overlaid\n" +
-			"❌ Centered, symmetrical composition without drama\n" +
-			"❌ Flat shading that doesn't create depth"
+			"🎯 Professional webtoon/cartoon aesthetic\n\n" +
+			"[FORBIDDEN]\n" +
+			"❌ STICKER EFFECT (Character looking pasted or floating)\n" +
+			"❌ Cut-out look or white outlines around character\n" +
+			"❌ Mismatched lighting or shadows\n" +
+			"❌ Incorrect scale (character too big or too small)\n" +
+			"❌ Split-screen, collage, or multiple separate images"
 	} else if hasProducts {
 		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
 		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +

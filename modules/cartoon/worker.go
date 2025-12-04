@@ -158,7 +158,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -187,10 +187,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 		// type에 따라 카테고리별로 분류
 		switch attachType {
-		case "model", "character":
+		case "model", "character", "face":
 			if len(categories.Models) < MaxModels {
 				categories.Models = append(categories.Models, imageData)
-				log.Printf("✅ Character image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
+				log.Printf("✅ Character/Face image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
 			} else {
 				log.Printf("⚠️ Maximum characters reached (%d), skipping additional character", MaxModels)
 			}
@@ -221,58 +221,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-	// Camera Angle 매핑 - Cartoon/Webtoon 전용
-	cameraAngleTextMap := map[string]string{
-		"front":   "Front-facing character angle, webtoon/manga illustration style, character looking at viewer with expressive eyes, clean linework and vibrant colors",
-		"side":    "Side profile character angle, webtoon/manga illustration style, 90-degree side view showing character profile, comic art composition",
-		"profile": "Character portrait angle, webtoon/manga style front view, expressive facial features and personality, anime/comic illustration aesthetic",
-		"dynamic": "Dynamic action angle, energetic perspective with movement and drama, anime/cartoon style composition with impact and motion lines",
-	}
-
-	// Shot Type 매핑 - Cartoon/Webtoon 전용
-	shotTypeTextMap := map[string]string{
-		"bust":      "Bust shot, webtoon/manga character framing from chest up, portrait composition showing face and upper body clearly with clean lines",
-		"full-body": "Full body shot, complete webtoon/manga character from head to toe, character design composition showing entire figure and outfit in comic style",
-		"action":    "Action shot, dynamic pose with movement and energy, anime/cartoon action sequence with motion lines and impact, emphasizes dramatic motion",
-		"portrait":  "Portrait shot, webtoon/manga character headshot with emotional expression, close-up emphasizing facial features and eyes in comic art style",
-	}
-
-	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
-
-	// Semaphore: 최대 2개 조합만 동시 처리
-	semaphore := make(chan struct{}, 2)
-
-	for comboIdx, combo := range combinations {
-		wg.Add(1)
-
-		go func(idx int, combo map[string]interface{}) {
-			defer wg.Done()
-
-			// Semaphore 획득 (최대 2개까지만)
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }() // 완료 시 반환
-
-			angle := fallback.SafeString(combo["angle"], "front")
-			shot := fallback.SafeString(combo["shot"], "full-body")
-			quantity := fallback.SafeInt(combo["quantity"], 1)
-
-			log.Printf("🎯 Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
-				idx+1, len(combinations), angle, shot, quantity)
-
-			// 조합별 프롬프트 생성
-			cameraAngleText := cameraAngleTextMap[angle]
-			if cameraAngleText == "" {
-				cameraAngleText = "Front view" // 기본값
-			}
-
-			shotTypeText := shotTypeTextMap[shot]
-			if shotTypeText == "" {
-				shotTypeText = "full body shot" // 기본값
-			}
-
-			// basePrompt는 사용자의 캐릭터 묘사 (표정, 제스처, 상황)
-			// 앵글/샷 정보만 추가, 스타일은 GenerateDynamicPrompt에서 자동 처리
-			enhancedPrompt := cameraAngleText + ", " + shotTypeText + ". " + basePrompt
+			// 앵글/샷 정보만 간단히 추가
+			enhancedPrompt := fmt.Sprintf("%s view, %s. %s", angle, shot, basePrompt)
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
@@ -520,7 +470,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 				for i, attachObj := range individualIds {
 					attachMap, ok := attachObj.(map[string]interface{})
@@ -546,10 +496,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 					// type에 따라 카테고리별로 분류
 					switch attachType {
-					case "model", "character":
+					case "model", "character", "face":
 						if len(stageCategories.Models) < MaxModels {
 							stageCategories.Models = append(stageCategories.Models, imageData)
-							log.Printf("✅ Stage %d: Character image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
+							log.Printf("✅ Stage %d: Character/Face image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
 						} else {
 							log.Printf("⚠️ Stage %d: Maximum characters reached (%d), skipping", stageIndex, MaxModels)
 						}
@@ -736,7 +686,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
 			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -751,7 +701,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				}
 
 				switch attachType {
-				case "model", "character":
+				case "model", "character", "face":
 					if len(retryCategories.Models) < MaxModels {
 						retryCategories.Models = append(retryCategories.Models, imageData)
 					}
