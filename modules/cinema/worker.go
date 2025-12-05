@@ -218,9 +218,55 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
-			// 앵글/샷 정보만 간단히 추가
-			enhancedPrompt := fmt.Sprintf("SHOT TYPE: %s\nCAMERA ANGLE: %s\n\nSCENE: %s\n\nMANDATORY TECHNICAL SPECS:\n- 100%% photorealistic\n- Cinematic film production aesthetic\n- Natural lighting and shadows",
-				shot, angle, basePrompt)
+	// Camera Angle 매핑
+	cameraAngleTextMap := map[string]string{
+		"front":   "Front-facing angle, direct eye contact with camera",
+		"side":    "Side profile angle, 90-degree perspective",
+		"profile": "Professional portrait, formal front-facing composition",
+		"back":    "Rear angle, back view composition",
+	}
+
+	// Shot Type 매핑
+	shotTypeTextMap := map[string]string{
+		"tight":  "Tight shot, close-up framing from shoulders up",
+		"middle": "Medium shot, framing from waist up",
+		"full":   "Full body shot, head to toe",
+	}
+
+	log.Printf("Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
+
+	// Semaphore: 최대 2개 조합만 동시 처리
+	semaphore := make(chan struct{}, 2)
+
+	for comboIdx, combo := range combinations {
+		wg.Add(1)
+
+		go func(idx int, combo map[string]interface{}) {
+			defer wg.Done()
+
+			// Semaphore 획득 (최대 2개까지만)
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }() // 완료 시 반환
+
+			angle := fallback.SafeString(combo["angle"], "front")
+			shot := fallback.SafeString(combo["shot"], "full")
+			quantity := fallback.SafeInt(combo["quantity"], 1)
+
+			log.Printf("Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
+				idx+1, len(combinations), angle, shot, quantity)
+
+			// 조합별 프롬프트 생성
+			angleInstruction := cameraAngleTextMap[angle]
+			if angleInstruction == "" {
+				angleInstruction = "Front view"
+			}
+
+			shotTypeText := shotTypeTextMap[shot]
+			if shotTypeText == "" {
+				shotTypeText = "Full body shot"
+			}
+
+			frameInstruction := shotTypeText
 
 			enhancedPrompt := fmt.Sprintf(`SHOT TYPE: %s
 FRAMING: %s
@@ -592,12 +638,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			var enhancedPrompt string
 
 			if cameraAngle != "" && shotType != "" {
-				// 앵글/샷 정보만 간단히 추가
-				enhancedPrompt = fmt.Sprintf("SHOT TYPE: %s\nCAMERA ANGLE: %s\n\nSCENE: %s\n\nMANDATORY TECHNICAL SPECS:\n- 100%% photorealistic\n- Cinematic film production aesthetic\n- Natural lighting and shadows",
-					shotType, cameraAngle, cleanedBasePrompt)
-
 				enhancedPrompt = fmt.Sprintf(`SHOT TYPE: %s
-FRAMING: %s
 CAMERA ANGLE: %s
 
 SCENE: %s
@@ -608,11 +649,11 @@ MANDATORY TECHNICAL SPECS:
 - Natural lighting and shadows
 - Professional cinematography
 - CRITICAL: Follow the FRAMING instruction exactly - do not deviate`,
-					shotTypeText, frameInstruction, angleInstruction, cleanedBasePrompt)
+					shotType, cameraAngle, cleanedBasePrompt)
 
 				log.Printf("━━━━━━━━━━ 🎯 Stage %d ━━━━━━━━━━", stageIndex)
-				log.Printf("📐 Angle: [%s] → %s", cameraAngle, angleInstruction)
-				log.Printf("📷 Shot: [%s] → %s", shotType, frameInstruction)
+				log.Printf("📐 Angle: %s", cameraAngle)
+				log.Printf("📷 Shot: %s", shotType)
 				log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 			} else {
 				// 카메라 앵글/샷 타입 정보가 없으면 basePrompt 사용

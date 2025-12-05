@@ -235,6 +235,28 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
+	log.Printf("Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
+
+	// Semaphore: 최대 2개 조합만 동시 처리
+	semaphore := make(chan struct{}, 2)
+
+	for comboIdx, combo := range combinations {
+		wg.Add(1)
+
+		go func(idx int, combo map[string]interface{}) {
+			defer wg.Done()
+
+			// Semaphore 획득 (최대 2개까지만)
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }() // 완료 시 반환
+
+			angle := fallback.SafeString(combo["angle"], "front")
+			shot := fallback.SafeString(combo["shot"], "full")
+			quantity := fallback.SafeInt(combo["quantity"], 1)
+
+			log.Printf("Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
+				idx+1, len(combinations), angle, shot, quantity)
+
 			// 앵글/샷 정보만 간단히 추가
 			enhancedPrompt := fmt.Sprintf("SHOT TYPE: %s\nCAMERA ANGLE: %s\n\nSCENE: %s\n\nMANDATORY TECHNICAL SPECS:\n- High-end beauty photography\n- Professional lighting and makeup details",
 				shot, angle, basePrompt)
@@ -423,7 +445,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
-	log.Printf("📦 Pipeline has %d stages, UserID=%s", len(stages), userID)
+	log.Printf("📦 Pipeline has %d stages, UserID=%s, DefaultPrompt=%s", len(stages), userID, defaultPrompt)
 
 	// Phase 2: Job 상태 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -471,6 +493,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			aspectRatio := fallback.SafeAspectRatio(stage["aspect-ratio"])
 
 			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s (parallel)", stageIndex+1, len(stages), quantity, aspectRatio)
+			log.Printf("📝 Stage %d Prompt: %s", stageIndex, prompt)
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{

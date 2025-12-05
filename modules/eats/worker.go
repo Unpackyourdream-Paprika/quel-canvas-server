@@ -527,6 +527,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				Clothing:    [][]byte{},
 				Accessories: [][]byte{},
 			}
+			backgrounds := [][]byte{} // 여러 배경 지원
+			models := [][]byte{}      // 여러 모델(음식) 지원
 
 			if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 				// 새 방식: individualImageAttachIds로 카테고리별 분류
@@ -537,8 +539,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					Accessories: [][]byte{},
 				}
 
-				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-				accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
+				// Eats 전용 타입 정의
+				ingredientTypes := map[string]bool{"ingredient": true, "side": true}
+				toppingTypes := map[string]bool{"topping": true, "garnish": true, "prop": true}
 
 				for i, attachObj := range individualIds {
 					attachMap, ok := attachObj.(map[string]interface{})
@@ -562,30 +565,32 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						continue
 					}
 
-					// type에 따라 카테고리별로 분류
+					// type에 따라 카테고리별로 분류 (Eats 전용)
 					switch attachType {
 					case "model", "food", "dish", "main":
-						stageCategories.Model = imageData
-						log.Printf("✅ Stage %d: Model/Food image added", stageIndex)
-					case "bg":
-						stageCategories.Background = imageData
-						log.Printf("✅ Stage %d: Background image added", stageIndex)
+						models = append(models, imageData)
+						log.Printf("✅ [Eats Pipeline] Stage %d: Food/Main image added (Total: %d)", stageIndex, len(models))
+					case "bg", "background":
+						backgrounds = append(backgrounds, imageData)
+						log.Printf("✅ [Eats Pipeline] Stage %d: Background image added (Total: %d)", stageIndex, len(backgrounds))
 					default:
-						if clothingTypes[attachType] {
+						if ingredientTypes[attachType] {
 							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
-							log.Printf("✅ Stage %d: Clothing image added (type: %s)", stageIndex, attachType)
-						} else if accessoryTypes[attachType] {
+							log.Printf("✅ [Eats Pipeline] Stage %d: Ingredient/Side image added (type: %s)", stageIndex, attachType)
+						} else if toppingTypes[attachType] {
 							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
-							log.Printf("✅ Stage %d: Accessory image added (type: %s)", stageIndex, attachType)
+							log.Printf("✅ [Eats Pipeline] Stage %d: Topping/Garnish image added (type: %s)", stageIndex, attachType)
 						} else {
-							log.Printf("⚠️  Stage %d: Unknown type: %s, skipping", stageIndex, attachType)
+							// 알 수 없는 타입은 부재료로 처리
+							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
+							log.Printf("⚠️  [Eats Pipeline] Stage %d: Unknown type '%s' treated as ingredient", stageIndex, attachType)
 						}
 					}
 				}
 
-				log.Printf("✅ Stage %d: Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-					stageIndex, stageCategories.Model != nil, len(stageCategories.Clothing),
-					len(stageCategories.Accessories), stageCategories.Background != nil)
+				log.Printf("✅ [Eats Pipeline] Stage %d: Images classified - Food:%d, Ingredients:%d, Toppings:%d, BG:%d",
+					stageIndex, len(models), len(stageCategories.Clothing),
+					len(stageCategories.Accessories), len(backgrounds))
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
 				// 레거시 방식: mergedImageAttachId
@@ -614,6 +619,18 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
+				// 여러 모델(음식) 이미지가 있으면 rotate
+				if len(models) > 0 {
+					stageCategories.Model = models[i%len(models)]
+					log.Printf("🔄 [Eats Pipeline] Stage %d: Using model %d/%d for image %d", stageIndex, (i%len(models))+1, len(models), i+1)
+				}
+
+				// 여러 배경이 있으면 rotate
+				if len(backgrounds) > 0 {
+					stageCategories.Background = backgrounds[i%len(backgrounds)]
+					log.Printf("🔄 [Eats Pipeline] Stage %d: Using background %d/%d for image %d", stageIndex, (i%len(backgrounds))+1, len(backgrounds), i+1)
+				}
+
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
