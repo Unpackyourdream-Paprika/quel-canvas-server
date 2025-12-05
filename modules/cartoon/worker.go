@@ -221,6 +221,28 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	generatedAttachIds := []int{}
 	completedCount := 0
 
+	log.Printf("Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
+
+	// Semaphore: 최대 2개 조합만 동시 처리
+	semaphore := make(chan struct{}, 2)
+
+	for comboIdx, combo := range combinations {
+		wg.Add(1)
+
+		go func(idx int, combo map[string]interface{}) {
+			defer wg.Done()
+
+			// Semaphore 획득 (최대 2개까지만)
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }() // 완료 시 반환
+
+			angle := fallback.SafeString(combo["angle"], "front")
+			shot := fallback.SafeString(combo["shot"], "full")
+			quantity := fallback.SafeInt(combo["quantity"], 1)
+
+			log.Printf("Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
+				idx+1, len(combinations), angle, shot, quantity)
+
 			// 앵글/샷 정보만 간단히 추가
 			enhancedPrompt := fmt.Sprintf("%s view, %s. %s", angle, shot, basePrompt)
 
