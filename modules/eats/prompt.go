@@ -185,7 +185,20 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"✓ ONE dish in ONE presentation at ONE moment in time\n" +
 		"✓ NO repeating elements on left and right sides\n" +
 		"✓ The entire image is ONE COHESIVE PHOTOGRAPH - not a collage or split screen\n" +
-		"✓ Background elements (table, walls, windows) must be CONTINUOUS with no breaks or seams\n"
+		"✓ Background elements (table, walls, windows) must be CONTINUOUS with no breaks or seams\n\n" +
+		"[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:\n" +
+		"- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides\n" +
+		"- NO grid, NO collage, NO comparison view, NO before/after layout\n" +
+		"- NO vertical dividing line, NO center split, NO symmetrical duplication\n" +
+		"- NO white/gray borders, NO letterboxing, NO empty margins on any side\n" +
+		"- NO multiple identical poses, NO mirrored images, NO panel divisions\n" +
+		"- NO vertical portrait orientation with side margins\n\n" +
+		"[REQUIRED - MUST GENERATE THIS WAY]:\n" +
+		"- ONE single continuous photograph taken with ONE camera shutter\n" +
+		"- ONE unified moment in time - NOT two or more moments combined\n" +
+		"- FILL entire frame edge-to-edge with NO empty space\n" +
+		"- Natural asymmetric composition - left side MUST be different from right side\n" +
+		"- Professional editorial style - real single-shot photography only\n"
 
 	if hasMainDish {
 		// 메인 요리 있는 케이스 - 음식 에디토리얼 규칙
@@ -389,8 +402,14 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		finalPrompt = criticalHeader
 	}
 
+	// 카테고리별 고정 스타일 가이드
+	categoryStyleGuide := "\n\n[FOOD PHOTOGRAPHY STYLE GUIDE]\n" +
+		"Food photography style. Overhead or 45-degree angle. Natural lighting or soft studio lights. Appetizing presentation.\n\n" +
+		"[TECHNICAL CONSTRAINTS]\n" +
+		"ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides.\n"
+
 	// 2️⃣ 나머지 지시사항들
-	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + categoryStyleGuide + criticalRules + aspectRatioInstruction
 
 	return finalPrompt
 }
