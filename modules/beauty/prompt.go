@@ -266,7 +266,20 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	commonForbidden := "\n\n[CRITICAL: SINGLE UNIFIED SCENE ONLY]\n" +
 		"⚠️ NO SPLIT SCREENS, NO GRIDS, NO COLLAGES.\n" +
 		"⚠️ ONE continuous composition with ONE background.\n" +
-		"⚠️ NO vertical or horizontal dividing lines.\n" +
+		"⚠️ NO vertical or horizontal dividing lines.\n\n" +
+		"[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:\n" +
+		"- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides\n" +
+		"- NO grid, NO collage, NO comparison view, NO before/after layout\n" +
+		"- NO vertical dividing line, NO center split, NO symmetrical duplication\n" +
+		"- NO white/gray borders, NO letterboxing, NO empty margins on any side\n" +
+		"- NO multiple identical poses, NO mirrored images, NO panel divisions\n" +
+		"- NO vertical portrait orientation with side margins\n\n" +
+		"[REQUIRED - MUST GENERATE THIS WAY]:\n" +
+		"- ONE single continuous photograph taken with ONE camera shutter\n" +
+		"- ONE unified moment in time - NOT two or more moments combined\n" +
+		"- FILL entire frame edge-to-edge with NO empty space\n" +
+		"- Natural asymmetric composition - left side MUST be different from right side\n" +
+		"- Professional editorial style - real single-shot photography only\n" +
 		func() string {
 			productCount := len(categories.Products)
 			if productCount > 0 {
@@ -360,8 +373,14 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		}
 	}
 
-	// 최종 조합: 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
-	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+	// 카테고리별 고정 스타일 가이드
+	categoryStyleGuide := "\n\n[BEAUTY PHOTOGRAPHY STYLE GUIDE]\n" +
+		"Beauty product photography, cosmetic packaging shot, professional product lighting, clean background, high-end commercial photography, luxury cosmetic brand style, focus on product texture and packaging details, NO people, NO human faces, product only\n\n" +
+		"[TECHNICAL CONSTRAINTS]\n" +
+		"ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides.\n"
+
+	// 최종 조합: 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 카테고리 스타일 → 핵심 규칙 → 16:9 특화
+	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + categoryStyleGuide + criticalRules + aspectRatioInstruction
 
 	if userPrompt != "" {
 		finalPrompt += "\n\n[ADDITIONAL STYLING]\n" + userPrompt
