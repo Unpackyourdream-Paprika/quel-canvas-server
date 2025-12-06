@@ -108,7 +108,20 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"✓ ONE unified comic panel - no split/collage layouts\n" +
 		"✓ Character wears all referenced clothing/items\n" +
 		"❌ NO photorealistic rendering\n" +
-		"❌ NO vertical dividing lines or panel splits\n"
+		"❌ NO vertical dividing lines or panel splits\n\n" +
+		"[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:\n" +
+		"- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides\n" +
+		"- NO grid, NO collage, NO comparison view, NO before/after layout\n" +
+		"- NO vertical dividing line, NO center split, NO symmetrical duplication\n" +
+		"- NO white/gray borders, NO letterboxing, NO empty margins on any side\n" +
+		"- NO multiple identical poses, NO mirrored images, NO panel divisions\n" +
+		"- NO vertical portrait orientation with side margins\n\n" +
+		"[REQUIRED - MUST GENERATE THIS WAY]:\n" +
+		"- ONE single continuous illustration in ONE unified style\n" +
+		"- ONE unified moment in time - NOT two or more moments combined\n" +
+		"- FILL entire frame edge-to-edge with NO empty space\n" +
+		"- Natural asymmetric composition - left side MUST be different from right side\n" +
+		"- Professional webtoon/manga style - single panel illustration only\n"
 
 	// Aspect ratio 기본 지시
 	var aspectRatioHint string
@@ -120,11 +133,18 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		aspectRatioHint = "\n[FORMAT: Square] Balanced webtoon character composition.\n"
 	}
 
-	// 최종 조합: 스타일 → 참조 이미지 → 캐릭터 묘사(사용자) → 구성 → 금지사항 → 비율
+	// 카테고리별 고정 스타일 가이드
+	categoryStyleGuide := "\n\n[CARTOON CHARACTER DESCRIPTION GUIDE]\n" +
+		"Describe character details: facial expression (eyes, mouth, eyebrows), gesture (hand position, arm movement), body pose (standing, sitting, jumping), emotion (happy, angry, surprised, sad), and situation (what they are doing). Be specific and detailed. Do NOT mention art style, colors, or visual effects.\n\n" +
+		"[TECHNICAL CONSTRAINTS]\n" +
+		"ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides.\n"
+
+	// 최종 조합: 스타일 → 참조 이미지 → 캐릭터 묘사(사용자) → 구성 → 카테고리 스타일 → 금지사항 → 비율
 	finalPrompt := baseStyle +
 		strings.Join(instructions, "\n") +
 		characterDescription +
 		compositionInstruction +
+		categoryStyleGuide +
 		criticalRules +
 		aspectRatioHint
 

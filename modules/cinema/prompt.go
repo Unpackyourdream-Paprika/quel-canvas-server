@@ -87,13 +87,32 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	}
 	promptBuilder.WriteString("\n")
 
+	// 카테고리별 고정 스타일 가이드
+	promptBuilder.WriteString("[CINEMATIC PHOTOGRAPHY STYLE GUIDE]\n")
+	promptBuilder.WriteString("Cinematic scene. Natural lighting. Emotional depth. Film grain. Anamorphic lens. Professional composition.\n\n")
+	promptBuilder.WriteString("[TECHNICAL CONSTRAINTS]\n")
+	promptBuilder.WriteString("ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides.\n\n")
+
 	// 6. [NEGATIVE CONSTRAINTS] - 절대 금지 사항 (핵심만)
 	promptBuilder.WriteString("[STRICT NEGATIVE CONSTRAINTS]\n")
 	promptBuilder.WriteString("- NO distorted faces or bodies.\n")
 	promptBuilder.WriteString("- NO missing people (Must have exactly the number specified).\n")
 	promptBuilder.WriteString("- NO extra people (Do not add random crowds).\n")
 	promptBuilder.WriteString("- NO split screens, borders, or collage layouts.\n")
-	promptBuilder.WriteString("- NO cartoon, illustration, or 3D render style. Must be PHOTO-REAL.\n")
+	promptBuilder.WriteString("- NO cartoon, illustration, or 3D render style. Must be PHOTO-REAL.\n\n")
+	promptBuilder.WriteString("[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:\n")
+	promptBuilder.WriteString("- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides\n")
+	promptBuilder.WriteString("- NO grid, NO collage, NO comparison view, NO before/after layout\n")
+	promptBuilder.WriteString("- NO vertical dividing line, NO center split, NO symmetrical duplication\n")
+	promptBuilder.WriteString("- NO white/gray borders, NO letterboxing, NO empty margins on any side\n")
+	promptBuilder.WriteString("- NO multiple identical poses, NO mirrored images, NO panel divisions\n")
+	promptBuilder.WriteString("- NO vertical portrait orientation with side margins\n\n")
+	promptBuilder.WriteString("[REQUIRED - MUST GENERATE THIS WAY]:\n")
+	promptBuilder.WriteString("- ONE single continuous photograph taken with ONE camera shutter\n")
+	promptBuilder.WriteString("- ONE unified moment in time - NOT two or more moments combined\n")
+	promptBuilder.WriteString("- FILL entire frame edge-to-edge with NO empty space\n")
+	promptBuilder.WriteString("- Natural asymmetric composition - left side MUST be different from right side\n")
+	promptBuilder.WriteString("- Professional editorial style - real single-shot photography only\n")
 
 	// 7. [USER INSTRUCTION] - 사용자 입력 (최우선 적용)
 	if userPrompt != "" {
