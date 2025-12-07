@@ -297,6 +297,19 @@ MANDATORY TECHNICAL SPECS:
 				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
+					// 403 PERMISSION_DENIED 에러 체크
+					if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+						log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
+						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+							log.Printf("❌ Failed to update job status to error: %v", err)
+						}
+						if job.ProductionID != nil {
+							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+								log.Printf("❌ Failed to update production status to error: %v", err)
+							}
+						}
+						return
+					}
 					continue
 				}
 
@@ -670,6 +683,18 @@ MANDATORY TECHNICAL SPECS:
 				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, enhancedPrompt, aspectRatio)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
+					if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+						log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
+						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+							log.Printf("❌ Failed to update job status to error: %v", err)
+						}
+						if job.ProductionID != nil {
+							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+								log.Printf("❌ Failed to update production status to error: %v", err)
+							}
+						}
+						return
+					}
 					continue
 				}
 
@@ -849,6 +874,18 @@ MANDATORY TECHNICAL SPECS:
 			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio)
 			if err != nil {
 				log.Printf("❌ Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
+				if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+					log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping retry.")
+					if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+						log.Printf("❌ Failed to update job status to error: %v", err)
+					}
+					if job.ProductionID != nil {
+						if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+							log.Printf("❌ Failed to update production status to error: %v", err)
+						}
+					}
+					return
+				}
 				continue
 			}
 
@@ -1104,6 +1141,18 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Images[0], prompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
+			if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+				log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
+				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+					log.Printf("❌ Failed to update job status to error: %v", err)
+				}
+				if job.ProductionID != nil {
+					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+						log.Printf("❌ Failed to update production status to error: %v", err)
+					}
+				}
+				return
+			}
 			continue
 		}
 
@@ -1252,6 +1301,18 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, wrappingPrompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
+			if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+				log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
+				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+					log.Printf("❌ Failed to update job status to error: %v", err)
+				}
+				if job.ProductionID != nil {
+					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+						log.Printf("❌ Failed to update production status to error: %v", err)
+					}
+				}
+				return
+			}
 			continue
 		}
 
