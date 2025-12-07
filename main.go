@@ -10,10 +10,12 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/modify"
+	"quel-canvas-server/modules/multiview"
 	"quel-canvas-server/modules/preview"
 	"quel-canvas-server/modules/unified-prompt/landing"
 	"quel-canvas-server/modules/unified-prompt/studio"
 	"quel-canvas-server/modules/worker"
+	landingdemo "quel-canvas-server/modules/landing-demo"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -659,6 +661,23 @@ func main() {
 		log.Println("⚠️ Failed to initialize Studio handler")
 	}
 
+	// Landing Demo 라우트 등록 (체험존 - 무제한)
+	landingDemoHandler := landingdemo.NewHandler()
+	if landingDemoHandler != nil {
+		r.HandleFunc("/api/landing-demo/generate", landingDemoHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		log.Println("✅ Landing Demo routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Landing Demo handler")
+	}
+
+	// Multiview 360 라우트 등록
+	multiviewHandler := multiview.NewHandler()
+	if multiviewHandler != nil {
+		multiviewHandler.RegisterRoutes(r)
+	} else {
+		log.Println("⚠️ Failed to initialize Multiview handler")
+	}
+
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -675,6 +694,8 @@ func main() {
 	log.Printf("Job cancel: http://localhost:%s/api/jobs/{jobId}/cancel", port)
 	log.Printf("Unified Prompt Landing: http://localhost:%s/api/unified-prompt/landing/generate", port)
 	log.Printf("Unified Prompt Studio: http://localhost:%s/api/unified-prompt/studio/generate", port)
+	log.Printf("Landing Demo: http://localhost:%s/api/landing-demo/generate", port)
+	log.Printf("Multiview 360: http://localhost:%s/api/multiview/generate", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
