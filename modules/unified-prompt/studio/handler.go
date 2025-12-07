@@ -174,3 +174,71 @@ func (h *Handler) HandleCheckCredits(w http.ResponseWriter, r *http.Request) {
 		"credits": credits,
 	})
 }
+
+// HandleAnalyze - POST /api/unified-prompt/studio/analyze
+// 이미지 분석하여 레시피용 프롬프트 추출
+func (h *Handler) HandleAnalyze(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	// OPTIONS 요청 처리
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// POST만 허용
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Service 확인
+	if h.service == nil {
+		log.Println("❌ [Studio] Service not initialized")
+		json.NewEncoder(w).Encode(StudioAnalyzeResponse{
+			Success:      false,
+			ErrorMessage: "Service unavailable",
+			ErrorCode:    common.ErrCodeInternalError,
+		})
+		return
+	}
+
+	// Request 파싱
+	var req StudioAnalyzeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("❌ [Studio] Invalid analyze request: %v", err)
+		json.NewEncoder(w).Encode(StudioAnalyzeResponse{
+			Success:      false,
+			ErrorMessage: "Invalid request format",
+			ErrorCode:    common.ErrCodeInvalidRequest,
+		})
+		return
+	}
+
+	// 요청 검증
+	if strings.TrimSpace(req.ImageURL) == "" {
+		json.NewEncoder(w).Encode(StudioAnalyzeResponse{
+			Success:      false,
+			ErrorMessage: "Image URL is required",
+			ErrorCode:    common.ErrCodeInvalidRequest,
+		})
+		return
+	}
+
+	ctx := r.Context()
+
+	log.Printf("🔍 [Studio] Processing analyze request: category=%s", req.Category)
+
+	// 이미지 분석
+	response, err := h.service.AnalyzeImage(ctx, &req)
+	if err != nil {
+		log.Printf("❌ [Studio] Analysis failed: %v", err)
+	}
+
+	log.Printf("✅ [Studio] Analyze response sent: success=%v", response.Success)
+
+	json.NewEncoder(w).Encode(response)
+}
