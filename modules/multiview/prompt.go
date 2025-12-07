@@ -8,7 +8,8 @@ import "fmt"
 // category: 카테고리 (fashion, beauty, etc.)
 // originalPrompt: 원본 프롬프트 (있는 경우)
 // hasReference: 해당 각도에 레퍼런스 이미지가 있는지
-func BuildMultiviewPrompt(sourceAngle, targetAngle int, category, originalPrompt string, hasReference bool) string {
+// rotateBackground: 배경도 함께 회전할지 여부
+func BuildMultiviewPrompt(sourceAngle, targetAngle int, category, originalPrompt string, hasReference, rotateBackground bool) string {
 	angleLabel := GetAngleLabel(targetAngle)
 	angleDiff := targetAngle - sourceAngle
 	if angleDiff < 0 {
@@ -27,16 +28,22 @@ func BuildMultiviewPrompt(sourceAngle, targetAngle int, category, originalPrompt
 	if hasReference {
 		// 레퍼런스 이미지가 있는 경우 - 더 정확한 재현
 		prompt = fmt.Sprintf(`You are given two images:
-1. The FIRST image is the SOURCE image showing the subject from the front view (0 degrees)
-2. The SECOND image is the REFERENCE image showing how the subject should look from the %s view (%d degrees)
+1. The FIRST image is the SOURCE image showing a scene from the front view (0 degrees)
+2. The SECOND image is the REFERENCE image showing how the scene should look from the %s view (%d degrees)
 
-TASK: Generate a new image that shows the SAME subject from the SOURCE image, but from the %s angle (%d degrees).
+TASK: Generate a new image that shows the SAME ENTIRE SCENE from the SOURCE image, but viewed from the %s angle (%d degrees).
+
+IMPORTANT - CAMERA ORBIT ROTATION:
+Imagine the camera is orbiting around the ENTIRE SCENE (not just the subject).
+The camera moves %s while keeping the scene center fixed.
+BOTH the subject AND the background/environment should rotate together as a unified scene.
 
 CRITICAL REQUIREMENTS:
-- The generated image MUST maintain the EXACT same subject identity, clothing, colors, textures, and details as the SOURCE image
+- The generated image MUST show the ENTIRE SCENE rotated, including background and environment
+- Maintain the EXACT same subject identity, clothing, colors, textures, and details
+- The background should change perspective naturally as the camera orbits (e.g., if there's a wall on the left in front view, it should appear differently from side/back views)
 - Use the REFERENCE image as a guide for the correct angle, pose, and perspective
-- The rotation should be %s from the front view
-- Maintain consistent lighting and style with the source image
+- Maintain consistent lighting direction relative to the scene
 - %s
 
 OUTPUT: Generate ONLY the image, no text or explanations.`,
@@ -46,33 +53,60 @@ OUTPUT: Generate ONLY the image, no text or explanations.`,
 			categoryContext)
 	} else {
 		// 레퍼런스 이미지가 없는 경우 - AI가 각도 추론
-		prompt = fmt.Sprintf(`You are given an image showing a subject from the FRONT VIEW (0 degrees).
+		if rotateBackground {
+			// 배경도 함께 회전하는 경우 (카메라가 씬 주위를 공전)
+			prompt = fmt.Sprintf(`Generate the SAME ENTIRE SCENE from a different camera angle. The camera is orbiting around the scene.
 
-TASK: Generate a new image that shows the EXACT SAME subject from the %s angle (%d degrees).
+TARGET: %s view (%d degrees) - %s
 
-ROTATION DETAILS:
-- Current view: Front (0 degrees)
-- Target view: %s (%d degrees)
-- Rotation: %s from the current view
+IMPORTANT - CAMERA ORBIT ROTATION:
+The camera moves around the ENTIRE SCENE (including background).
+Both the subject AND the background/environment rotate together as a unified scene.
 
-CRITICAL REQUIREMENTS:
-- The generated image MUST maintain the EXACT same subject identity
-- Keep all visual details consistent: colors, textures, patterns, materials
-- Properly show the subject as it would appear when rotated %d degrees
-- For %s view: %s
-- Maintain consistent lighting, shadows, and atmosphere
-- %s
+REQUIREMENTS:
+1. Show the subject from their %s: %s
+2. The background should also rotate with the camera orbit - show what would naturally be visible from this camera position
+3. Keep the subject's identity, clothing, colors exactly the same
+4. The overall mood and lighting style should be consistent
+5. Imagine the camera is physically moving around the scene, so the background perspective changes accordingly
 
 %s
 
-OUTPUT: Generate ONLY the image, no text or explanations.`,
-			angleLabel, targetAngle,
-			angleLabel, targetAngle,
-			rotationDesc,
-			targetAngle,
-			angleLabel, getAngleSpecificGuidance(targetAngle),
-			categoryContext,
-			getOriginalPromptContext(originalPrompt))
+%s
+
+OUTPUT: Generate ONLY the image. No text.`,
+				angleLabel, targetAngle, rotationDesc,
+				angleLabel, getAngleSpecificGuidance(targetAngle),
+				categoryContext,
+				getOriginalPromptContext(originalPrompt))
+		} else {
+			// 배경 고정 - 피사체만 회전 (기본값)
+			prompt = fmt.Sprintf(`Generate the SAME SUBJECT from a different viewing angle, keeping the background fixed.
+
+TARGET: %s view (%d degrees) - %s
+
+IMPORTANT - SUBJECT ROTATION ONLY:
+Only rotate the SUBJECT (person/object), NOT the background.
+Keep the same background/environment as the original image.
+The subject should appear to have turned/rotated while standing in the same place.
+
+REQUIREMENTS:
+1. Show the subject from their %s: %s
+2. Keep the EXACT SAME background as the original image (do not rotate or change the background)
+3. Keep the subject's identity, clothing, colors exactly the same
+4. The subject should look like they simply turned to face a different direction
+5. The overall mood and lighting style should be consistent
+
+%s
+
+%s
+
+OUTPUT: Generate ONLY the image. No text.`,
+				angleLabel, targetAngle, rotationDesc,
+				angleLabel, getAngleSpecificGuidance(targetAngle),
+				categoryContext,
+				getOriginalPromptContext(originalPrompt))
+		}
 	}
 
 	return prompt
@@ -177,6 +211,75 @@ func getOriginalPromptContext(originalPrompt string) string {
 ORIGINAL DESCRIPTION:
 The source image was created with this context: "%s"
 Use this information to better understand the subject and maintain consistency.`, originalPrompt)
+}
+
+// getBackgroundAngleDescription - 배경이 어떻게 보여야 하는지 설명
+func getBackgroundAngleDescription(angle int) string {
+	switch angle {
+	case 45:
+		return "right-front"
+	case 90:
+		return "right"
+	case 135:
+		return "right-back"
+	case 180:
+		return "back"
+	case 225:
+		return "left-back"
+	case 270:
+		return "left"
+	case 315:
+		return "left-front"
+	default:
+		return "corresponding"
+	}
+}
+
+// getDetailedAngleInstruction - 각도별 상세 지시
+func getDetailedAngleInstruction(angle int) string {
+	switch angle {
+	case 45:
+		return `- Camera moved 45° to the right
+- We now see the subject's front-right side
+- Background elements that were on the LEFT in original are now more visible
+- Background elements on the RIGHT are now less visible or hidden
+- The arch/doorway frame should show its right inner edge more`
+	case 90:
+		return `- Camera moved 90° to the right (side view)
+- We now see the subject's complete right profile
+- Background that was BEHIND the subject is now on the LEFT side of frame
+- Background that was in FRONT is now on the RIGHT side
+- The arch/doorway should be viewed from its side`
+	case 135:
+		return `- Camera moved 135° (back-right view)
+- We see mostly the subject's back with some right side visible
+- The original background is now mostly on our LEFT
+- We should see what was BEHIND the camera in the original shot
+- The arch is now viewed from behind-right`
+	case 180:
+		return `- Camera moved 180° (complete back view)
+- We see the subject's back completely
+- The original background (building/arch) should now be BEHIND the camera
+- We see what was originally behind the photographer
+- The arch/doorway is now behind us, not visible`
+	case 225:
+		return `- Camera moved 225° (back-left view)
+- We see mostly the subject's back with some left side visible
+- Similar to 135° but mirrored
+- The arch is viewed from behind-left`
+	case 270:
+		return `- Camera moved 270° to the left (left side view)
+- We see the subject's complete left profile
+- Background layout is mirrored from 90° view
+- The arch/doorway viewed from its left side`
+	case 315:
+		return `- Camera moved 315° (front-left view)
+- We see the subject's front-left side
+- Background elements on the RIGHT in original are now more visible
+- The arch should show its left inner edge more`
+	default:
+		return "Rotate the entire scene accordingly"
+	}
 }
 
 // BuildConsistencyCheckPrompt - 일관성 체크를 위한 프롬프트 (선택적 사용)

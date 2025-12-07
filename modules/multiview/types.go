@@ -25,6 +25,9 @@ type MultiviewGenerateRequest struct {
 
 	// Aspect Ratio (기본: 1:1)
 	AspectRatio string `json:"aspectRatio,omitempty"`
+
+	// 배경도 함께 회전할지 여부 (기본: false = 배경 고정)
+	RotateBackground bool `json:"rotateBackground,omitempty"`
 }
 
 // ReferenceImageWithAngle - 특정 각도에 대한 레퍼런스 이미지

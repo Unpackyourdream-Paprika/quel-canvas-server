@@ -15,6 +15,7 @@ import (
 	"quel-canvas-server/modules/eats"
 	"quel-canvas-server/modules/fashion"
 	"quel-canvas-server/modules/modify"
+	"quel-canvas-server/modules/multiview"
 )
 
 // StartWorker - Redis Queue Worker 시작
@@ -139,6 +140,10 @@ func processJob(ctx context.Context, dbClient *database.Client, jobID string) {
 	case "cartoon":
 		log.Printf("🎨 Routing to Cartoon module")
 		cartoon.ProcessJob(ctx, job)
+
+	case "multiview":
+		log.Printf("🌐 Routing to Multiview module")
+		multiview.ProcessJob(ctx, job)
 
 	default:
 		log.Printf("⚠️  Unknown quel_production_path: %s, using Fashion as default", path)

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 
 	"github.com/supabase-community/supabase-go"
 	"quel-canvas-server/modules/common/config"
@@ -223,6 +225,100 @@ func (c *Client) UpdateJobProgress(ctx context.Context, jobID string, completedI
 
 	log.Printf("✅ Job progress updated: %d images completed", completedImages)
 	return nil
+}
+
+// UpdateJobFailed - Job 실패 상태 업데이트
+func (c *Client) UpdateJobFailed(ctx context.Context, jobID string, errorMsg string) error {
+	log.Printf("❌ Updating job %s as failed: %s", jobID, errorMsg)
+
+	updateData := map[string]interface{}{
+		"job_status":    model.StatusFailed,
+		"error_message": errorMsg,
+		"completed_at":  "now()",
+		"updated_at":    "now()",
+	}
+
+	_, _, err := c.supabase.From("quel_production_jobs").
+		Update(updateData, "", "").
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to update job failed status: %w", err)
+	}
+
+	log.Printf("✅ Job %s marked as failed", jobID)
+	return nil
+}
+
+// UpdateJobCompleted - Job 완료 상태 업데이트
+func (c *Client) UpdateJobCompleted(ctx context.Context, jobID string, generatedAttachIDs []interface{}) error {
+	log.Printf("✅ Updating job %s as completed with %d attach IDs", jobID, len(generatedAttachIDs))
+
+	updateData := map[string]interface{}{
+		"job_status":           model.StatusCompleted,
+		"completed_images":     len(generatedAttachIDs),
+		"generated_attach_ids": generatedAttachIDs,
+		"completed_at":         "now()",
+		"updated_at":           "now()",
+	}
+
+	_, _, err := c.supabase.From("quel_production_jobs").
+		Update(updateData, "", "").
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to update job completed status: %w", err)
+	}
+
+	log.Printf("✅ Job %s marked as completed", jobID)
+	return nil
+}
+
+// DownloadImageFromStorage - Storage에서 이미지 다운로드
+func (c *Client) DownloadImageFromStorage(attachID int) ([]byte, error) {
+	cfg := config.GetConfig()
+
+	// 1. quel_attach에서 파일 경로 조회
+	attach, err := c.FetchAttachInfo(attachID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. attach_file_path 확인 (없으면 attach_directory 사용)
+	var filePath string
+	if attach.AttachFilePath != nil && *attach.AttachFilePath != "" {
+		filePath = *attach.AttachFilePath
+	} else if attach.AttachDirectory != nil && *attach.AttachDirectory != "" {
+		filePath = *attach.AttachDirectory
+	} else {
+		return nil, fmt.Errorf("no file path for attach_id: %d", attachID)
+	}
+
+	log.Printf("📥 Downloading image from Storage: %s", filePath)
+
+	// 3. Supabase Storage에서 다운로드
+	downloadURL := fmt.Sprintf("%s/storage/v1/object/attachments/%s", cfg.SupabaseURL, filePath)
+
+	resp, err := http.Get(downloadURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("download failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image data: %w", err)
+	}
+
+	log.Printf("✅ Image downloaded: %d bytes from %s", len(imageData), filePath)
+	return imageData, nil
 }
 
 // UpdateProductionAttachIds - Production Photo의 attach_ids 배열에 추가

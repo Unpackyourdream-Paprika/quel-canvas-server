@@ -200,7 +200,7 @@ func (s *Service) GenerateMultiview(ctx context.Context, req *MultiviewGenerateR
 		}
 
 		// 프롬프트 생성
-		prompt := BuildMultiviewPrompt(0, angle, req.Category, req.OriginalPrompt, hasReference)
+		prompt := BuildMultiviewPrompt(0, angle, req.Category, req.OriginalPrompt, hasReference, req.RotateBackground)
 		parts = append(parts, genai.NewPartFromText(prompt))
 
 		// Content 생성
