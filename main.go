@@ -11,6 +11,8 @@ import (
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/modify"
 	"quel-canvas-server/modules/preview"
+	"quel-canvas-server/modules/unified-prompt/landing"
+	"quel-canvas-server/modules/unified-prompt/studio"
 	"quel-canvas-server/modules/worker"
 
 	"github.com/gorilla/mux"
@@ -636,6 +638,26 @@ func main() {
 		log.Println("Failed to initialize Cancel handler")
 	}
 
+	// Unified Prompt - Landing 라우트 등록
+	landingHandler := landing.NewHandler()
+	if landingHandler != nil {
+		r.HandleFunc("/api/unified-prompt/landing/generate", landingHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		r.HandleFunc("/api/unified-prompt/landing/check-limit", landingHandler.HandleCheckLimit).Methods("GET", "OPTIONS")
+		log.Println("✅ Unified Prompt Landing routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Landing handler")
+	}
+
+	// Unified Prompt - Studio 라우트 등록
+	studioHandler := studio.NewHandler()
+	if studioHandler != nil {
+		r.HandleFunc("/api/unified-prompt/studio/generate", studioHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		r.HandleFunc("/api/unified-prompt/studio/check-credits", studioHandler.HandleCheckCredits).Methods("GET", "OPTIONS")
+		log.Println("✅ Unified Prompt Studio routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Studio handler")
+	}
+
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -650,6 +672,8 @@ func main() {
 	log.Printf("Modify submit: http://localhost:%s/api/modify/submit", port)
 	log.Printf("Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
 	log.Printf("Job cancel: http://localhost:%s/api/jobs/{jobId}/cancel", port)
+	log.Printf("Unified Prompt Landing: http://localhost:%s/api/unified-prompt/landing/generate", port)
+	log.Printf("Unified Prompt Studio: http://localhost:%s/api/unified-prompt/studio/generate", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
