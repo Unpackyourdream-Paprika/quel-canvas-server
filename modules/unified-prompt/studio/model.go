@@ -52,3 +52,18 @@ const (
 	JobStatusCompleted  = "completed"
 	JobStatusFailed     = "failed"
 )
+
+// StudioAnalyzeRequest - 이미지 분석 요청 (레시피 생성용)
+type StudioAnalyzeRequest struct {
+	ImageURL       string `json:"imageUrl"`       // 분석할 이미지 URL 또는 Base64
+	Category       string `json:"category"`       // fashion, beauty, eats, cinema, cartoon
+	OriginalPrompt string `json:"originalPrompt"` // 사용자가 입력한 원본 프롬프트
+}
+
+// StudioAnalyzeResponse - 이미지 분석 응답
+type StudioAnalyzeResponse struct {
+	Success      bool   `json:"success"`
+	Prompt       string `json:"prompt,omitempty"`       // 분석된 상세 프롬프트
+	ErrorMessage string `json:"errorMessage,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
+}

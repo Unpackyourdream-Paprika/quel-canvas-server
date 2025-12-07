@@ -171,7 +171,7 @@ func (s *Service) GenerateImage(ctx context.Context, req *StudioGenerateRequest)
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
 			},
-			Temperature: floatPtr(0.5), // 카테고리별 일관성을 위해 약간 낮춤
+			Temperature: floatPtr(0.7), // 더 창의적인 이미지 생성을 위해
 		},
 	)
 	if err != nil {
@@ -431,4 +431,175 @@ func findBase64Start(s string) int {
 func floatPtr(f float64) *float32 {
 	f32 := float32(f)
 	return &f32
+}
+
+// AnalyzeImage - 이미지 분석하여 상세 프롬프트 추출 (레시피 생성용)
+func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (*StudioAnalyzeResponse, error) {
+	log.Printf("🔍 [Studio] Analyzing image for recipe - category: %s", req.Category)
+
+	// 이미지 데이터 준비
+	var parts []*genai.Part
+
+	// 이미지 URL 또는 Base64 처리
+	if req.ImageURL != "" {
+		var imageData []byte
+		var err error
+
+		if findBase64Start(req.ImageURL) > 0 {
+			// Base64 이미지
+			base64Data := req.ImageURL[findBase64Start(req.ImageURL):]
+			imageData, err = base64.StdEncoding.DecodeString(base64Data)
+			if err != nil {
+				log.Printf("❌ [Studio] Failed to decode base64 image: %v", err)
+				return &StudioAnalyzeResponse{
+					Success:      false,
+					ErrorMessage: "Failed to decode image",
+				}, err
+			}
+		} else if len(req.ImageURL) > 100 && !hasHTTPPrefix(req.ImageURL) {
+			// Raw Base64 (prefix 없이)
+			imageData, err = base64.StdEncoding.DecodeString(req.ImageURL)
+			if err != nil {
+				log.Printf("❌ [Studio] Failed to decode raw base64: %v", err)
+				return &StudioAnalyzeResponse{
+					Success:      false,
+					ErrorMessage: "Failed to decode image",
+				}, err
+			}
+		} else {
+			// HTTP URL - 이미지 다운로드
+			resp, err := http.Get(req.ImageURL)
+			if err != nil {
+				log.Printf("❌ [Studio] Failed to fetch image: %v", err)
+				return &StudioAnalyzeResponse{
+					Success:      false,
+					ErrorMessage: "Failed to fetch image",
+				}, err
+			}
+			defer resp.Body.Close()
+
+			imageData, err = io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("❌ [Studio] Failed to read image: %v", err)
+				return &StudioAnalyzeResponse{
+					Success:      false,
+					ErrorMessage: "Failed to read image",
+				}, err
+			}
+		}
+
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{
+				MIMEType: "image/png",
+				Data:     imageData,
+			},
+		})
+		log.Printf("📎 [Studio] Image loaded for analysis (%d bytes)", len(imageData))
+	}
+
+	// 분석 프롬프트 생성
+	analysisPrompt := buildAnalysisPrompt(req.Category, req.OriginalPrompt)
+	parts = append(parts, genai.NewPartFromText(analysisPrompt))
+
+	// Content 생성
+	content := &genai.Content{
+		Parts: parts,
+	}
+
+	// Gemini API 호출
+	log.Printf("📤 [Studio] Calling Gemini API for image analysis")
+	result, err := s.genaiClient.Models.GenerateContent(
+		ctx,
+		"gemini-2.0-flash", // 분석용은 빠른 모델 사용
+		[]*genai.Content{content},
+		&genai.GenerateContentConfig{
+			Temperature: floatPtr(0.3), // 분석은 일관성 있게
+		},
+	)
+	if err != nil {
+		log.Printf("❌ [Studio] Gemini API error: %v", err)
+		return &StudioAnalyzeResponse{
+			Success:      false,
+			ErrorMessage: "Image analysis failed",
+		}, err
+	}
+
+	// 응답에서 텍스트 추출
+	if len(result.Candidates) == 0 {
+		return &StudioAnalyzeResponse{
+			Success:      false,
+			ErrorMessage: "No analysis result",
+		}, fmt.Errorf("no candidates in response")
+	}
+
+	var analyzedPrompt string
+	for _, candidate := range result.Candidates {
+		if candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				analyzedPrompt = part.Text
+				break
+			}
+		}
+	}
+
+	if analyzedPrompt == "" {
+		return &StudioAnalyzeResponse{
+			Success:      false,
+			ErrorMessage: "No prompt extracted",
+		}, fmt.Errorf("no text in response")
+	}
+
+	log.Printf("✅ [Studio] Image analyzed: %s", truncateString(analyzedPrompt, 100))
+
+	return &StudioAnalyzeResponse{
+		Success: true,
+		Prompt:  analyzedPrompt,
+	}, nil
+}
+
+// buildAnalysisPrompt - 이미지 분석용 프롬프트 생성
+func buildAnalysisPrompt(category string, originalPrompt string) string {
+	categoryContext := ""
+	switch category {
+	case "fashion":
+		categoryContext = "fashion photography, clothing, style, pose, lighting"
+	case "beauty":
+		categoryContext = "beauty photography, makeup, skincare, cosmetics"
+	case "eats":
+		categoryContext = "food photography, cuisine, plating, ingredients"
+	case "cinema":
+		categoryContext = "cinematic photography, mood, lighting, composition"
+	case "cartoon":
+		categoryContext = "illustration style, character design, colors, art style"
+	default:
+		categoryContext = "commercial photography"
+	}
+
+	prompt := fmt.Sprintf(`Analyze this image and create a detailed prompt that could recreate a similar image.
+
+CONTEXT:
+- Category: %s
+- Original user prompt: %s
+
+TASK:
+Generate a detailed, concise prompt (2-3 sentences) that captures:
+1. Main subject/object description
+2. Style, lighting, and mood
+3. Key visual elements and composition
+
+OUTPUT FORMAT:
+Return ONLY the prompt text, no explanations or labels. The prompt should be in English and suitable for image generation.
+
+Example output format:
+"A woman wearing an elegant red silk evening gown, studio lighting with soft shadows, fashion editorial style, full body shot, front view"`, categoryContext, originalPrompt)
+
+	return prompt
+}
+
+// hasHTTPPrefix - URL이 http로 시작하는지 확인
+func hasHTTPPrefix(s string) bool {
+	return len(s) >= 4 && (s[:4] == "http" || s[:5] == "https")
 }

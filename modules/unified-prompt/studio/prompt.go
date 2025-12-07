@@ -148,7 +148,10 @@ AVOID:
 func BuildStudioPrompt(userPrompt string, category string, imageCount int) string {
 	config := GetCategoryPromptConfig(category)
 
-	prompt := config.SystemPrefix + "\n"
+	// 이미지 생성을 강제하는 핵심 지시문을 앞에 배치
+	prompt := `[IMPORTANT: You MUST generate an image. Do not respond with text only.]
+
+` + config.SystemPrefix + "\n"
 
 	if imageCount > 0 {
 		prompt += fmt.Sprintf(`
@@ -168,6 +171,7 @@ OUTPUT REQUIREMENTS:
 - Generate exactly ONE high-quality image
 - Single cohesive composition (no collages or split screens)
 - Professional quality suitable for commercial use
+- If the user's request doesn't match the category style, still generate a beautiful image interpreting their intent creatively
 
 USER'S CREATIVE DIRECTION:
 ` + userPrompt

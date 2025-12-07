@@ -653,6 +653,7 @@ func main() {
 	if studioHandler != nil {
 		r.HandleFunc("/api/unified-prompt/studio/generate", studioHandler.HandleGenerate).Methods("POST", "OPTIONS")
 		r.HandleFunc("/api/unified-prompt/studio/check-credits", studioHandler.HandleCheckCredits).Methods("GET", "OPTIONS")
+		r.HandleFunc("/api/unified-prompt/studio/analyze", studioHandler.HandleAnalyze).Methods("POST", "OPTIONS")
 		log.Println("✅ Unified Prompt Studio routes registered")
 	} else {
 		log.Println("⚠️ Failed to initialize Studio handler")
