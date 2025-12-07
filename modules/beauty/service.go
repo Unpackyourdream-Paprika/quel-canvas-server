@@ -129,7 +129,7 @@ func (s *Service) UpdateJobStatus(ctx context.Context, jobID string, status stri
 
 	if status == model.StatusProcessing {
 		updateData["started_at"] = "now()"
-	} else if status == model.StatusCompleted || status == model.StatusFailed {
+	} else if status == model.StatusCompleted || status == model.StatusFailed || status == model.StatusError {
 		updateData["completed_at"] = "now()"
 	}
 

@@ -70,4 +70,5 @@ const (
 	StatusCompleted     = "completed"
 	StatusFailed        = "failed"
 	StatusUserCancelled = "user_cancelled"
+	StatusError         = "error"
 )
