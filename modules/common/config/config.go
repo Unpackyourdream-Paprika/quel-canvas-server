@@ -52,7 +52,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// ImagePerPrice 파싱
-	imagePerPrice := 20 // 기본값
+	imagePerPrice := 5 // 기본값 (5 크레딧 = ₩500/장)
 	if priceStr := os.Getenv("IMAGE_PER_PRICE"); priceStr != "" {
 		if parsed, err := strconv.Atoi(priceStr); err == nil {
 			imagePerPrice = parsed
