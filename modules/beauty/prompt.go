@@ -50,8 +50,8 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		// Check if user prompt indicates a grid or multiple products (for pre-merged inputs)
 		isGridInput := false
 		lowerPrompt := strings.ToLower(userPrompt)
-		if strings.Contains(lowerPrompt, "grid") || 
-		   strings.Contains(lowerPrompt, "4 products") || 
+		if strings.Contains(lowerPrompt, "grid") ||
+		   strings.Contains(lowerPrompt, "4 products") ||
 		   strings.Contains(lowerPrompt, "four products") ||
 		   strings.Contains(lowerPrompt, "multiple products") {
 			isGridInput = true
@@ -61,41 +61,44 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		case 1:
 			if isGridInput {
 				productCountInstruction = "⚠️ CRITICAL: The reference image is a GRID containing MULTIPLE products.\n" +
-					"⚠️ YOU MUST SHOW ALL PRODUCTS visible in the reference grid.\n" +
-					"⚠️ Do not select just one. Show the entire set as presented.\n"
+					"⚠️ YOU MUST RECREATE ALL PRODUCTS visible in the reference grid EXACTLY.\n" +
+					"⚠️ Do not select just one. Recreate the entire set with EXACT colors, shapes, and packaging.\n"
 			} else {
-				// Allow flexibility if it might be a grid but not explicitly stated, 
+				// Allow flexibility if it might be a grid but not explicitly stated,
 				// but prioritize single product if it looks like one.
-				productCountInstruction = "⚠️ CRITICAL: Show the product(s) exactly as shown in the reference.\n" +
-					"⚠️ If the reference is a GRID of multiple items, SHOW ALL OF THEM.\n" +
-					"⚠️ If it is a single item, show exactly one.\n"
+				productCountInstruction = "⚠️ CRITICAL: RECREATE the product(s) EXACTLY as shown in the reference.\n" +
+					"⚠️ If the reference is a GRID of multiple items, RECREATE ALL OF THEM with exact colors and shapes.\n" +
+					"⚠️ If it is a single item, recreate exactly that one product with matching colors and packaging.\n"
 			}
 		case 2:
-			productCountInstruction = "⚠️ CRITICAL: Show EXACTLY 2 (TWO) products - both items from the reference must appear.\n" +
-				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY 2 products.\n"
+			productCountInstruction = "⚠️ CRITICAL: RECREATE EXACTLY 2 (TWO) products - both items from the reference must appear with EXACT colors and shapes.\n" +
+				"⚠️ DO NOT add extra products. DO NOT omit any. DO NOT change colors or packaging. EXACTLY 2 products.\n"
 		case 3:
-			productCountInstruction = "⚠️ CRITICAL: Show EXACTLY 3 (THREE) products - all three items from the reference must appear.\n" +
-				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY 3 products.\n"
+			productCountInstruction = "⚠️ CRITICAL: RECREATE EXACTLY 3 (THREE) products - all three items from the reference must appear with EXACT colors and shapes.\n" +
+				"⚠️ DO NOT add extra products. DO NOT omit any. DO NOT change colors or packaging. EXACTLY 3 products.\n"
 		case 4:
-			productCountInstruction = "⚠️ CRITICAL: Show EXACTLY 4 (FOUR) products - all four items from the reference must appear.\n" +
-				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY 4 products.\n" +
+			productCountInstruction = "⚠️ CRITICAL: RECREATE EXACTLY 4 (FOUR) products - all four items from the reference must appear with EXACT colors and shapes.\n" +
+				"⚠️ DO NOT add extra products. DO NOT omit any. DO NOT change colors or packaging. EXACTLY 4 products.\n" +
 				"⚠️ ARRANGE them naturally in the scene (e.g., a group composition), NOT as a 2x2 grid.\n"
 		default:
-			productCountInstruction = fmt.Sprintf("⚠️ CRITICAL: Show EXACTLY %d products - ALL items from the reference must appear.\n"+
-				"⚠️ DO NOT add extra products. DO NOT omit any. EXACTLY %d products.\n", productCount, productCount)
+			productCountInstruction = fmt.Sprintf("⚠️ CRITICAL: RECREATE EXACTLY %d products - ALL items from the reference must appear with EXACT colors and shapes.\n"+
+				"⚠️ DO NOT add extra products. DO NOT omit any. DO NOT change colors or packaging. EXACTLY %d products.\n", productCount, productCount)
 		}
 
 		mainInstruction = "[BEAUTY PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
 			"You are a world-class cosmetic product photographer.\n" +
-			"The BEAUTY PRODUCTS are the STARS - showcase them as premium cosmetics.\n" +
+			"The BEAUTY PRODUCTS from the reference are the STARS - you must RECREATE them EXACTLY.\n" +
 			"⚠️ CRITICAL: NO people or models in this shot - beauty products only.\n" +
+			"⚠️ CRITICAL: DO NOT invent new products. RECREATE the EXACT products from the reference image.\n" +
+			"⚠️ CRITICAL: Match colors, shapes, packaging designs, and labels EXACTLY from the reference.\n" +
 			productCountInstruction +
 			"\nCreate ONE photorealistic photograph with COSMETIC ELEGANCE:\n" +
-			"• Artistic arrangement of beauty products (lipsticks, makeup, skincare)\n" +
+			"• RECREATE the exact products from the reference (matching colors, shapes, packaging)\n" +
+			"• Arrange them artistically in a natural composition (NOT a grid)\n" +
 			"• Soft, diffused lighting that highlights product details\n" +
 			"• Premium cosmetic brand photography style\n" +
 			"• Clean, elegant composition\n" +
-			"• This is high-end beauty product photography\n\n"
+			"• This is high-end beauty product photography showing the EXACT referenced products\n\n"
 	} else {
 		// 배경만 → 환경 포토그래피
 		mainInstruction = "[BEAUTY ENVIRONMENT PHOTOGRAPHER'S APPROACH]\n" +
@@ -137,21 +140,21 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			switch productCount {
 			case 1:
 				if isGridInput {
-					countDesc = "The reference shows multiple products in a grid. Show ALL of them arranged naturally together."
+					countDesc = "The reference shows multiple products in a grid. You MUST recreate EXACTLY these same products - same colors, same shapes, same packaging designs. Show ALL of them arranged naturally together."
 				} else {
-					countDesc = "The reference shows the product. Show it naturally in the scene."
+					countDesc = "The reference shows the EXACT product you must recreate. Copy this product's appearance EXACTLY - same color, same shape, same packaging, same label design. Show it naturally in the scene."
 				}
 			case 2:
-				countDesc = "The reference shows 2 products (in a grid). Arrange these TWO products naturally together in the scene. DO NOT copy the grid layout."
+				countDesc = "The reference shows 2 products (in a grid). You MUST recreate these TWO EXACT products - same colors, same shapes, same packaging. Arrange these TWO products naturally together in the scene. DO NOT copy the grid layout, but DO copy the products exactly."
 			case 3:
-				countDesc = "The reference shows 3 products (in a grid). Arrange these THREE products naturally together as a group. DO NOT copy the grid layout."
+				countDesc = "The reference shows 3 products (in a grid). You MUST recreate these THREE EXACT products - same colors, same shapes, same packaging. Arrange these THREE products naturally together as a group. DO NOT copy the grid layout, but DO copy the products exactly."
 			case 4:
-				countDesc = "The reference shows 4 products (in a grid). Arrange these FOUR products naturally together as a group. DO NOT copy the grid layout."
+				countDesc = "The reference shows 4 products (in a grid). You MUST recreate these FOUR EXACT products - same colors, same shapes, same packaging. Arrange these FOUR products naturally together as a group. DO NOT copy the grid layout, but DO copy the products exactly."
 			default:
-				countDesc = fmt.Sprintf("The reference shows %d products. Arrange ALL %d products naturally together in the scene. DO NOT copy the grid layout.", productCount, productCount)
+				countDesc = fmt.Sprintf("The reference shows %d products. You MUST recreate ALL %d EXACT products - same colors, same shapes, same packaging. Arrange ALL %d products naturally together in the scene. DO NOT copy the grid layout, but DO copy the products exactly.", productCount, productCount, productCount)
 			}
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS - %d ITEMS): %s These are cosmetic items to showcase as the main subject. Display ONLY these products with premium cosmetic photography style. These are OBJECTS to be photographed, not makeup to apply.", imageIndex, productCount, countDesc))
+				fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS - %d ITEMS TO RECREATE EXACTLY): %s ⚠️ CRITICAL: These are the EXACT cosmetic products you must RECREATE in the new scene. DO NOT invent new products. DO NOT change colors, shapes, or packaging designs. COPY these products EXACTLY as they appear in the reference, then place them in the new scene with premium cosmetic photography style.", imageIndex, productCount, countDesc))
 		}
 		imageIndex++
 	}
@@ -189,14 +192,18 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		// 케이스 2: 모델 없이 제품만 → 뷰티 프로덕트 샷 (화장품/코스메틱)
 		compositionInstruction = "\n[BEAUTY PRODUCT PHOTOGRAPHY]\n" +
 			"Generate ONE photorealistic beauty product photograph showcasing cosmetics and beauty items as OBJECTS.\n" +
+			"⚠️ CRITICAL: RECREATE the EXACT products from the reference image - same colors, same shapes, same packaging.\n" +
+			"⚠️ CRITICAL: DO NOT invent new products or change the product designs.\n" +
 			"⚠️ CRITICAL: DO NOT add any people, models, or human figures.\n" +
 			"⚠️ CRITICAL: DO NOT add hands, fingers, or any body parts holding products.\n" +
 			"⚠️ CRITICAL: NO human faces, NO portraits, NO makeup application shots - PRODUCTS ONLY.\n" +
-			"⚠️ Display the beauty products artistically arranged - like high-end cosmetic advertising photography.\n" +
+			"⚠️ RECREATE the exact products from the reference, then arrange them artistically in a new scene.\n" +
 			"⚠️ USE ONLY the provided product references; do NOT invent extra products or variants."
 
 		if hasBackground {
-			compositionInstruction += "The beauty products are placed in a FULLY RE-RENDERED 3D ENVIRONMENT inspired by the background reference.\n" +
+			compositionInstruction += "\n\n[PRODUCT RECREATION + BACKGROUND INTEGRATION]\n" +
+				"Step 1: RECREATE the beauty products EXACTLY from the reference (colors, shapes, packaging).\n" +
+				"Step 2: Place these recreated products in a FULLY RE-RENDERED 3D ENVIRONMENT inspired by the background reference.\n" +
 				"⚠️ CRITICAL: The background reference is ONLY for mood, colors, and texture. IT IS NOT A TEMPLATE.\n" +
 				"⚠️ YOU HAVE FULL CREATIVE FREEDOM to change the background layout, geometry, and perspective to best fit the products.\n" +
 				"⚠️ DO NOT try to match the reference background's shape or object placement. CREATE A NEW SCENE.\n" +
@@ -204,12 +211,13 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"⚠️ AMBIENT OCCLUSION: Create deep, realistic contact shadows where the products touch the surface to avoid the 'floating sticker' look.\n" +
 				"⚠️ LIGHT WRAP: Let the background light softly wrap around the product edges to blend them naturally into the scene.\n" +
 				"⚠️ COLOR BLEED: Allow the background colors (e.g., green from leaves) to subtly reflect on the product surfaces for true integration.\n" +
-				"⚠️ The products and the new background must be rendered TOGETHER as one single 3D scene.\n" +
-				"This is a completely NEW photograph where the background is re-created to perfectly fit the products."
+				"⚠️ The EXACT products from reference and the new background must be rendered TOGETHER as one single 3D scene.\n" +
+				"This is a completely NEW photograph where the background is re-created to perfectly fit the EXACT products from reference."
 		} else {
-			compositionInstruction += "Create a stunning studio beauty product shot with soft, diffused lighting and clean composition.\n" +
-				"The cosmetic items are arranged artistically - flat lay, clean display, or elegantly positioned with beauty editorial aesthetic.\n" +
-				"Think premium beauty brand campaigns (Estée Lauder, La Mer, Tom Ford Beauty) - pure product elegance, zero human presence."
+			compositionInstruction += "\n\nCreate a stunning studio beauty product shot with soft, diffused lighting and clean composition.\n" +
+				"RECREATE the exact cosmetic items from the reference (colors, shapes, packaging), then arrange them artistically - flat lay, clean display, or elegantly positioned with beauty editorial aesthetic.\n" +
+				"Think premium beauty brand campaigns (Estée Lauder, La Mer, Tom Ford Beauty) - pure product elegance, zero human presence.\n" +
+				"⚠️ Remember: Copy the EXACT products from reference, do NOT invent new ones."
 		}
 	} else if hasBackground {
 		// 케이스 3: 배경만 → 환경 사진
@@ -298,13 +306,16 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	} else if hasProducts {
 		// 뷰티 프로덕트 샷 케이스 - 화장품 촬영 규칙
 		criticalRules = commonForbidden + "\n[BEAUTY PRODUCT RULES]\n" +
-			"🎯 SHOWCASE products as premium objects. NO people/hands/faces.\n" +
+			"🎯 RECREATE the EXACT products from reference - match colors, shapes, packaging PRECISELY.\n" +
+			"🎯 DO NOT invent new products. DO NOT change product designs or colors.\n" +
+			"🎯 SHOWCASE recreated products as premium objects. NO people/hands/faces.\n" +
 			"🎯 Artistic, elegant arrangement. Soft, diffused lighting.\n" +
 			"🎯 Products must sit naturally in the scene (shadows, reflections).\n" +
 			"🎯 DO NOT copy the grid layout from the reference. Group them naturally.\n" +
 			"🎯 NO sticker effect. Lighting on products MUST match the background.\n" +
 			"🎯 RE-GENERATE the background. Do not use it as a static image.\n" +
-			"🎯 MISSING PRODUCTS ARE UNACCEPTABLE. Count them before finalizing.\n"
+			"🎯 MISSING PRODUCTS ARE UNACCEPTABLE. Count them before finalizing.\n" +
+			"🎯 CHANGED PRODUCT COLORS ARE UNACCEPTABLE. Match the reference exactly.\n"
 	} else {
 		// 배경만 있는 케이스
 		criticalRules = commonForbidden + "\n[ENVIRONMENT RULES]\n" +
