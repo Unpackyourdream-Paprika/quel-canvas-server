@@ -52,7 +52,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// ImagePerPrice 파싱
-	imagePerPrice := 20 // 기본값
+	imagePerPrice := 5 // 기본값 (5 크레딧 = ₩500/장)
 	if priceStr := os.Getenv("IMAGE_PER_PRICE"); priceStr != "" {
 		if parsed, err := strconv.Atoi(priceStr); err == nil {
 			imagePerPrice = parsed
@@ -74,7 +74,7 @@ func LoadConfig() (*Config, error) {
 
 		// Gemini API
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
-		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image-preview"),
+		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
 
 		// Server
 		Port: getEnv("PORT", "8080"),

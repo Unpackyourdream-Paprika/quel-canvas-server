@@ -8,7 +8,14 @@ import (
 	"sync"
 	"time"
 
-	generateimage "quel-canvas-server/modules/generate-image"
+	"quel-canvas-server/modules/common/config"
+	"quel-canvas-server/modules/modify"
+	"quel-canvas-server/modules/multiview"
+	"quel-canvas-server/modules/preview"
+	"quel-canvas-server/modules/unified-prompt/landing"
+	"quel-canvas-server/modules/unified-prompt/studio"
+	"quel-canvas-server/modules/worker"
+	landingdemo "quel-canvas-server/modules/landing-demo"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -34,10 +41,10 @@ type Client struct {
 
 // 세션 관리
 type Session struct {
-	id        string
-	clients   map[string]*Client
-	mutex     sync.RWMutex
-	createdAt time.Time
+	id           string
+	clients      map[string]*Client
+	mutex        sync.RWMutex
+	createdAt    time.Time
 	lastActivity time.Time
 }
 
@@ -50,9 +57,9 @@ type SessionManager struct {
 
 // 서버 메트릭
 type ServerMetrics struct {
-	TotalSessions    int `json:"totalSessions"`
-	ActiveSessions   int `json:"activeSessions"`
-	TotalConnections int `json:"totalConnections"`
+	TotalSessions    int       `json:"totalSessions"`
+	ActiveSessions   int       `json:"activeSessions"`
+	TotalConnections int       `json:"totalConnections"`
 	StartTime        time.Time `json:"startTime"`
 	mutex            sync.RWMutex
 }
@@ -66,25 +73,25 @@ var sessionManager = &SessionManager{
 
 // 메시지 타입
 type Message struct {
-	Type        string                 `json:"type"`
-	SessionId   string                 `json:"sessionId"`
-	UserId      string                 `json:"userId"`
-	UserInfo    map[string]interface{} `json:"userInfo"`
-	ItemIds     []string               `json:"itemIds,omitempty"`
-	SectionIds  []string               `json:"sectionIds,omitempty"`
-	ItemUpdates map[string]interface{} `json:"itemUpdates,omitempty"`
+	Type           string                 `json:"type"`
+	SessionId      string                 `json:"sessionId"`
+	UserId         string                 `json:"userId"`
+	UserInfo       map[string]interface{} `json:"userInfo"`
+	ItemIds        []string               `json:"itemIds,omitempty"`
+	SectionIds     []string               `json:"sectionIds,omitempty"`
+	ItemUpdates    map[string]interface{} `json:"itemUpdates,omitempty"`
 	SectionUpdates map[string]interface{} `json:"sectionUpdates,omitempty"`
-	ItemId      string                 `json:"itemId,omitempty"`
-	SectionId   string                 `json:"sectionId,omitempty"`
-	Label       string                 `json:"label,omitempty"`
-	Title       string                 `json:"title,omitempty"`
+	ItemId         string                 `json:"itemId,omitempty"`
+	SectionId      string                 `json:"sectionId,omitempty"`
+	Label          string                 `json:"label,omitempty"`
+	Title          string                 `json:"title,omitempty"`
 
 	// 새로운 필드들
-	CanvasItems []interface{}          `json:"canvasItems,omitempty"`    // 캔버스 아이템들
-	Sections    []interface{}          `json:"sections,omitempty"`       // 섹션들
-	CursorX     float64                `json:"cursorX,omitempty"`        // 마우스 커서 X
-	CursorY     float64                `json:"cursorY,omitempty"`        // 마우스 커서 Y
-	IsHost      bool                   `json:"isHost,omitempty"`         // 호스트 여부
+	CanvasItems []interface{} `json:"canvasItems,omitempty"` // 캔버스 아이템들
+	Sections    []interface{} `json:"sections,omitempty"`    // 섹션들
+	CursorX     float64       `json:"cursorX,omitempty"`     // 마우스 커서 X
+	CursorY     float64       `json:"cursorY,omitempty"`     // 마우스 커서 Y
+	IsHost      bool          `json:"isHost,omitempty"`      // 호스트 여부
 
 	// Creation History 관련 필드들
 	ShowCreationHistory bool          `json:"showCreationHistory,omitempty"` // 히스토리 표시 여부
@@ -113,7 +120,7 @@ func (sm *SessionManager) getOrCreateSession(sessionId string) *Session {
 		sm.metrics.ActiveSessions++
 		sm.metrics.mutex.Unlock()
 
-		log.Printf("✅ Created new session: %s (Total: %d, Active: %d)",
+		log.Printf("Created new session: %s (Total: %d, Active: %d)",
 			sessionId, sm.metrics.TotalSessions, sm.metrics.ActiveSessions)
 	}
 
@@ -135,7 +142,7 @@ func (s *Session) addClient(client *Client) {
 	sessionManager.metrics.TotalConnections++
 	sessionManager.metrics.mutex.Unlock()
 
-	log.Printf("👤 Client %s joined session %s (Clients: %d, Total Connections: %d)",
+	log.Printf("Client %s joined session %s (Clients: %d, Total Connections: %d)",
 		client.userId, s.id, clientCount, sessionManager.metrics.TotalConnections)
 
 	// user_joined 메시지를 모든 클라이언트에게 브로드캐스트 (mutex 해제 후)
@@ -244,7 +251,7 @@ func (sm *SessionManager) cleanupEmptySessions() {
 			sm.metrics.ActiveSessions--
 			sm.metrics.mutex.Unlock()
 
-			log.Printf("🧹 Cleaned up empty session: %s", sessionId)
+			log.Printf("Cleaned up empty session: %s", sessionId)
 		}
 	}
 
@@ -274,7 +281,7 @@ func (sm *SessionManager) cleanupExpiredSessions() {
 			session.mutex.Lock()
 			for userId, client := range session.clients {
 				close(client.send)
-				log.Printf("🔌 Disconnecting client %s from expired session %s", userId, sessionId)
+				log.Printf("Disconnecting client %s from expired session %s", userId, sessionId)
 			}
 			session.mutex.Unlock()
 
@@ -322,7 +329,7 @@ func (sm *SessionManager) startCleanupRoutine() {
 		}
 	}()
 
-	log.Printf("🔄 Started session cleanup routines (Empty: 5min, Expired: 30min)")
+	log.Printf("Started session cleanup routines (Empty: 5min, Expired: 30min)")
 }
 
 // WebSocket 핸들러
@@ -352,7 +359,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		send:      make(chan []byte, 256),
 	}
 
-	log.Printf("🔍 New WebSocket connection - Session: %s, User: %s", sessionId, userId)
+	log.Printf("New WebSocket connection - Session: %s, User: %s", sessionId, userId)
 
 	// 세션에 클라이언트 추가
 	session := sessionManager.getOrCreateSession(sessionId)
@@ -362,7 +369,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	existingUsers := len(session.clients)
 	session.mutex.RUnlock()
 
-	log.Printf("📊 Session %s has %d existing users before adding new user", sessionId, existingUsers)
+	log.Printf("Session %s has %d existing users before adding new user", sessionId, existingUsers)
 
 	session.addClient(client)
 
@@ -421,7 +428,7 @@ func (c *Client) readPump(session *Session) {
 			log.Printf("User %s updated sections (count: %d)", c.userId, len(message.Sections))
 
 		case "history_visibility_update":
-			log.Printf("📊 Host %s updated history visibility to: %v (productions: %d)",
+			log.Printf("Host %s updated history visibility to: %v (productions: %d)",
 				c.userId, message.ShowCreationHistory, len(message.HostProductions))
 
 		case "user_joined":
@@ -481,7 +488,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "healthy",
+		"status":  "healthy",
 		"service": "quel-canvas-collaboration",
 	})
 }
@@ -583,20 +590,17 @@ func forceCleanupSessions(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	// 환경변수 로드
-	if _, err := generateimage.LoadConfig(); err != nil {
-		log.Fatalf("❌ Failed to load config: %v", err)
+	if _, err := config.LoadConfig(); err != nil {
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// 정리 루틴 시작
 	sessionManager.startCleanupRoutine()
 
 	// Redis Queue Worker 시작 (백그라운드)
-	go generateimage.StartWorker()
+	go worker.StartWorker()
 
-   // Generate Image 모듈 초기화
-
-
-
+	// Worker 모듈 초기화 완료
 
 	// 라우터 설정
 	r := mux.NewRouter()
@@ -612,10 +616,67 @@ func main() {
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/admin/cleanup", forceCleanupSessions).Methods("POST")
 
+	// Modify 모듈 라우트 등록
+	modifyHandler := modify.NewModifyHandler()
+	if modifyHandler != nil {
+		modifyHandler.RegisterRoutes(r)
+	} else {
+		log.Println("Failed to initialize Modify handler")
+	}
 
+	// Preview 라우트 등록 (슬래시 노드 프리뷰 용도)
+	previewHandler := preview.NewPreviewHandler()
+	if previewHandler != nil {
+		previewHandler.RegisterRoutes(r)
+	} else {
+		log.Println("Failed to initialize Preview handler")
+	}
 
+	// Cancel API 라우트 등록
+	cancelHandler := worker.NewCancelHandler()
+	if cancelHandler != nil {
+		cancelHandler.RegisterRoutes(r)
+	} else {
+		log.Println("Failed to initialize Cancel handler")
+	}
 
+	// Unified Prompt - Landing 라우트 등록
+	landingHandler := landing.NewHandler()
+	if landingHandler != nil {
+		r.HandleFunc("/api/unified-prompt/landing/generate", landingHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		r.HandleFunc("/api/unified-prompt/landing/check-limit", landingHandler.HandleCheckLimit).Methods("GET", "OPTIONS")
+		log.Println("✅ Unified Prompt Landing routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Landing handler")
+	}
 
+	// Unified Prompt - Studio 라우트 등록
+	studioHandler := studio.NewHandler()
+	if studioHandler != nil {
+		r.HandleFunc("/api/unified-prompt/studio/generate", studioHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		r.HandleFunc("/api/unified-prompt/studio/check-credits", studioHandler.HandleCheckCredits).Methods("GET", "OPTIONS")
+		r.HandleFunc("/api/unified-prompt/studio/analyze", studioHandler.HandleAnalyze).Methods("POST", "OPTIONS")
+		log.Println("✅ Unified Prompt Studio routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Studio handler")
+	}
+
+	// Landing Demo 라우트 등록 (체험존 - 무제한)
+	landingDemoHandler := landingdemo.NewHandler()
+	if landingDemoHandler != nil {
+		r.HandleFunc("/api/landing-demo/generate", landingDemoHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		log.Println("✅ Landing Demo routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Landing Demo handler")
+	}
+
+	// Multiview 360 라우트 등록
+	multiviewHandler := multiview.NewHandler()
+	if multiviewHandler != nil {
+		multiviewHandler.RegisterRoutes(r)
+	} else {
+		log.Println("⚠️ Failed to initialize Multiview handler")
+	}
 
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
@@ -623,11 +684,18 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("🚀 Quel Canvas Collaboration Server starting on port %s", port)
-	log.Printf("📡 WebSocket endpoint: ws://localhost:%s/ws", port)
-	log.Printf("❤️  Health check: http://localhost:%s/health", port)
-	log.Printf("📊 Metrics: http://localhost:%s/metrics", port)
-	log.Printf("🧹 Admin cleanup: http://localhost:%s/admin/cleanup", port)
+	log.Printf("Quel Canvas Collaboration Server starting on port %s", port)
+	log.Printf("WebSocket endpoint: ws://localhost:%s/ws", port)
+	log.Printf("Health check: http://localhost:%s/health", port)
+	log.Printf("Metrics: http://localhost:%s/metrics", port)
+	log.Printf("Admin cleanup: http://localhost:%s/admin/cleanup", port)
+	log.Printf("Modify submit: http://localhost:%s/api/modify/submit", port)
+	log.Printf("Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
+	log.Printf("Job cancel: http://localhost:%s/api/jobs/{jobId}/cancel", port)
+	log.Printf("Unified Prompt Landing: http://localhost:%s/api/unified-prompt/landing/generate", port)
+	log.Printf("Unified Prompt Studio: http://localhost:%s/api/unified-prompt/studio/generate", port)
+	log.Printf("Landing Demo: http://localhost:%s/api/landing-demo/generate", port)
+	log.Printf("Multiview 360: http://localhost:%s/api/multiview/generate", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
