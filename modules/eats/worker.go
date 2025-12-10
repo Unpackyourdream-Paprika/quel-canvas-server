@@ -154,15 +154,13 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		}
 	}
 
-	// Phase 3: 이미지 다운로드 및 카테고리별 분류
+	// Phase 3: 이미지 다운로드 및 카테고리별 분류 (Eats 전용)
 	categories := &ImageCategories{
-		Clothing:    [][]byte{},
-		Accessories: [][]byte{},
+		Ingredient: [][]byte{},
+		Prop:       [][]byte{},
 	}
 
-	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
-
+	// Eats 프론트 타입: none, food, ingredient, prop, background
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
 		if !ok {
@@ -179,7 +177,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		attachID := int(attachIDFloat)
 		attachType, _ := attachMap["type"].(string)
 
-		log.Printf("📥 Downloading image %d/%d: AttachID=%d, Type=%s",
+		log.Printf("📥 [Eats] Downloading image %d/%d: AttachID=%d, Type=%s",
 			i+1, len(individualImageAttachIds), attachID, attachType)
 
 		imageData, err := service.DownloadImageFromStorage(attachID)
@@ -188,31 +186,35 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			continue
 		}
 
-		// type에 따라 카테고리별로 분류
+		// type에 따라 카테고리별로 분류 (Eats 전용)
 		switch attachType {
-		case "model", "food", "dish", "main", "product":
-			categories.Model = imageData
-			log.Printf("✅ Model/Food image added (type: %s)", attachType)
-		case "background", "bg":
+		case "food":
+			categories.Food = imageData
+			log.Printf("✅ [Eats] Food image added")
+		case "ingredient":
+			categories.Ingredient = append(categories.Ingredient, imageData)
+			log.Printf("✅ [Eats] Ingredient image added")
+		case "prop":
+			categories.Prop = append(categories.Prop, imageData)
+			log.Printf("✅ [Eats] Prop image added")
+		case "background":
 			categories.Background = imageData
-			log.Printf("✅ Background image added")
+			log.Printf("✅ [Eats] Background image added")
+		case "none":
+			// none은 Food로 처리
+			categories.Food = imageData
+			log.Printf("✅ [Eats] None type → Food image added")
 		default:
-			if clothingTypes[attachType] {
-				categories.Clothing = append(categories.Clothing, imageData)
-				log.Printf("✅ Clothing image added (type: %s)", attachType)
-			} else if accessoryTypes[attachType] {
-				categories.Accessories = append(categories.Accessories, imageData)
-				log.Printf("✅ Accessory image added (type: %s)", attachType)
-			} else if attachType != "none" {
-				log.Printf("⚠️  Unknown type: %s, skipping", attachType)
-			}
+			// 알 수 없는 타입은 Food로 처리
+			categories.Food = imageData
+			log.Printf("⚠️  [Eats] Unknown type: %s → Food image added", attachType)
 		}
 	}
 
 	normalizeEatsCategories(categories, &basePrompt)
 
-	log.Printf("✅ Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ [Eats] Images classified - Food:%v, Ingredient:%d, Prop:%d, BG:%v",
+		categories.Food != nil, len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -407,7 +409,7 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 	}
 
 	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
-	hasAnyImage := categories.Model != nil || len(categories.Clothing) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	hasAnyImage := categories.Food != nil || len(categories.Ingredient) > 0 || len(categories.Prop) > 0 || categories.Background != nil
 	if !hasAnyImage {
 		log.Printf("🔧 [Eats] No images provided - will generate with text prompt only")
 		if prompt != nil {
@@ -416,20 +418,20 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
-	if categories.Model == nil {
+	if categories.Food == nil {
 		switch {
-		case len(categories.Clothing) > 0:
-			categories.Model = categories.Clothing[0]
-			log.Printf("🔧 Using side/ingredient image as main dish placeholder")
-		case len(categories.Accessories) > 0:
-			categories.Model = categories.Accessories[0]
-			log.Printf("🔧 Using accessory/garnish image as main dish placeholder")
+		case len(categories.Ingredient) > 0:
+			categories.Food = categories.Ingredient[0]
+			log.Printf("🔧 Using ingredient image as main food placeholder")
+		case len(categories.Prop) > 0:
+			categories.Food = categories.Prop[0]
+			log.Printf("🔧 Using prop image as main food placeholder")
 		case categories.Background != nil:
-			categories.Model = categories.Background
-			log.Printf("🔧 Using background image as main dish placeholder")
+			categories.Food = categories.Background
+			log.Printf("🔧 Using background image as main food placeholder")
 		default:
 			// 🔧 더 이상 1x1 placeholder 사용 안 함
-			log.Printf("🔧 [Eats] No main dish image available - will use text-only generation")
+			log.Printf("🔧 [Eats] No main food image available - will use text-only generation")
 		}
 
 		if prompt != nil {
@@ -437,10 +439,10 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		}
 	}
 
-	// Model이 있을 때만 Clothing 채우기
-	if len(categories.Clothing) == 0 && categories.Model != nil {
-		categories.Clothing = append(categories.Clothing, categories.Model)
-		log.Printf("🔧 No ingredient/side images provided; reusing main reference")
+	// Food가 있을 때만 Ingredient 채우기
+	if len(categories.Ingredient) == 0 && categories.Food != nil {
+		categories.Ingredient = append(categories.Ingredient, categories.Food)
+		log.Printf("🔧 No ingredient images provided; reusing main food reference")
 	}
 }
 
@@ -536,19 +538,19 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{
-				Clothing:    [][]byte{},
-				Accessories: [][]byte{},
+				Ingredient: [][]byte{},
+				Prop:       [][]byte{},
 			}
 			backgrounds := [][]byte{} // 여러 배경 지원
-			models := [][]byte{}      // 여러 모델(음식) 지원
+			foods := [][]byte{}       // 여러 음식 이미지 지원
 
 			if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 				// 새 방식: individualImageAttachIds로 카테고리별 분류
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
-					Clothing:    [][]byte{},
-					Accessories: [][]byte{},
+					Ingredient: [][]byte{},
+					Prop:       [][]byte{},
 				}
 
 				// Eats 전용 타입 정의
@@ -580,29 +582,29 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					// type에 따라 카테고리별로 분류 (Eats 전용)
 					switch attachType {
 					case "model", "food", "dish", "main":
-						models = append(models, imageData)
-						log.Printf("✅ [Eats Pipeline] Stage %d: Food/Main image added (Total: %d)", stageIndex, len(models))
+						foods = append(foods, imageData)
+						log.Printf("✅ [Eats Pipeline] Stage %d: Food/Main image added (Total: %d)", stageIndex, len(foods))
 					case "bg", "background":
 						backgrounds = append(backgrounds, imageData)
 						log.Printf("✅ [Eats Pipeline] Stage %d: Background image added (Total: %d)", stageIndex, len(backgrounds))
 					default:
 						if ingredientTypes[attachType] {
-							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
+							stageCategories.Ingredient = append(stageCategories.Ingredient, imageData)
 							log.Printf("✅ [Eats Pipeline] Stage %d: Ingredient/Side image added (type: %s)", stageIndex, attachType)
 						} else if toppingTypes[attachType] {
-							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
-							log.Printf("✅ [Eats Pipeline] Stage %d: Topping/Garnish image added (type: %s)", stageIndex, attachType)
+							stageCategories.Prop = append(stageCategories.Prop, imageData)
+							log.Printf("✅ [Eats Pipeline] Stage %d: Topping/Garnish/Prop image added (type: %s)", stageIndex, attachType)
 						} else {
 							// 알 수 없는 타입은 부재료로 처리
-							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
+							stageCategories.Ingredient = append(stageCategories.Ingredient, imageData)
 							log.Printf("⚠️  [Eats Pipeline] Stage %d: Unknown type '%s' treated as ingredient", stageIndex, attachType)
 						}
 					}
 				}
 
-				log.Printf("✅ [Eats Pipeline] Stage %d: Images classified - Food:%d, Ingredients:%d, Toppings:%d, BG:%d",
-					stageIndex, len(models), len(stageCategories.Clothing),
-					len(stageCategories.Accessories), len(backgrounds))
+				log.Printf("✅ [Eats Pipeline] Stage %d: Images classified - Food:%d, Ingredients:%d, Props:%d, BG:%d",
+					stageIndex, len(foods), len(stageCategories.Ingredient),
+					len(stageCategories.Prop), len(backgrounds))
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
 				// 레거시 방식: mergedImageAttachId
@@ -615,14 +617,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					imageData = fallback.PlaceholderBytes()
 				}
 
-				// 레거시 이미지를 Clothing 카테고리로 처리
+				// 레거시 이미지를 Ingredient 카테고리로 처리
 				stageCategories = &ImageCategories{
-					Clothing:    [][]byte{imageData},
-					Accessories: [][]byte{},
+					Ingredient: [][]byte{imageData},
+					Prop:       [][]byte{},
 				}
 			} else {
 				log.Printf("❌ Stage %d: No individualImageAttachIds or mergedImageAttachId found - using placeholder", stageIndex)
-				stageCategories.Clothing = append(stageCategories.Clothing, fallback.PlaceholderBytes())
+				stageCategories.Ingredient = append(stageCategories.Ingredient, fallback.PlaceholderBytes())
 			}
 
 			normalizeEatsCategories(stageCategories, &prompt)
@@ -631,10 +633,10 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
-				// 여러 모델(음식) 이미지가 있으면 rotate
-				if len(models) > 0 {
-					stageCategories.Model = models[i%len(models)]
-					log.Printf("🔄 [Eats Pipeline] Stage %d: Using model %d/%d for image %d", stageIndex, (i%len(models))+1, len(models), i+1)
+				// 여러 음식 이미지가 있으면 rotate
+				if len(foods) > 0 {
+					stageCategories.Food = foods[i%len(foods)]
+					log.Printf("🔄 [Eats Pipeline] Stage %d: Using food %d/%d for image %d", stageIndex, (i%len(foods))+1, len(foods), i+1)
 				}
 
 				// 여러 배경이 있으면 rotate
@@ -774,14 +776,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 		// individualImageAttachIds 또는 mergedImageAttachId 지원
 		retryCategories := &ImageCategories{
-			Clothing:    [][]byte{},
-			Accessories: [][]byte{},
+			Ingredient: [][]byte{},
+			Prop:       [][]byte{},
 		}
 
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
-			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
+			ingredientTypes := map[string]bool{"ingredient": true, "side": true}
+			propTypes := map[string]bool{"topping": true, "garnish": true, "prop": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -797,14 +799,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				switch attachType {
 				case "model", "food", "dish", "main":
-					retryCategories.Model = imageData
-				case "bg":
+					retryCategories.Food = imageData
+				case "bg", "background":
 					retryCategories.Background = imageData
 				default:
-					if clothingTypes[attachType] {
-						retryCategories.Clothing = append(retryCategories.Clothing, imageData)
-					} else if accessoryTypes[attachType] {
-						retryCategories.Accessories = append(retryCategories.Accessories, imageData)
+					if ingredientTypes[attachType] {
+						retryCategories.Ingredient = append(retryCategories.Ingredient, imageData)
+					} else if propTypes[attachType] {
+						retryCategories.Prop = append(retryCategories.Prop, imageData)
 					}
 				}
 			}
@@ -817,12 +819,12 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				imageData = fallback.PlaceholderBytes()
 			}
 			retryCategories = &ImageCategories{
-				Clothing:    [][]byte{imageData},
-				Accessories: [][]byte{},
+				Ingredient: [][]byte{imageData},
+				Prop:       [][]byte{},
 			}
 		} else {
 			log.Printf("❌ Stage %d: No image data for retry - using placeholder", stageIdx)
-			retryCategories.Clothing = append(retryCategories.Clothing, fallback.PlaceholderBytes())
+			retryCategories.Ingredient = append(retryCategories.Ingredient, fallback.PlaceholderBytes())
 		}
 
 		normalizeEatsCategories(retryCategories, &prompt)

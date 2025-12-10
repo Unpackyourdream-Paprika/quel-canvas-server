@@ -35,12 +35,13 @@ type Service struct {
 	redis       *redis.Client
 }
 
-// ImageCategories - 카테고리별 이미지 분류 구조체
+// ImageCategories - Cinema 모듈 전용 이미지 분류 구조체
+// 프론트 type: actor, face, top, pants, outer, prop, background
 type ImageCategories struct {
-	Models      [][]byte // 모델 이미지 배열 (최대 3명)
-	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
-	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
-	Background  []byte   // 배경 이미지 (최대 1장)
+	Actor      [][]byte // Actor/Face 이미지 배열 (최대 3명)
+	Clothing   [][]byte // 의류 이미지 배열 (top, pants, outer)
+	Prop       [][]byte // Prop (소품) 이미지 배열
+	Background []byte   // 배경 이미지 (최대 1장)
 }
 
 // MaxModels - 최대 허용 모델 수
@@ -524,10 +525,10 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 // generateDynamicPrompt - 상황별 동적 프롬프트 생성 (간소화 및 명확화 버전)
 func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석
-	hasModels := len(categories.Models) > 0
-	modelCount := len(categories.Models)
+	hasModels := len(categories.Actor) > 0
+	modelCount := len(categories.Actor)
 	hasClothing := len(categories.Clothing) > 0
-	hasAccessories := len(categories.Accessories) > 0
+	hasAccessories := len(categories.Prop) > 0
 	hasProducts := hasClothing || hasAccessories
 	hasBackground := categories.Background != nil
 
@@ -550,7 +551,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 2. [SUBJECTS] - 인물/모델 상세 지시 (담백하게)
 	if hasModels {
 		promptBuilder.WriteString("[SUBJECTS - CRITICAL]\n")
-		for i := range categories.Models {
+		for i := range categories.Actor {
 			idx := i + 1
 			promptBuilder.WriteString(fmt.Sprintf("%d. Person %d: Use Reference Image %d.\n", idx, idx, idx))
 			promptBuilder.WriteString("   - FACE: Copy the face, age, gender, and ethnicity EXACTLY.\n")
@@ -622,7 +623,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	log.Printf("🎨 Calling Gemini API with categories - Models:%d, Clothing:%d, Accessories:%d, BG:%v",
-		len(categories.Models), len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+		len(categories.Actor), len(categories.Clothing), len(categories.Prop), categories.Background != nil)
 
 	// 카테고리별 병합 및 resize
 	var mergedClothing []byte
@@ -636,8 +637,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		}
 	}
 
-	if len(categories.Accessories) > 0 {
-		mergedAccessories, err = mergeImages(categories.Accessories, aspectRatio)
+	if len(categories.Prop) > 0 {
+		mergedAccessories, err = mergeImages(categories.Prop, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to merge accessory images: %w", err)
 		}
@@ -648,7 +649,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	// 순서: Models → Clothing → Accessories → Background
 	// 다중 모델 지원: 각 모델 이미지를 개별적으로 추가
-	for i, modelData := range categories.Models {
+	for i, modelData := range categories.Actor {
 		// 각 Model 이미지를 resize
 		resizedModel, err := mergeImages([][]byte{modelData}, aspectRatio)
 		if err != nil {
@@ -660,10 +661,10 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     resizedModel,
 			},
 		})
-		if len(categories.Models) == 1 {
+		if len(categories.Actor) == 1 {
 			log.Printf("📎 Added Model image (resized)")
 		} else {
-			log.Printf("📎 Added Model image %d/%d (resized)", i+1, len(categories.Models))
+			log.Printf("📎 Added Model image %d/%d (resized)", i+1, len(categories.Actor))
 		}
 	}
 
@@ -684,7 +685,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     mergedAccessories,
 			},
 		})
-		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Accessories))
+		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Prop))
 	}
 
 	if categories.Background != nil {

@@ -34,12 +34,13 @@ type Service struct {
 	redis       *redis.Client
 }
 
-// ImageCategories - 카테고리별 이미지 분류 구조체 (음식용)
+// ImageCategories - Eats 모듈 전용 이미지 분류 구조체
+// 프론트 type: food, ingredient, prop, background
 type ImageCategories struct {
-	Model       []byte   // 메인 요리 이미지 (최대 1장)
-	Clothing    [][]byte // 부재료/사이드 이미지 배열
-	Accessories [][]byte // 토핑/가니쉬 이미지 배열
-	Background  []byte   // 레스토랑/세팅 배경 이미지 (최대 1장)
+	Food       []byte   // Food (메인 음식) 이미지 (최대 1장)
+	Ingredient [][]byte // Ingredient (재료) 이미지 배열
+	Prop       [][]byte // Prop (소품) 이미지 배열
+	Background []byte   // Background (배경) 이미지 (최대 1장)
 }
 
 func NewService() *Service {
@@ -527,65 +528,65 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		aspectRatio = "16:9"
 	}
 
-	log.Printf("🎨 Calling Gemini API with categories - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("🎨 [Eats] Calling Gemini API with categories - Food:%v, Ingredient:%d, Prop:%d, BG:%v",
+		categories.Food != nil, len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
 
 	// 카테고리별 병합 및 resize
-	var mergedClothing []byte
-	var mergedAccessories []byte
+	var mergedIngredient []byte
+	var mergedProp []byte
 	var err error
 
-	if len(categories.Clothing) > 0 {
-		mergedClothing, err = mergeImages(categories.Clothing, aspectRatio)
+	if len(categories.Ingredient) > 0 {
+		mergedIngredient, err = mergeImages(categories.Ingredient, aspectRatio)
 		if err != nil {
-			return "", fmt.Errorf("failed to merge clothing images: %w", err)
+			return "", fmt.Errorf("failed to merge ingredient images: %w", err)
 		}
 	}
 
-	if len(categories.Accessories) > 0 {
-		mergedAccessories, err = mergeImages(categories.Accessories, aspectRatio)
+	if len(categories.Prop) > 0 {
+		mergedProp, err = mergeImages(categories.Prop, aspectRatio)
 		if err != nil {
-			return "", fmt.Errorf("failed to merge accessory images: %w", err)
+			return "", fmt.Errorf("failed to merge prop images: %w", err)
 		}
 	}
 
 	// Gemini Part 배열 구성
 	var parts []*genai.Part
 
-	// 순서: Model → Clothing → Accessories → Background
-	if categories.Model != nil {
-		// Model 이미지도 resize
-		resizedModel, err := mergeImages([][]byte{categories.Model}, aspectRatio)
+	// 순서: Food → Ingredient → Prop → Background
+	if categories.Food != nil {
+		// Food 이미지도 resize
+		resizedFood, err := mergeImages([][]byte{categories.Food}, aspectRatio)
 		if err != nil {
-			return "", fmt.Errorf("failed to resize model image: %w", err)
+			return "", fmt.Errorf("failed to resize food image: %w", err)
 		}
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     resizedModel,
+				Data:     resizedFood,
 			},
 		})
-		log.Printf("📎 Added Model image (resized)")
+		log.Printf("📎 [Eats] Added Food image (resized)")
 	}
 
-	if mergedClothing != nil {
+	if mergedIngredient != nil {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     mergedClothing,
+				Data:     mergedIngredient,
 			},
 		})
-		log.Printf("📎 Added Clothing image (merged from %d items)", len(categories.Clothing))
+		log.Printf("📎 [Eats] Added Ingredient image (merged from %d items)", len(categories.Ingredient))
 	}
 
-	if mergedAccessories != nil {
+	if mergedProp != nil {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     mergedAccessories,
+				Data:     mergedProp,
 			},
 		})
-		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Accessories))
+		log.Printf("📎 [Eats] Added Prop image (merged from %d items)", len(categories.Prop))
 	}
 
 	if categories.Background != nil {
@@ -600,14 +601,14 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     resizedBG,
 			},
 		})
-		log.Printf("📎 Added Background image (resized)")
+		log.Printf("📎 [Eats] Added Background image (resized)")
 	}
 
 	// Log ImageCategories for debugging
-	log.Printf("🔍 [DEBUG] ImageCategories Inspection:")
-	log.Printf("  - Model (Main Dish): %v (Size: %d bytes)", categories.Model != nil, len(categories.Model))
-	log.Printf("  - Clothing (Ingredients): %d items", len(categories.Clothing))
-	log.Printf("  - Accessories (Toppings): %d items", len(categories.Accessories))
+	log.Printf("🔍 [Eats DEBUG] ImageCategories Inspection:")
+	log.Printf("  - Food: %v (Size: %d bytes)", categories.Food != nil, len(categories.Food))
+	log.Printf("  - Ingredient: %d items", len(categories.Ingredient))
+	log.Printf("  - Prop: %d items", len(categories.Prop))
 	log.Printf("  - Background: %v (Size: %d bytes)", categories.Background != nil, len(categories.Background))
 
 	// 동적 프롬프트 생성

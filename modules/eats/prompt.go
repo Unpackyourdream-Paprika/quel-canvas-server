@@ -5,26 +5,27 @@ import (
 	"strings"
 )
 
-// ImageCategories - 카테고리별 이미지 분류 구조체 (음식용)
+// PromptCategories - 카테고리별 이미지 분류 구조체 (Eats 전용)
+// 프론트 type: food, ingredient, prop, background
 type PromptCategories struct {
-	Model       []byte   // 메인 요리 이미지 (최대 1장)
-	Clothing    [][]byte // 부재료/사이드 이미지 배열
-	Accessories [][]byte // 토핑/가니쉬 이미지 배열
-	Background  []byte   // 레스토랑/세팅 배경 이미지 (최대 1장)
+	Food       []byte   // Food (메인 음식) 이미지 (최대 1장)
+	Ingredient [][]byte // Ingredient (재료) 이미지 배열
+	Prop       [][]byte // Prop (소품) 이미지 배열
+	Background []byte   // Background (배경) 이미지 (최대 1장)
 }
 
 // GenerateDynamicPrompt - Eats 모듈 전용 프롬프트 생성 (음식 사진)
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
-	// 케이스 분석을 위한 변수 정의
-	hasMainDish := categories.Model != nil
-	hasIngredients := len(categories.Clothing) > 0
-	hasToppings := len(categories.Accessories) > 0
-	hasFoodItems := hasIngredients || hasToppings
-	hasRestaurant := categories.Background != nil
+	// 케이스 분석을 위한 변수 정의 (프론트 type 기준)
+	hasFood := categories.Food != nil             // type: food
+	hasIngredient := len(categories.Ingredient) > 0 // type: ingredient
+	hasProp := len(categories.Prop) > 0            // type: prop
+	hasFoodItems := hasIngredient || hasProp
+	hasBackground := categories.Background != nil // type: background
 
 	// 케이스별 메인 지시사항
 	var mainInstruction string
-	if hasMainDish {
+	if hasFood {
 		// 메인 요리 있음 → 음식 에디토리얼
 		mainInstruction = "[PROFESSIONAL FOOD PHOTOGRAPHER'S APPROACH]\n" +
 			"You are a world-class culinary photographer shooting for a Michelin-star restaurant editorial.\n" +
@@ -65,19 +66,19 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	imageIndex := 1
 
 	// 각 카테고리별 명확한 설명 (음식 용어로)
-	if categories.Model != nil {
+	if categories.Food != nil {
 		instructions = append(instructions,
 			fmt.Sprintf("Reference Image %d (MAIN DISH - FOOD ONLY): This is a FOOD/DISH photograph showing plating, colors, textures, and presentation. This is NOT a person - it's FOOD. Recreate this DISH EXACTLY with the same culinary style and plating", imageIndex))
 		imageIndex++
 	}
 
-	if len(categories.Clothing) > 0 {
+	if len(categories.Ingredient) > 0 {
 		instructions = append(instructions,
 			fmt.Sprintf("Reference Image %d (INGREDIENTS/SIDES): ALL visible ingredients, side dishes, or components. The dish MUST include EVERY item shown here", imageIndex))
 		imageIndex++
 	}
 
-	if len(categories.Accessories) > 0 {
+	if len(categories.Prop) > 0 {
 		instructions = append(instructions,
 			fmt.Sprintf("Reference Image %d (TOPPINGS/GARNISH): ALL toppings, garnishes, sauces, herbs, or finishing touches. The dish MUST feature EVERY element shown here", imageIndex))
 		imageIndex++
@@ -93,7 +94,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var compositionInstruction string
 
 	// 케이스 1: 메인 요리가 있는 경우 → 플레이팅 샷
-	if hasMainDish {
+	if hasFood {
 		compositionInstruction = "\n[CULINARY EDITORIAL COMPOSITION]\n" +
 			"Generate ONE photorealistic culinary photograph showing the referenced dish with professional plating (including all ingredients + toppings).\n" +
 			"This is high-end restaurant photography with the dish as the centerpiece."
@@ -104,7 +105,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"⚠️ DO NOT add any people, hands, or cooking in progress.\n" +
 			"⚠️ Display the items artistically arranged - like high-end food magazine photography.\n"
 
-		if hasRestaurant {
+		if hasBackground {
 			compositionInstruction += "The ingredients are placed naturally within the referenced restaurant environment - " +
 				"as if styled by a professional food photographer on location.\n" +
 				"The items interact with the space (resting on wooden boards, marble counters, rustic tables).\n" +
@@ -114,7 +115,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			compositionInstruction += "Create a stunning culinary still life with professional lighting and composition.\n" +
 				"The ingredients are arranged artistically - overhead flat lay, rustic board, or elegantly displayed."
 		}
-	} else if hasRestaurant {
+	} else if hasBackground {
 		// 케이스 3: 레스토랑만 → 환경 사진
 		compositionInstruction = "\n[RESTAURANT ENVIRONMENTAL PHOTOGRAPHY]\n" +
 			"Generate ONE photorealistic restaurant photograph of the referenced dining environment.\n" +
@@ -127,7 +128,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	}
 
 	// 배경 관련 지시사항 - 메인 요리가 있을 때만 추가
-	if hasMainDish && hasRestaurant {
+	if hasFood && hasBackground {
 		compositionInstruction += " photographed in a restaurant setting with environmental storytelling.\n\n" +
 			"[FOOD PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
 			"The photographer CHOSE this dining environment to complement the dish - not to overwhelm it.\n" +
@@ -158,7 +159,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"✓ Editorial food photography aesthetic with natural color grading\n" +
 			"✓ Shallow depth of field focuses attention on the dish\n" +
 			"✓ The environment and dish look appetizing and naturally integrated"
-	} else if hasMainDish && !hasRestaurant {
+	} else if hasFood && !hasBackground {
 		// 메인 요리만 있고 배경 없음 → 스튜디오 테이블
 		compositionInstruction += " on a professional table setting with editorial food lighting."
 	}
@@ -200,7 +201,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"- Natural asymmetric composition - left side MUST be different from right side\n" +
 		"- Professional editorial style - real single-shot photography only\n"
 
-	if hasMainDish {
+	if hasFood {
 		// 메인 요리 있는 케이스 - 음식 에디토리얼 규칙
 		criticalRules = commonForbidden + "\n[NON-NEGOTIABLE REQUIREMENTS - CULINARY EDITORIAL]\n" +
 			"🎯 ONLY ONE DISH in the photograph - this is professional plating photography\n" +
@@ -259,7 +260,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// aspect ratio별 추가 지시사항
 	var aspectRatioInstruction string
 	if aspectRatio == "1:1" {
-		if hasMainDish {
+		if hasFood {
 			// 메인 요리가 있는 1:1 케이스 (정사각형 - 음식 에디토리얼)
 			aspectRatioInstruction = "\n\n[1:1 SQUARE CULINARY EDITORIAL - OVERHEAD/45-DEGREE ANGLE]\n" +
 				"This is a SQUARE format - perfect for Instagram-style food photography and overhead plating shots.\n\n" +
@@ -309,7 +310,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"GOAL: A stunning square restaurant shot."
 		}
 	} else if aspectRatio == "16:9" || aspectRatio == "9:16" {
-		if hasMainDish {
+		if hasFood {
 			// 메인 요리가 있는 wide/tall 케이스
 			var formatDesc string
 			if aspectRatio == "16:9" {

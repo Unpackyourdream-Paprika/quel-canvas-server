@@ -6,24 +6,24 @@ import (
 	"strings"
 )
 
-// ImageCategories - Beauty 카테고리별 이미지 분류 구조체 (화장품 전용)
+// PromptCategories - Beauty 카테고리별 이미지 분류 구조체 (화장품 전용)
+// 프론트 type: model, product, background
 type PromptCategories struct {
-	Model       []byte   // 모델 이미지 (최대 1장) - Beauty에서는 인물 뷰티 샷용
-	Products    [][]byte // 화장품/제품 이미지 배열 (lipstick, cream, bottle 등) - Beauty 전용
-	Accessories [][]byte // 악세사리 이미지 배열 (brush, tool 등) - Beauty 보조 도구
-	Background  []byte   // 배경 이미지 (최대 1장)
+	Model      []byte   // 모델 이미지 (최대 1장) - Beauty에서는 인물 뷰티 샷용
+	Product    [][]byte // 화장품/제품 이미지 배열 (lipstick, cream, bottle 등) - Beauty 전용
+	Background []byte   // 배경 이미지 (최대 1장)
 }
 
 // GenerateDynamicPrompt - Beauty 모듈 전용 프롬프트 생성
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
-	hasProducts := len(categories.Products) > 0 // Beauty 전용: Products 필드 직접 확인
+	hasProduct := len(categories.Product) > 0 // Beauty 전용: Product 필드 직접 확인
 	hasBackground := categories.Background != nil
 
 	// 디버그 로그 추가
-	log.Printf("🔍 [Beauty Prompt] Model:%v, Products:%d, Accessories:%d, BG:%v",
-		hasModel, len(categories.Products), len(categories.Accessories), hasBackground)
+	log.Printf("🔍 [Beauty Prompt] Model:%v, Product:%d, BG:%v",
+		hasModel, len(categories.Product), hasBackground)
 
 	// 케이스별 메인 지시사항
 	var mainInstruction string
@@ -42,9 +42,9 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"• Professional studio beauty photography composition\n" +
 			"• High-end cosmetic editorial quality\n" +
 			"• This is about BEAUTY and MAKEUP, not fashion or outfits\n\n"
-	} else if hasProducts {
+	} else if hasProduct {
 		// 프로덕트만 → 뷰티 프로덕트 (화장품/제품) - 개수에 따라 동적 프롬프트
-		productCount := len(categories.Products)
+		productCount := len(categories.Product)
 		var productCountInstruction string
 
 		// Check if user prompt indicates a grid or multiple products (for pre-merged inputs)
@@ -122,8 +122,8 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		imageIndex++
 	}
 
-	if len(categories.Products) > 0 {
-		productCount := len(categories.Products)
+	if len(categories.Product) > 0 {
+		productCount := len(categories.Product)
 		if hasModel {
 			// 모델 + 제품: 메이크업 레퍼런스로 사용
 			instructions = append(instructions,
@@ -159,11 +159,6 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		imageIndex++
 	}
 
-	if len(categories.Accessories) > 0 {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BEAUTY ACCESSORIES): Visible accessories in closeup (earrings, necklace, headpiece) that complement the beauty portrait - include ONLY items visible in head and shoulders frame", imageIndex))
-		imageIndex++
-	}
 
 	if categories.Background != nil {
 		instructions = append(instructions,
@@ -188,7 +183,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"• Head and shoulders composition only\n" +
 			"• Soft, flattering beauty lighting\n" +
 			"This is high-end cosmetic editorial photography with the face as the star."
-	} else if hasProducts {
+	} else if hasProduct {
 		// 케이스 2: 모델 없이 제품만 → 뷰티 프로덕트 샷 (화장품/코스메틱)
 		compositionInstruction = "\n[BEAUTY PRODUCT PHOTOGRAPHY]\n" +
 			"Generate ONE photorealistic beauty product photograph showcasing cosmetics and beauty items as OBJECTS.\n" +
@@ -289,7 +284,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"- Natural asymmetric composition - left side MUST be different from right side\n" +
 		"- Professional editorial style - real single-shot photography only\n" +
 		func() string {
-			productCount := len(categories.Products)
+			productCount := len(categories.Product)
 			if productCount > 0 {
 				return fmt.Sprintf("⚠️ ABSOLUTE RULE: The reference contains EXACTLY %d products. YOU MUST SHOW ALL %d PRODUCTS.\n⚠️ COUNT THEM: 1, 2, ... %d. IF ANY ARE MISSING, THE IMAGE IS WRONG.\n⚠️ Do not add extra products. Do not remove any.\n", productCount, productCount, productCount)
 			}
@@ -303,7 +298,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"🎯 NO full body shots. NO fashion poses.\n" +
 			"🎯 Perfect, natural facial features and skin texture.\n" +
 			"🎯 Soft, flattering beauty lighting.\n"
-	} else if hasProducts {
+	} else if hasProduct {
 		// 뷰티 프로덕트 샷 케이스 - 화장품 촬영 규칙
 		criticalRules = commonForbidden + "\n[BEAUTY PRODUCT RULES]\n" +
 			"🎯 RECREATE the EXACT products from reference - match colors, shapes, packaging PRECISELY.\n" +
@@ -348,7 +343,7 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"✓ Natural color grading for skin tones\n\n" +
 				"GOAL: A stunning wide-format beauty portrait like Peter Lindbergh or Patrick Demarchelier - \n" +
 				"elegant closeup with horizontal breathing room, NOT a full body fashion shot."
-		} else if hasProducts {
+		} else if hasProduct {
 			// 뷰티 프로덕트 샷 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 BEAUTY PRODUCT SHOT]\n" +
 				"This is a WIDE ANGLE beauty product shot - use the horizontal space for elegant cosmetic advertising.\n\n" +

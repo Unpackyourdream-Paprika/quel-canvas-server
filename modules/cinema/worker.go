@@ -149,13 +149,13 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 3: 이미지 다운로드 및 카테고리별 분류
 	categories := &ImageCategories{
-		Models:      [][]byte{},
-		Clothing:    [][]byte{},
-		Accessories: [][]byte{},
+		Actor:    [][]byte{},
+		Clothing: [][]byte{},
+		Prop:     [][]byte{},
 	}
 
+	// Cinema 프론트 타입: none, actor, top, pants, outer, face, prop, background
 	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "prop": true}
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -173,7 +173,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		attachID := int(attachIDFloat)
 		attachType, _ := attachMap["type"].(string)
 
-		log.Printf("📥 Downloading image %d/%d: AttachID=%d, Type=%s",
+		log.Printf("📥 [Cinema] Downloading image %d/%d: AttachID=%d, Type=%s",
 			i+1, len(individualImageAttachIds), attachID, attachType)
 
 		imageData, err := service.DownloadImageFromStorage(attachID)
@@ -182,35 +182,48 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			continue
 		}
 
-		// type에 따라 카테고리별로 분류
+		// type에 따라 카테고리별로 분류 (Cinema 전용)
 		switch attachType {
-		case "model", "character", "actor", "face":
-			if len(categories.Models) < MaxModels {
-				categories.Models = append(categories.Models, imageData)
-				log.Printf("✅ Model/Character/Face image added (%d/%d) [type: %s]", len(categories.Models), MaxModels, attachType)
+		case "actor":
+			if len(categories.Actor) < MaxModels {
+				categories.Actor = append(categories.Actor, imageData)
+				log.Printf("✅ [Cinema] Actor image added (%d/%d)", len(categories.Actor), MaxModels)
 			} else {
-				log.Printf("⚠️ Maximum models reached (%d), skipping additional model", MaxModels)
+				log.Printf("⚠️ [Cinema] Maximum actors reached (%d), skipping", MaxModels)
 			}
-		case "background", "bg":
+		case "face":
+			if len(categories.Actor) < MaxModels {
+				categories.Actor = append(categories.Actor, imageData)
+				log.Printf("✅ [Cinema] Face reference added (%d/%d)", len(categories.Actor), MaxModels)
+			} else {
+				log.Printf("⚠️ [Cinema] Maximum actors reached (%d), skipping face", MaxModels)
+			}
+		case "background":
 			categories.Background = imageData
-			log.Printf("✅ Background image added")
+			log.Printf("✅ [Cinema] Background image added")
+		case "prop":
+			categories.Prop = append(categories.Prop, imageData)
+			log.Printf("✅ [Cinema] Prop image added")
+		case "none":
+			// none은 Prop로 처리
+			categories.Prop = append(categories.Prop, imageData)
+			log.Printf("✅ [Cinema] None type → Prop image added")
 		default:
 			if clothingTypes[attachType] {
 				categories.Clothing = append(categories.Clothing, imageData)
-				log.Printf("✅ Clothing image added (type: %s)", attachType)
-			} else if accessoryTypes[attachType] {
-				categories.Accessories = append(categories.Accessories, imageData)
-				log.Printf("✅ Accessory image added (type: %s)", attachType)
-			} else if attachType != "none" {
-				log.Printf("⚠️  Unknown type: %s, skipping", attachType)
+				log.Printf("✅ [Cinema] Clothing image added (type: %s)", attachType)
+			} else {
+				// 알 수 없는 타입은 Prop으로 처리
+				categories.Prop = append(categories.Prop, imageData)
+				log.Printf("⚠️  [Cinema] Unknown type: %s → Prop image added", attachType)
 			}
 		}
 	}
 
 	normalizeCinemaCategories(categories, &basePrompt)
 
-	log.Printf("✅ Images classified - Models:%d, Clothing:%d, Accessories:%d, BG:%v",
-		len(categories.Models), len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ Images classified - Actor:%d, Clothing:%d, Prop:%d, BG:%v",
+		len(categories.Actor), len(categories.Clothing), len(categories.Prop), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -406,7 +419,7 @@ func normalizeCinemaCategories(categories *ImageCategories, prompt *string) {
 	}
 
 	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
-	hasAnyImage := len(categories.Models) > 0 || len(categories.Clothing) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	hasAnyImage := len(categories.Actor) > 0 || len(categories.Clothing) > 0 || len(categories.Prop) > 0 || categories.Background != nil
 	if !hasAnyImage {
 		log.Printf("🔧 [Cinema] No images provided - will generate with text prompt only")
 		if prompt != nil {
@@ -415,20 +428,20 @@ func normalizeCinemaCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
-	if len(categories.Models) == 0 {
+	if len(categories.Actor) == 0 {
 		switch {
 		case len(categories.Clothing) > 0:
-			categories.Models = append(categories.Models, categories.Clothing[0])
-			log.Printf("🔧 Using clothing image as model placeholder")
-		case len(categories.Accessories) > 0:
-			categories.Models = append(categories.Models, categories.Accessories[0])
-			log.Printf("🔧 Using accessory image as model placeholder")
+			categories.Actor = append(categories.Actor, categories.Clothing[0])
+			log.Printf("🔧 Using clothing image as actor placeholder")
+		case len(categories.Prop) > 0:
+			categories.Actor = append(categories.Actor, categories.Prop[0])
+			log.Printf("🔧 Using prop image as actor placeholder")
 		case categories.Background != nil:
-			categories.Models = append(categories.Models, categories.Background)
-			log.Printf("🔧 Using background image as model placeholder")
+			categories.Actor = append(categories.Actor, categories.Background)
+			log.Printf("🔧 Using background image as actor placeholder")
 		default:
 			// 🔧 더 이상 1x1 placeholder 사용 안 함
-			log.Printf("🔧 [Cinema] No model image available - will use text-only generation")
+			log.Printf("🔧 [Cinema] No actor image available - will use text-only generation")
 		}
 
 		if prompt != nil {
@@ -436,10 +449,10 @@ func normalizeCinemaCategories(categories *ImageCategories, prompt *string) {
 		}
 	}
 
-	// Models가 있을 때만 Clothing 채우기
-	if len(categories.Clothing) == 0 && len(categories.Accessories) == 0 && len(categories.Models) > 0 {
-		categories.Clothing = append(categories.Clothing, categories.Models[0])
-		log.Printf("🔧 No clothing/accessories provided; reusing model reference")
+	// Actor가 있을 때만 Clothing 채우기
+	if len(categories.Clothing) == 0 && len(categories.Prop) == 0 && len(categories.Actor) > 0 {
+		categories.Clothing = append(categories.Clothing, categories.Actor[0])
+		log.Printf("🔧 No clothing/props provided; reusing actor reference")
 	}
 }
 
@@ -540,9 +553,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{
-				Models:      [][]byte{},
-				Clothing:    [][]byte{},
-				Accessories: [][]byte{},
+				Actor:    [][]byte{},
+				Clothing: [][]byte{},
+				Prop:     [][]byte{},
 			}
 
 			if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
@@ -550,9 +563,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
-					Models:      [][]byte{},
-					Clothing:    [][]byte{},
-					Accessories: [][]byte{},
+					Actor:    [][]byte{},
+					Clothing: [][]byte{},
+					Prop:     [][]byte{},
 				}
 
 				clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
@@ -583,9 +596,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					// type에 따라 카테고리별로 분류
 					switch attachType {
 					case "model", "character", "actor", "face":
-						if len(stageCategories.Models) < MaxModels {
-							stageCategories.Models = append(stageCategories.Models, imageData)
-							log.Printf("✅ Stage %d: Model/Character/Face image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Models), MaxModels, attachType)
+						if len(stageCategories.Actor) < MaxModels {
+							stageCategories.Actor = append(stageCategories.Actor, imageData)
+							log.Printf("✅ Stage %d: Model/Character/Face image added (%d/%d) [type: %s]", stageIndex, len(stageCategories.Actor), MaxModels, attachType)
 						} else {
 							log.Printf("⚠️ Stage %d: Maximum models reached (%d), skipping", stageIndex, MaxModels)
 						}
@@ -597,7 +610,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
 							log.Printf("✅ Stage %d: Clothing image added (type: %s)", stageIndex, attachType)
 						} else if accessoryTypes[attachType] {
-							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
+							stageCategories.Prop = append(stageCategories.Prop, imageData)
 							log.Printf("✅ Stage %d: Accessory image added (type: %s)", stageIndex, attachType)
 						} else {
 							log.Printf("⚠️  Stage %d: Unknown type: %s, skipping", stageIndex, attachType)
@@ -605,9 +618,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					}
 				}
 
-				log.Printf("✅ Stage %d: Images classified - Models:%d, Clothing:%d, Accessories:%d, BG:%v",
-					stageIndex, len(stageCategories.Models), len(stageCategories.Clothing),
-					len(stageCategories.Accessories), stageCategories.Background != nil)
+				log.Printf("✅ Stage %d: Images classified - Actor:%d, Clothing:%d, Prop:%d, BG:%v",
+					stageIndex, len(stageCategories.Actor), len(stageCategories.Clothing),
+					len(stageCategories.Prop), stageCategories.Background != nil)
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
 				// 레거시 방식: mergedImageAttachId
@@ -622,9 +635,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				// 레거시 이미지를 Clothing 카테고리로 처리
 				stageCategories = &ImageCategories{
-					Models:      [][]byte{},
-					Clothing:    [][]byte{imageData},
-					Accessories: [][]byte{},
+					Actor:    [][]byte{},
+					Clothing: [][]byte{imageData},
+					Prop:     [][]byte{},
 				}
 			} else {
 				log.Printf("❌ Stage %d: No individualImageAttachIds or mergedImageAttachId found - using placeholder", stageIndex)
@@ -808,9 +821,9 @@ MANDATORY TECHNICAL SPECS:
 
 		// individualImageAttachIds 또는 mergedImageAttachId 지원
 		retryCategories := &ImageCategories{
-			Models:      [][]byte{},
-			Clothing:    [][]byte{},
-			Accessories: [][]byte{},
+			Actor:    [][]byte{},
+			Clothing: [][]byte{},
+			Prop:     [][]byte{},
 		}
 
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
@@ -832,8 +845,8 @@ MANDATORY TECHNICAL SPECS:
 
 				switch attachType {
 				case "model", "character", "actor", "face":
-					if len(retryCategories.Models) < MaxModels {
-						retryCategories.Models = append(retryCategories.Models, imageData)
+					if len(retryCategories.Actor) < MaxModels {
+						retryCategories.Actor = append(retryCategories.Actor, imageData)
 					}
 				case "bg":
 					retryCategories.Background = imageData
@@ -841,7 +854,7 @@ MANDATORY TECHNICAL SPECS:
 					if clothingTypes[attachType] {
 						retryCategories.Clothing = append(retryCategories.Clothing, imageData)
 					} else if accessoryTypes[attachType] {
-						retryCategories.Accessories = append(retryCategories.Accessories, imageData)
+						retryCategories.Prop = append(retryCategories.Prop, imageData)
 					}
 				}
 			}
@@ -854,9 +867,9 @@ MANDATORY TECHNICAL SPECS:
 				imageData = fallback.PlaceholderBytes()
 			}
 			retryCategories = &ImageCategories{
-				Models:      [][]byte{},
-				Clothing:    [][]byte{imageData},
-				Accessories: [][]byte{},
+				Actor:    [][]byte{},
+				Clothing: [][]byte{imageData},
+				Prop:     [][]byte{},
 			}
 		} else {
 			log.Printf("❌ Stage %d: No image data for retry - using placeholder", stageIdx)

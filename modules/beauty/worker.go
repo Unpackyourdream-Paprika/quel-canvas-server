@@ -153,8 +153,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 3: 이미지 다운로드 및 카테고리별 분류 (Beauty 전용)
 	categories := &ImageCategories{
-		Products:    [][]byte{}, // Clothing 대신 Products 사용 (Beauty 전용)
-		Accessories: [][]byte{},
+		Product: [][]byte{},
 	}
 
 	// Beauty 전용 타입 정의
@@ -167,12 +166,6 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"cosmetic": true,
 		"skincare": true,
 		"makeup":   true,
-	}
-
-	accessoryTypes := map[string]bool{
-		"brush": true,
-		"tool":  true,
-		"acce":  true,
 	}
 
 	for i, attachObj := range individualImageAttachIds {
@@ -209,25 +202,22 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			categories.Background = imageData
 			log.Printf("✅ [Beauty] Background image added")
 		default:
-			if productTypes[attachType] {
-				categories.Products = append(categories.Products, imageData)
+			// Beauty: 모든 제품 타입(product, lipstick, cream, brush, tool 등)은 Product로 처리
+			if productTypes[attachType] || attachType != "none" {
+				categories.Product = append(categories.Product, imageData)
 				log.Printf("✅ [Beauty] Product image added (type: '%s')", attachType)
-			} else if accessoryTypes[attachType] {
-				categories.Accessories = append(categories.Accessories, imageData)
-				log.Printf("✅ [Beauty] Accessory image added (type: '%s')", attachType)
-			} else {
-				// ⚠️ Beauty 모듈: 알 수 없는 타입 또는 'none'도 제품으로 처리
-				// 이미지가 버려지는 것을 방지 (엉뚱한 생성 결과 방지)
-				log.Printf("⚠️  [Beauty] Type '%s' treated as product (fallback to prevent image loss)", attachType)
-				categories.Products = append(categories.Products, imageData)
+			} else if attachType == "none" {
+				// none 타입도 Product로 처리
+				categories.Product = append(categories.Product, imageData)
+				log.Printf("✅ [Beauty] None type → Product image added")
 			}
 		}
 	}
 
 	normalizeBeautyCategories(categories, &basePrompt)
 
-	log.Printf("✅ [Beauty] Images classified - Model:%v, Products:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Products), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ [Beauty] Images classified - Model:%v, Product:%d, BG:%v",
+		categories.Model != nil, len(categories.Product), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -382,7 +372,7 @@ func normalizeBeautyCategories(categories *ImageCategories, prompt *string) {
 	}
 
 	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
-	hasAnyImage := categories.Model != nil || len(categories.Products) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	hasAnyImage := categories.Model != nil || len(categories.Product) > 0 || categories.Background != nil
 	if !hasAnyImage {
 		log.Printf("🔧 [Beauty] No images provided - will generate with text prompt only")
 		if prompt != nil {
@@ -391,16 +381,13 @@ func normalizeBeautyCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
-	if len(categories.Products) == 0 {
+	if len(categories.Product) == 0 {
 		switch {
 		case categories.Model != nil:
-			categories.Products = append(categories.Products, categories.Model)
+			categories.Product = append(categories.Product, categories.Model)
 			log.Printf("🔧 [Beauty] Using model image as product placeholder")
-		case len(categories.Accessories) > 0:
-			categories.Products = append(categories.Products, categories.Accessories[0])
-			log.Printf("🔧 [Beauty] Using accessory image as product placeholder")
 		case categories.Background != nil:
-			categories.Products = append(categories.Products, categories.Background)
+			categories.Product = append(categories.Product, categories.Background)
 			log.Printf("🔧 [Beauty] Using background image as product placeholder")
 		default:
 			// 🔧 더 이상 1x1 placeholder 사용 안 함
@@ -413,7 +400,7 @@ func normalizeBeautyCategories(categories *ImageCategories, prompt *string) {
 
 	// ⚠️ Beauty 모듈: Model이 없으면 Product-only 모드로 동작
 	// Product 이미지를 Model 슬롯에 복사하지 않음 (엉뚱한 모델 생성 방지)
-	if categories.Model == nil && len(categories.Products) > 0 {
+	if categories.Model == nil && len(categories.Product) > 0 {
 		log.Printf("🔧 [Beauty] No model provided - running in Product-only mode (no model image will be used)")
 	}
 }
@@ -511,8 +498,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{
-				Products:    [][]byte{}, // Beauty 전용
-				Accessories: [][]byte{},
+				Product: [][]byte{},
 			}
 			backgrounds := [][]byte{}
 
@@ -521,8 +507,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
-					Products:    [][]byte{}, // Beauty 전용
-					Accessories: [][]byte{},
+					Product: [][]byte{},
 				}
 
 				// Beauty 전용 타입 정의
@@ -570,24 +555,24 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						log.Printf("✅ [Beauty Pipeline] Stage %d: Background image added (Total: %d)", stageIndex, len(backgrounds))
 					default:
 						if productTypes[attachType] {
-							stageCategories.Products = append(stageCategories.Products, imageData)
+							stageCategories.Product = append(stageCategories.Product, imageData)
 							log.Printf("✅ [Beauty Pipeline] Stage %d: Product image added (type: %s)", stageIndex, attachType)
 						} else if accessoryTypes[attachType] {
 							// ⚠️ CRITICAL FIX: Treat 'acce' (Accessory) as Product for now to ensure all user uploads appear.
 							// The user expects all 4 images to be products, but some are tagged as 'acce'.
-							stageCategories.Products = append(stageCategories.Products, imageData)
+							stageCategories.Product = append(stageCategories.Product, imageData)
 							log.Printf("✅ [Beauty Pipeline] Stage %d: Product image added (remapped from accessory type: %s)", stageIndex, attachType)
 						} else {
 							// ⚠️ Beauty 모듈: 알 수 없는 타입 또는 'none'도 제품으로 처리
 							log.Printf("⚠️  [Beauty Pipeline] Stage %d: Type '%s' treated as product (fallback)", stageIndex, attachType)
-							stageCategories.Products = append(stageCategories.Products, imageData)
+							stageCategories.Product = append(stageCategories.Product, imageData)
 						}
 					}
 				}
 
-				log.Printf("✅ [Beauty Pipeline] Stage %d: Images classified - Model:%v, Products:%d, Accessories:%d, BG:%v",
-					stageIndex, stageCategories.Model != nil, len(stageCategories.Products),
-					len(stageCategories.Accessories), stageCategories.Background != nil)
+				log.Printf("✅ [Beauty Pipeline] Stage %d: Images classified - Model:%v, Product:%d, %d, BG:%v",
+					stageIndex, stageCategories.Model != nil, len(stageCategories.Product),
+					len(stageCategories.Product), stageCategories.Background != nil)
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
 				// 레거시 방식: mergedImageAttachId
@@ -600,14 +585,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					imageData = fallback.PlaceholderBytes()
 				}
 
-				// Beauty: 레거시 이미지를 Products 카테고리로 처리
+				// Beauty: 레거시 이미지를 Product 카테고리로 처리
 				stageCategories = &ImageCategories{
-					Products:    [][]byte{imageData},
-					Accessories: [][]byte{},
+					Product: [][]byte{imageData},
 				}
 			} else {
 				log.Printf("❌ Stage %d: No individualImageAttachIds or mergedImageAttachId found - using placeholder", stageIndex)
-				stageCategories.Products = append(stageCategories.Products, fallback.PlaceholderBytes())
+				stageCategories.Product = append(stageCategories.Product, fallback.PlaceholderBytes())
 			}
 
 			normalizeBeautyCategories(stageCategories, &prompt)
@@ -754,8 +738,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 		// individualImageAttachIds 또는 mergedImageAttachId 지원
 		retryCategories := &ImageCategories{
-			Products:    [][]byte{},
-			Accessories: [][]byte{},
+			Product: [][]byte{},
 		}
 		backgrounds := [][]byte{}
 
@@ -764,8 +747,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			productTypes := map[string]bool{
 				"product": true, "lipstick": true, "cream": true, "bottle": true,
 				"compact": true, "cosmetic": true, "skincare": true, "makeup": true,
+				"brush": true, "tool": true, "acce": true, // 도구류도 Product로 통합
 			}
-			accessoryTypes := map[string]bool{"brush": true, "tool": true, "acce": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -785,17 +768,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				case "bg", "background":
 					backgrounds = append(backgrounds, imageData)
 				default:
-					if productTypes[attachType] {
-						retryCategories.Products = append(retryCategories.Products, imageData)
-					} else if accessoryTypes[attachType] {
-						retryCategories.Accessories = append(retryCategories.Accessories, imageData)
-					} else if attachType != "none" {
-						retryCategories.Products = append(retryCategories.Products, imageData)
+					if productTypes[attachType] || attachType != "none" {
+						retryCategories.Product = append(retryCategories.Product, imageData)
 					}
 				}
 			}
 		} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
-			// 레거시 방식 (Beauty: Products로 처리)
+			// 레거시 방식 (Beauty: Product로 처리)
 			mergedImageAttachID := int(mergedID)
 			imageData, err := service.DownloadImageFromStorage(mergedImageAttachID)
 			if err != nil {
@@ -803,12 +782,11 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				imageData = fallback.PlaceholderBytes()
 			}
 			retryCategories = &ImageCategories{
-				Products:    [][]byte{imageData},
-				Accessories: [][]byte{},
+				Product: [][]byte{imageData},
 			}
 		} else {
 			log.Printf("❌ Stage %d: No image data for retry - using placeholder", stageIdx)
-			retryCategories.Products = append(retryCategories.Products, fallback.PlaceholderBytes())
+			retryCategories.Product = append(retryCategories.Product, fallback.PlaceholderBytes())
 		}
 
 		normalizeBeautyCategories(retryCategories, &prompt)
