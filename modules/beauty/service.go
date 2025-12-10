@@ -36,11 +36,11 @@ type Service struct {
 }
 
 // ImageCategories - Beauty 카테고리별 이미지 분류 구조체 (화장품 전용)
+// 프론트 type: model, product, background
 type ImageCategories struct {
-	Model       []byte   // 모델 이미지 (최대 1장) - Beauty에서는 인물 뷰티 샷용
-	Products    [][]byte // 화장품/제품 이미지 배열 (lipstick, cream, bottle 등) - Beauty 전용
-	Accessories [][]byte // 악세사리 이미지 배열 (brush, tool 등) - Beauty 보조 도구
-	Background  []byte   // 배경 이미지 (최대 1장)
+	Model      []byte   // 모델 이미지 (최대 1장) - Beauty에서는 인물 뷰티 샷용
+	Product    [][]byte // 화장품/제품 이미지 배열 (lipstick, cream, bottle 등) - Beauty 전용
+	Background []byte   // 배경 이미지 (최대 1장)
 }
 
 func NewService() *Service {
@@ -523,7 +523,7 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
-	hasProducts := len(categories.Products) > 0
+	hasProducts := len(categories.Product) > 0
 	hasBackground := categories.Background != nil
 
 	// 케이스별 메인 지시사항
@@ -575,13 +575,13 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		imageIndex++
 	}
 
-	if len(categories.Products) > 0 {
+	if len(categories.Product) > 0 {
 		instructions = append(instructions,
 			fmt.Sprintf("Reference Image %d (BEAUTY PRODUCTS): Beauty products and cosmetics - use as styling reference or showcase as products", imageIndex))
 		imageIndex++
 	}
 
-	if len(categories.Accessories) > 0 {
+	if len(categories.Product) > 0 {
 		instructions = append(instructions,
 			fmt.Sprintf("Reference Image %d (ACCESSORIES): ALL items - shoes, bags, hats, glasses, jewelry, watches. The person MUST wear/carry EVERY item shown here", imageIndex))
 		imageIndex++
@@ -797,23 +797,23 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	log.Printf("🎨 [Beauty Service] Calling Gemini API with categories - Model:%v, Products:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Products), len(categories.Accessories), categories.Background != nil)
+		categories.Model != nil, len(categories.Product), len(categories.Product), categories.Background != nil)
 
 	// 카테고리별 병합 및 resize (Beauty 전용)
 	var mergedProducts []byte
 	var mergedAccessories []byte
 	var err error
 
-	if len(categories.Products) > 0 {
-		mergedProducts, err = mergeImages(categories.Products, aspectRatio)
+	if len(categories.Product) > 0 {
+		mergedProducts, err = mergeImages(categories.Product, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to merge product images: %w", err)
 		}
-		log.Printf("✅ [Beauty Service] Merged %d product images", len(categories.Products))
+		log.Printf("✅ [Beauty Service] Merged %d product images", len(categories.Product))
 	}
 
-	if len(categories.Accessories) > 0 {
-		mergedAccessories, err = mergeImages(categories.Accessories, aspectRatio)
+	if len(categories.Product) > 0 {
+		mergedAccessories, err = mergeImages(categories.Product, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to merge accessory images: %w", err)
 		}
@@ -845,7 +845,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     mergedProducts,
 			},
 		})
-		log.Printf("📎 [Beauty Service] Added Products image (merged from %d beauty items)", len(categories.Products))
+		log.Printf("📎 [Beauty Service] Added Products image (merged from %d beauty items)", len(categories.Product))
 	}
 
 	if mergedAccessories != nil {
@@ -855,7 +855,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     mergedAccessories,
 			},
 		})
-		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Accessories))
+		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Product))
 	}
 
 	if categories.Background != nil {

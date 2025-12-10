@@ -35,12 +35,12 @@ type Service struct {
 	redis       *redis.Client
 }
 
-// ImageCategories - 카테고리별 이미지 분류 구조체
+// ImageCategories - Cartoon 모듈 전용 이미지 분류 구조체
+// 프론트 type: character, face, prop, background
 type ImageCategories struct {
-	Models      [][]byte // 캐릭터 이미지 배열 (최대 3명)
-	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
-	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
-	Background  []byte   // 배경 이미지 (최대 1장)
+	Character  [][]byte // Character/Face 이미지 배열 (최대 3명)
+	Prop       [][]byte // Prop (소품) 이미지 배열
+	Background []byte   // 배경 이미지 (최대 1장)
 }
 
 // MaxModels - 최대 허용 캐릭터 수
@@ -524,18 +524,16 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 // generateDynamicPrompt - 상황별 동적 프롬프트 생성
 func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
-	hasModels := len(categories.Models) > 0
-	modelCount := len(categories.Models)
-	hasClothing := len(categories.Clothing) > 0
-	hasAccessories := len(categories.Accessories) > 0
-	hasProducts := hasClothing || hasAccessories
+	hasCharacter := len(categories.Character) > 0
+	characterCount := len(categories.Character)
+	hasProp := len(categories.Prop) > 0
 	hasBackground := categories.Background != nil
 
 	// 케이스별 메인 지시사항
 	var mainInstruction string
-	if hasModels {
+	if hasCharacter {
 		// 캐릭터 있음 → 웹툰/카툰 스타일
-		if modelCount == 1 {
+		if characterCount == 1 {
 			mainInstruction = "[WEBTOON/CARTOON STYLE - UNIFIED MASTERPIECE]\n" +
 				"You are a professional webtoon artist creating a SINGLE, COHESIVE illustration.\n" +
 				"The character and background must be rendered TOGETHER as one unified piece of art.\n" +
@@ -556,9 +554,9 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"• EACH character MUST appear exactly as shown in their reference image\n"+
 				"• Characters are anchored firmly in the scene\n"+
 				"• Shadows from characters fall naturally on the background elements\n"+
-				"• The entire image has a consistent artistic style\n\n", modelCount, modelCount)
+				"• The entire image has a consistent artistic style\n\n", characterCount, characterCount)
 		}
-	} else if hasProducts {
+	} else if hasProp {
 		// 프로덕트만 → 프로덕트 포토그래피
 		mainInstruction = "[CARTOON PRODUCT ILLUSTRATOR'S APPROACH]\n" +
 			"You are a world-class cartoon/webtoon illustrator creating editorial-style still life in consistent cartoon style.\n" +
@@ -588,8 +586,8 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	imageIndex := 1
 
 	// 각 카테고리별 명확한 설명 - 다중 캐릭터 지원
-	for i := range categories.Models {
-		if len(categories.Models) == 1 {
+	for i := range categories.Character {
+		if len(categories.Character) == 1 {
 			instructions = append(instructions,
 				fmt.Sprintf("Reference Image %d (CHARACTER): This character's face, body shape, style, and visual features - use EXACTLY this appearance", imageIndex))
 		} else {
@@ -599,15 +597,9 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		imageIndex++
 	}
 
-	if len(categories.Clothing) > 0 {
+	if len(categories.Prop) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (CLOTHING): ALL visible garments - tops, bottoms, dresses, outerwear, layers. The person MUST wear EVERY piece shown here", imageIndex))
-		imageIndex++
-	}
-
-	if len(categories.Accessories) > 0 {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (ACCESSORIES): ALL items - shoes, bags, hats, glasses, jewelry, watches. The person MUST wear/carry EVERY item shown here", imageIndex))
+			fmt.Sprintf("Reference Image %d (PROPS/ITEMS): ALL items - clothing, accessories, objects the character wears/carries. The character MUST have EVERY item shown here", imageIndex))
 		imageIndex++
 	}
 
@@ -621,12 +613,12 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var compositionInstruction string
 
 	// 케이스 1: 캐릭터 이미지가 있는 경우 → 웹툰/카툰 장면
-	if hasModels {
+	if hasCharacter {
 		compositionInstruction = "\n[WEBTOON/CARTOON SCENE COMPOSITION]\n" +
 			"Generate ONE high-quality webtoon/cartoon illustration showing the referenced character(s) in a dynamic scene.\n" +
 			"This is a professional webtoon/cartoon artwork with the character(s) as the star.\n" +
 			"Apply the SAME cartoon/anime rendering to characters AND background; no photoreal elements."
-	} else if hasProducts {
+	} else if hasProp {
 		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
 		compositionInstruction = "\n[CARTOON PRODUCT ILLUSTRATION]\n" +
 			"Generate ONE cartoon/webtoon-style product illustration showcasing the clothing and accessories as OBJECTS.\n" +
@@ -655,7 +647,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	}
 
 	// 배경 관련 지시사항 - 캐릭터가 있을 때만 추가
-	if hasModels && hasBackground {
+	if hasCharacter && hasBackground {
 		// 모델 + 배경 케이스 → 환경 통합 지시사항
 		compositionInstruction += " shot on location with UNIFIED RENDERING.\n\n" +
 			"[GLOBAL UNITY]\n" +
@@ -668,7 +660,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"[TECHNICAL EXECUTION]\n" +
 			"✓ Single cohesive illustration\n" +
 			"✓ Consistent artistic style"
-	} else if hasModels && !hasBackground {
+	} else if hasCharacter && !hasBackground {
 		// 캐릭터만 있고 배경 없음 → 심플 배경
 		compositionInstruction += " with a clean, stylized background that complements the character(s)."
 	}
@@ -676,7 +668,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	// 핵심 요구사항 - 케이스별로 다르게
 	var criticalRules string
-	if hasModels {
+	if hasCharacter {
 		// 캐릭터 있는 케이스 - 웹툰/카툰 규칙
 		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
 			"🎯 UNIFIED ARTWORK - Must look like one single painting\n" +
@@ -691,7 +683,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"❌ Mismatched lighting or shadows\n" +
 			"❌ Incorrect scale (character too big or too small)\n" +
 			"❌ Split-screen, collage, or multiple separate images"
-	} else if hasProducts {
+	} else if hasProp {
 		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
 		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
 			"🎯 Showcase the products as beautiful OBJECTS with perfect details\n" +
@@ -728,7 +720,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 16:9 비율 전용 추가 지시사항
 	var aspectRatioInstruction string
 	if aspectRatio == "16:9" {
-		if hasModels {
+		if hasCharacter {
 			// 모델이 있는 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
 				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
@@ -749,7 +741,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 				"✓ Depth of field emphasizes the subject while showing environment\n\n" +
 				"GOAL: A breathtaking wide shot from a high-budget fashion editorial - \n" +
 				"like Annie Leibovitz or Steven Meisel capturing a MOMENT of drama and beauty."
-		} else if hasProducts {
+		} else if hasProp {
 			// 프로덕트 샷 16:9 케이스
 			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PRODUCT SHOT]\n" +
 				"This is a WIDE ANGLE product shot - use the horizontal space for artistic storytelling.\n\n" +
@@ -804,25 +796,17 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		aspectRatio = "16:9"
 	}
 
-	log.Printf("🎨 Calling Gemini API with categories - Characters:%d, Clothing:%d, Accessories:%d, BG:%v",
-		len(categories.Models), len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("🎨 Calling Gemini API with categories - Characters:%d, Prop:%d, BG:%v",
+		len(categories.Character), len(categories.Prop), categories.Background != nil)
 
 	// 카테고리별 병합 및 resize
-	var mergedClothing []byte
-	var mergedAccessories []byte
+	var mergedProp []byte
 	var err error
 
-	if len(categories.Clothing) > 0 {
-		mergedClothing, err = mergeImages(categories.Clothing, aspectRatio)
+	if len(categories.Prop) > 0 {
+		mergedProp, err = mergeImages(categories.Prop, aspectRatio)
 		if err != nil {
-			return "", fmt.Errorf("failed to merge clothing images: %w", err)
-		}
-	}
-
-	if len(categories.Accessories) > 0 {
-		mergedAccessories, err = mergeImages(categories.Accessories, aspectRatio)
-		if err != nil {
-			return "", fmt.Errorf("failed to merge accessory images: %w", err)
+			return "", fmt.Errorf("failed to merge prop images: %w", err)
 		}
 	}
 
@@ -831,7 +815,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	// 순서: Models → Clothing → Accessories → Background
 	// 다중 캐릭터 지원: 각 캐릭터 이미지를 개별적으로 추가
-	for i, modelData := range categories.Models {
+	for i, modelData := range categories.Character {
 		// 각 캐릭터 이미지를 resize
 		resizedModel, err := mergeImages([][]byte{modelData}, aspectRatio)
 		if err != nil {
@@ -843,31 +827,21 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     resizedModel,
 			},
 		})
-		if len(categories.Models) == 1 {
+		if len(categories.Character) == 1 {
 			log.Printf("📎 Added Character image (resized)")
 		} else {
-			log.Printf("📎 Added Character image %d/%d (resized)", i+1, len(categories.Models))
+			log.Printf("📎 Added Character image %d/%d (resized)", i+1, len(categories.Character))
 		}
 	}
 
-	if mergedClothing != nil {
+	if mergedProp != nil {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     mergedClothing,
+				Data:     mergedProp,
 			},
 		})
-		log.Printf("📎 Added Clothing image (merged from %d items)", len(categories.Clothing))
-	}
-
-	if mergedAccessories != nil {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     mergedAccessories,
-			},
-		})
-		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Accessories))
+		log.Printf("📎 Added Prop image (merged from %d items)", len(categories.Prop))
 	}
 
 	if categories.Background != nil {

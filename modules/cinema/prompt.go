@@ -5,31 +5,32 @@ import (
 	"strings"
 )
 
-// PromptCategories - 카테고리별 이미지 분류 구조체 (프롬프트 생성용)
+// PromptCategories - Cinema 모듈 전용 이미지 분류 구조체 (프롬프트 생성용)
+// 프론트 type: actor, face, top, pants, outer, prop, background
 type PromptCategories struct {
-	Models      [][]byte // 모델 이미지 배열 (최대 3명)
-	Clothing    [][]byte // 의류 이미지 배열 (top, pants, outer)
-	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
-	Background  []byte   // 배경 이미지 (최대 1장)
+	Actor      [][]byte // Actor/Face 이미지 배열 (최대 3명)
+	Clothing   [][]byte // 의류 이미지 배열 (top, pants, outer)
+	Prop       [][]byte // Prop (소품) 이미지 배열
+	Background []byte   // 배경 이미지 (최대 1장)
 }
 
 // GenerateDynamicPrompt - Cinema 모듈 전용 프롬프트 생성 (간소화 및 명확화 버전)
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
-	// 케이스 분석
-	hasModels := len(categories.Models) > 0
-	modelCount := len(categories.Models)
-	hasClothing := len(categories.Clothing) > 0
-	hasAccessories := len(categories.Accessories) > 0
-	hasProducts := hasClothing || hasAccessories
+	// 케이스 분석 (프론트 type 기준)
+	hasActor := len(categories.Actor) > 0      // type: actor, face
+	actorCount := len(categories.Actor)
+	hasClothing := len(categories.Clothing) > 0 // type: top, pants, outer
+	hasProp := len(categories.Prop) > 0         // type: prop
+	hasProducts := hasClothing || hasProp
 	hasBackground := categories.Background != nil
 
 	var promptBuilder strings.Builder
 
 	// 1. [TASK DEFINITION] - 명확한 목표 설정
 	promptBuilder.WriteString("[TASK]\n")
-	if hasModels {
+	if hasActor {
 		promptBuilder.WriteString("Generate a photorealistic cinematic film still.\n")
-		promptBuilder.WriteString(fmt.Sprintf("The scene MUST contain EXACTLY %d person(s).\n", modelCount))
+		promptBuilder.WriteString(fmt.Sprintf("The scene MUST contain EXACTLY %d person(s).\n", actorCount))
 	} else if hasProducts {
 		promptBuilder.WriteString("Generate a photorealistic cinematic product shot.\n")
 		promptBuilder.WriteString("NO people allowed. Focus on the objects.\n")
@@ -40,14 +41,14 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	promptBuilder.WriteString("\n")
 
 	// 2. [SUBJECTS] - 인물/모델 상세 지시 (담백하게)
-	if hasModels {
+	if hasActor {
 		promptBuilder.WriteString("[SUBJECTS - CRITICAL]\n")
-		for i := range categories.Models {
+		for i := range categories.Actor {
 			idx := i + 1
 			promptBuilder.WriteString(fmt.Sprintf("%d. Person %d: Use Reference Image %d.\n", idx, idx, idx))
 			promptBuilder.WriteString("   - FACE: Copy the face, age, gender, and ethnicity EXACTLY.\n")
 			promptBuilder.WriteString("   - BODY: Observe the full body structure/shape in the reference and maintain it.\n")
-			if modelCount > 1 {
+			if actorCount > 1 {
 				promptBuilder.WriteString("   - INTERACTION: Natural interaction with other subjects in the scene.\n")
 			}
 		}
@@ -55,12 +56,12 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	}
 
 	// 3. [ATTIRE & PROPS] - 의상 및 소품
-	if hasClothing || hasAccessories {
+	if hasClothing || hasProp {
 		promptBuilder.WriteString("[ATTIRE & PROPS]\n")
 		if hasClothing {
 			promptBuilder.WriteString("- Wear the clothing shown in the Clothing Reference Images.\n")
 		}
-		if hasAccessories {
+		if hasProp {
 			promptBuilder.WriteString("- Include the accessories shown in the Accessory Reference Images.\n")
 		}
 		promptBuilder.WriteString("\n")
