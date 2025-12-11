@@ -255,6 +255,16 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
+				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Combination %d: Job %s cancelled, stopping generation", idx+1, job.JobID)
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
+				}
+
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
@@ -600,6 +610,16 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
+				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Stage %d: Job %s cancelled, stopping generation", stageIndex, job.JobID)
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
+				}
+
 				// Rotate backgrounds if multiple exist
 				if len(backgrounds) > 0 {
 					stageCategories.Background = backgrounds[i%len(backgrounds)]
@@ -721,6 +741,12 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 	// Step 2: 부족한 Stage만 재시도
 	for stageIdx, stageData := range stages {
+		// 🛑 재시도 전에 취소 체크
+		if service.IsJobCancelled(job.JobID) {
+			log.Printf("🛑 Job %s cancelled, skipping retry phase", job.JobID)
+			break
+		}
+
 		stage := stageData.(map[string]interface{})
 		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
@@ -794,6 +820,16 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		// 재시도 루프
 		retrySuccess := 0
 		for i := 0; i < missing; i++ {
+			// 🛑 재시도 중 취소 체크
+			if service.IsJobCancelled(job.JobID) {
+				log.Printf("🛑 Stage %d: Job %s cancelled during retry", stageIdx, job.JobID)
+				service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+				if job.ProductionID != nil {
+					service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+				}
+				return
+			}
+
 			// Rotate backgrounds if multiple exist
 			if len(backgrounds) > 0 {
 				retryCategories.Background = backgrounds[i%len(backgrounds)]
@@ -1061,6 +1097,16 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 	completedCount := 0
 
 	for i := 0; i < quantity; i++ {
+		// 🛑 취소 체크
+		if service.IsJobCancelled(job.JobID) {
+			log.Printf("🛑 Job %s cancelled, stopping generation", job.JobID)
+			service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+			if job.ProductionID != nil {
+				service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+			}
+			return
+		}
+
 		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)
 
 		// 4.1: Gemini API 호출 (단일 이미지 전달, aspect-ratio 포함)
