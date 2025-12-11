@@ -503,7 +503,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 					case "model":
 						stageCategories.Model = imageData
 						log.Printf("✅ Stage %d: Model image added", stageIndex)
-					case "bg":
+					case "bg", "background":
 						stageCategories.Background = imageData
 						log.Printf("✅ Stage %d: Background image added", stageIndex)
 					default:
@@ -700,7 +700,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 				switch attachType {
 				case "model":
 					retryCategories.Model = imageData
-				case "bg":
+				case "bg", "background":
 					retryCategories.Background = imageData
 				default:
 					if clothingTypes[attachType] {

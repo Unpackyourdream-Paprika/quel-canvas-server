@@ -602,7 +602,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						} else {
 							log.Printf("⚠️ Stage %d: Maximum models reached (%d), skipping", stageIndex, MaxModels)
 						}
-					case "bg":
+					case "bg", "background":
 						stageCategories.Background = imageData
 						log.Printf("✅ Stage %d: Background image added", stageIndex)
 					default:
@@ -848,7 +848,7 @@ MANDATORY TECHNICAL SPECS:
 					if len(retryCategories.Actor) < MaxModels {
 						retryCategories.Actor = append(retryCategories.Actor, imageData)
 					}
-				case "bg":
+				case "bg", "background":
 					retryCategories.Background = imageData
 				default:
 					if clothingTypes[attachType] {
