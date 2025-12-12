@@ -12,6 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"quel-canvas-server/modules/common/cancel"
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
 	"quel-canvas-server/modules/common/model"
@@ -513,13 +514,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// Phase 3: 모든 Stage 병렬 처리 (최종 배열은 순서 보장)
-	type StageResult struct {
-		StageIndex int
-		AttachIDs  []int
-		Success    int
-	}
-
-	results := make([]StageResult, len(stages))
+	results := make([]cancel.StageResult, len(stages))
 	var wg sync.WaitGroup
 	var progressMutex sync.Mutex
 	totalCompleted := 0
@@ -647,6 +642,12 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
 				if service.IsJobCancelled(job.JobID) {
 					log.Printf("🛑 Stage %d: Job %s cancelled, stopping generation", stageIndex, job.JobID)
+					// 지금까지 생성된 이미지는 results에 저장
+					results[stageIndex] = cancel.StageResult{
+						StageIndex: stageIndex,
+						AttachIDs:  stageGeneratedIds,
+						Success:    len(stageGeneratedIds),
+					}
 					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
 					if job.ProductionID != nil {
 						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
@@ -685,6 +686,22 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 						return
 					}
 					continue
+				}
+
+				// 🛑 Gemini 응답 후 취소 체크 - 취소됐으면 저장/차감 안 함
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Stage %d: Job %s cancelled after generation, discarding image %d", stageIndex, job.JobID, i+1)
+					// 지금까지 생성된 이미지는 results에 저장
+					results[stageIndex] = cancel.StageResult{
+						StageIndex: stageIndex,
+						AttachIDs:  stageGeneratedIds,
+						Success:    len(stageGeneratedIds),
+					}
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
 				}
 
 				// Base64 → []byte 변환
@@ -744,7 +761,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			}
 
 			// Stage 결과 저장 (stage_index 기반으로 올바른 위치에 저장)
-			results[stageIndex] = StageResult{
+			results[stageIndex] = cancel.StageResult{
 				StageIndex: stageIndex,
 				AttachIDs:  stageGeneratedIds,
 				Success:    len(stageGeneratedIds),
@@ -979,6 +996,19 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// Phase 4: 최종 완료 처리
+	// 🛑 Cancel된 job은 상태를 덮어쓰지 않음
+	if service.IsJobCancelled(job.JobID) {
+		log.Printf("🛑 Job %s was cancelled, keeping user_cancelled status", job.JobID)
+		// attach_ids만 업데이트 (이미 생성된 이미지들)
+		if job.ProductionID != nil && len(allGeneratedAttachIds) > 0 {
+			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, allGeneratedAttachIds); err != nil {
+				log.Printf("⚠️  Failed to update production attach_ids: %v", err)
+			}
+		}
+		log.Printf("✅ Pipeline Stage processing completed for job: %s (cancelled with %d images)", job.JobID, len(allGeneratedAttachIds))
+		return
+	}
+
 	finalStatus := model.StatusCompleted
 	if len(allGeneratedAttachIds) == 0 {
 		log.Printf("⚠️ No images generated in pipeline; marking job as completed with fallbacks")
