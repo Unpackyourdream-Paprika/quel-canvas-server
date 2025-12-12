@@ -54,14 +54,37 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 		return
 	}
 
-	// sourceAttachId 추출 (원본 이미지)
-	sourceAttachIDFloat, ok := inputData["sourceAttachId"].(float64)
-	if !ok {
-		log.Printf("❌ [Multiview] Missing sourceAttachId")
-		updateJobFailed(job.JobID, "Missing source image attach ID")
+	// sourceImageBase64 또는 sourceAttachId 추출 (원본 이미지)
+	var sourceImageData []byte
+	var err error
+
+	// 우선 base64 데이터 확인
+	if sourceBase64, ok := inputData["sourceImageBase64"].(string); ok && sourceBase64 != "" {
+		log.Printf("📦 [Multiview] Using base64 source image")
+		sourceImageData, err = base64.StdEncoding.DecodeString(sourceBase64)
+		if err != nil {
+			log.Printf("❌ [Multiview] Failed to decode base64 image: %v", err)
+			updateJobFailed(job.JobID, "Failed to decode base64 image")
+			return
+		}
+		log.Printf("✅ [Multiview] Base64 source image decoded: %d bytes", len(sourceImageData))
+	} else if sourceAttachIDFloat, ok := inputData["sourceAttachId"].(float64); ok {
+		// base64가 없으면 attachId로 다운로드
+		sourceAttachID := int(sourceAttachIDFloat)
+		log.Printf("📦 [Multiview] Using sourceAttachId: %d", sourceAttachID)
+		dbClient := database.NewClient()
+		sourceImageData, err = dbClient.DownloadImageFromStorage(sourceAttachID)
+		if err != nil {
+			log.Printf("❌ [Multiview] Failed to download source image: %v", err)
+			updateJobFailed(job.JobID, "Failed to download source image")
+			return
+		}
+		log.Printf("✅ [Multiview] Source image downloaded: %d bytes", len(sourceImageData))
+	} else {
+		log.Printf("❌ [Multiview] Missing both sourceImageBase64 and sourceAttachId")
+		updateJobFailed(job.JobID, "Missing source image (base64 or attach ID)")
 		return
 	}
-	sourceAttachID := int(sourceAttachIDFloat)
 
 	// userId 추출
 	userID, _ := inputData["userId"].(string)
@@ -100,11 +123,12 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 	// rotateBackground 추출 (배경도 회전할지 여부)
 	rotateBackground, _ := inputData["rotateBackground"].(bool)
 
-	log.Printf("📦 [Multiview] Input: sourceAttachId=%d, userId=%s, angles=%v, aspectRatio=%s, rotateBackground=%v",
-		sourceAttachID, userID, angles, aspectRatio, rotateBackground)
+	log.Printf("📦 [Multiview] Input: userId=%s, angles=%v, aspectRatio=%s, rotateBackground=%v",
+		userID, angles, aspectRatio, rotateBackground)
 
 	// Phase 2: Status 업데이트 → processing
-	if err := dbClient.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
+	dbClient = database.NewClient()
+	if err = dbClient.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
 		log.Printf("⚠️ [Multiview] Failed to update job status: %v", err)
 	}
 
@@ -119,14 +143,7 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 		return
 	}
 
-	// Phase 4: 원본 이미지 다운로드
-	sourceImageData, err := dbClient.DownloadImageFromStorage(sourceAttachID)
-	if err != nil {
-		log.Printf("❌ [Multiview] Failed to download source image: %v", err)
-		updateJobFailed(job.JobID, "Failed to download source image")
-		return
-	}
-	log.Printf("✅ [Multiview] Source image downloaded: %d bytes", len(sourceImageData))
+	// Phase 4는 이미 위에서 처리됨 (sourceImageData가 이미 준비됨)
 
 	// Phase 5: 레퍼런스 이미지 다운로드 (있는 경우)
 	referenceMap := make(map[int][]byte)
