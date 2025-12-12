@@ -24,6 +24,12 @@ type ModifyJob struct {
 	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
+// Layer - 색상별 inpaint 지시사항
+type Layer struct {
+	Color  string `json:"color"`  // 페인트 색상 (red, yellow, blue, etc.)
+	Prompt string `json:"prompt"` // 해당 색상 영역에 대한 지시사항
+}
+
 // ModifyInputData - job_input_data JSONB 구조
 type ModifyInputData struct {
 	// 원본 이미지 정보
@@ -36,6 +42,9 @@ type ModifyInputData struct {
 
 	// 프롬프트
 	Prompt                string `json:"prompt"`                // Inpaint 지시사항 (optional)
+
+	// 레이어별 지시사항 (색상별 프롬프트)
+	Layers                []Layer `json:"layers"`               // 색상별 inpaint 지시사항
 
 	// 참조 이미지 (optional)
 	ReferenceImageDataURL *string `json:"referenceImageDataUrl"` // Base64 reference image (optional)
@@ -56,6 +65,7 @@ type ModifyRequest struct {
 	ImageURL              string  `json:"imageUrl"`              // 원본 이미지 URL
 	MaskDataURL           string  `json:"maskDataUrl"`           // Mask 데이터
 	Prompt                string  `json:"prompt"`                // Inpaint 프롬프트
+	Layers                []Layer `json:"layers"`                // 색상별 inpaint 지시사항
 	AttachID              int     `json:"attachId"`              // 원본 attach_id
 	UserID                string  `json:"userId"`                // 사용자 ID
 	ReferenceImage        *string `json:"referenceImage"`        // 참조 이미지 (Base64, optional)

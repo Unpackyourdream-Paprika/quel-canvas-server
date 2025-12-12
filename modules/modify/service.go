@@ -188,6 +188,7 @@ func (s *Service) CreateJobAndEnqueue(jobID, productionID string, inputData Modi
 		"originalProductionId":  inputData.OriginalProductionID,
 		"maskDataUrl":           inputData.MaskDataURL,
 		"prompt":                inputData.Prompt,
+		"layers":                inputData.Layers, // 색상별 inpaint 지시사항
 		"referenceImageDataUrl": inputData.ReferenceImageDataURL,
 		"quantity":              inputData.Quantity,
 		"aspect-ratio":          inputData.AspectRatio,

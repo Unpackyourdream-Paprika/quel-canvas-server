@@ -6,6 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/draw"
+	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -81,6 +84,7 @@ func (s *Service) ProcessModifyJob(ctx context.Context, jobID string) error {
 			imageMimeType,
 			maskBase64,
 			inputData.Prompt,
+			inputData.Layers,
 			referenceBase64,
 			referenceMimeType,
 			inputData.AspectRatio,
@@ -180,7 +184,69 @@ func (s *Service) parseInputData(data map[string]interface{}) (*ModifyInputData,
 		inputData.QuelMemberID = v
 	}
 
+	// layers 파싱
+	if v, ok := data["layers"].([]interface{}); ok {
+		for _, item := range v {
+			if layerMap, ok := item.(map[string]interface{}); ok {
+				layer := Layer{}
+				if color, ok := layerMap["color"].(string); ok {
+					layer.Color = color
+				}
+				if prompt, ok := layerMap["prompt"].(string); ok {
+					layer.Prompt = prompt
+				}
+				if layer.Color != "" && layer.Prompt != "" {
+					inputData.Layers = append(inputData.Layers, layer)
+				}
+			}
+		}
+		log.Printf("📋 Parsed %d layers", len(inputData.Layers))
+	}
+
 	return inputData, nil
+}
+
+// overlayMaskOnImage - 원본 이미지 위에 마스크를 합성
+func (s *Service) overlayMaskOnImage(imageData []byte, maskData []byte) ([]byte, error) {
+	log.Printf("🎨 Overlaying mask on original image...")
+
+	// 원본 이미지 디코딩
+	origImg, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode original image: %w", err)
+	}
+
+	// 마스크 이미지 디코딩
+	maskImg, _, err := image.Decode(bytes.NewReader(maskData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode mask image: %w", err)
+	}
+
+	// 결과 이미지 생성 (원본 크기)
+	bounds := origImg.Bounds()
+	result := image.NewRGBA(bounds)
+
+	// 원본 이미지 복사
+	draw.Draw(result, bounds, origImg, image.Point{}, draw.Src)
+
+	// 마스크 이미지 오버레이 (마스크 크기가 다를 수 있으므로 조정)
+	maskBounds := maskImg.Bounds()
+	if maskBounds.Dx() != bounds.Dx() || maskBounds.Dy() != bounds.Dy() {
+		log.Printf("⚠️  Mask size (%dx%d) differs from image size (%dx%d), drawing as-is",
+			maskBounds.Dx(), maskBounds.Dy(), bounds.Dx(), bounds.Dy())
+	}
+
+	// 마스크를 원본 위에 오버레이 (Over 모드 - 투명 부분은 원본 유지)
+	draw.Draw(result, bounds, maskImg, image.Point{}, draw.Over)
+
+	// PNG로 인코딩
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, result); err != nil {
+		return nil, fmt.Errorf("failed to encode merged image: %w", err)
+	}
+
+	log.Printf("✅ Mask overlayed successfully (merged size: %d bytes)", buf.Len())
+	return buf.Bytes(), nil
 }
 
 // performInpaint - Gemini API를 사용한 이미지 인페인팅
@@ -190,6 +256,7 @@ func (s *Service) performInpaint(
 	imageMimeType string,
 	maskBase64 string,
 	prompt string,
+	layers []Layer,
 	referenceBase64 string,
 	referenceMimeType string,
 	aspectRatio string,
@@ -197,13 +264,29 @@ func (s *Service) performInpaint(
 
 	log.Printf("🤖 Starting inpaint with Gemini API...")
 
-	// 기본 프롬프트 설정
-	if prompt == "" {
-		prompt = "Seamlessly fill in the selected area with natural content"
-	}
+	// 프롬프트 구성 - layers가 있으면 색상별 지시사항 통합
+	var inpaintPrompt string
 
-	// 템플릿 기반 프롬프트 구성
-	inpaintPrompt := fmt.Sprintf(`Using the provided image, change only the [%s] to [new element/description]. Keep everything else in the image exactly the same, preserving the original style, lighting, and composition.`, prompt)
+	// 공통 지시사항: 페인트 자국이 결과물에 남지 않도록
+	paintRemovalInstruction := "IMPORTANT: The colored paint strokes are ONLY markers to indicate areas. You MUST completely remove all paint strokes from the final image - no trace of the colored markings should remain in the output."
+
+	if len(layers) > 0 {
+		// layers에서 색상별 프롬프트 추출하여 통합
+		var layerInstructions []string
+		for _, layer := range layers {
+			instruction := fmt.Sprintf("%s색 부분: %s", layer.Color, layer.Prompt)
+			layerInstructions = append(layerInstructions, instruction)
+		}
+		combinedInstructions := strings.Join(layerInstructions, ", ")
+		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. Instructions by color: %s. %s Keep all other parts of the image exactly the same.`, combinedInstructions, paintRemovalInstruction)
+		log.Printf("📝 Using layers prompt: %s", combinedInstructions)
+	} else if prompt != "" {
+		// 기존 prompt 사용
+		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. %s. %s Keep all other parts of the image exactly the same.`, prompt, paintRemovalInstruction)
+	} else {
+		// 기본 프롬프트
+		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. Seamlessly fill in the selected area with natural content. %s Keep all other parts of the image exactly the same.`, paintRemovalInstruction)
+	}
 
 	// Reference 이미지가 있는 경우 프롬프트에 추가
 	if referenceBase64 != "" {
@@ -218,16 +301,20 @@ func (s *Service) performInpaint(
 		return "", "", fmt.Errorf("failed to decode image or mask data")
 	}
 
+	// 원본 이미지 + 마스크 합성
+	mergedImageData, err := s.overlayMaskOnImage(imageData, maskData)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to overlay mask: %w", err)
+	}
+
 	log.Printf("📤 Sending inpaint request to Gemini...")
 	log.Printf("  - Prompt: %s", inpaintPrompt)
-	log.Printf("  - Image size: %d bytes", len(imageData))
-	log.Printf("  - Mask size: %d bytes", len(maskData))
+	log.Printf("  - Merged image size: %d bytes", len(mergedImageData))
 
-	// Content 생성 - Parts 배열 구성
+	// Content 생성 - 합성된 이미지만 전달 (마스크 따로 안 보냄)
 	parts := []*genai.Part{
 		genai.NewPartFromText(inpaintPrompt),
-		genai.NewPartFromBytes(imageData, imageMimeType),
-		genai.NewPartFromBytes(maskData, "image/png"), // 마스크는 PNG
+		genai.NewPartFromBytes(mergedImageData, "image/png"), // 합성된 이미지
 	}
 
 	// Reference 이미지 추가 (있는 경우)
@@ -363,21 +450,8 @@ func (s *Service) uploadAndSaveImage(
 
 	attachID := attachResults[0].AttachID
 
-	// quel_production_attach 관계 생성
-	productionAttach := map[string]interface{}{
-		"production_id": productionID,
-		"attach_id":     attachID,
-	}
-
-	_, _, err = s.supabase.From("quel_production_attach").
-		Insert(productionAttach, false, "", "", "").
-		Execute()
-
-	if err != nil {
-		log.Printf("⚠️  Failed to create production_attach relation: %v", err)
-	}
-
-	log.Printf("✅ Image saved (attach_id: %d)", attachID)
+	// attach_ids는 UpdateJobProgress에서 quel_production_photo.attach_ids 배열로 업데이트됨
+	log.Printf("✅ Image saved to quel_attach (attach_id: %d)", attachID)
 	return attachID, nil
 }
 

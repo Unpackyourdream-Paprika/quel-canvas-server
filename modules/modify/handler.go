@@ -76,6 +76,7 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 	log.Printf("  - Original Attach ID: %d", req.AttachID)
 	log.Printf("  - Quantity: %d", req.Quantity)
 	log.Printf("  - Prompt: %s", req.Prompt)
+	log.Printf("  - Layers: %d", len(req.Layers))
 	log.Printf("  - Aspect Ratio: %s", req.AspectRatio)
 	log.Printf("  - Has Reference Image: %v", req.ReferenceImage != nil)
 
@@ -120,6 +121,7 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 		OriginalProductionID:  stringValue(req.OriginalProductionID),
 		MaskDataURL:           req.MaskDataURL,
 		Prompt:                req.Prompt,
+		Layers:                req.Layers, // 색상별 inpaint 지시사항
 		ReferenceImageDataURL: req.ReferenceImage,
 		Quantity:              req.Quantity,
 		AspectRatio:           req.AspectRatio,

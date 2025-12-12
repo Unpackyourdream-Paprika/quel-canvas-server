@@ -328,6 +328,16 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 					continue
 				}
 
+				// 🛑 Gemini 응답 후 취소 체크 - 취소됐으면 저장/차감 안 함
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Combination %d: Job %s cancelled after generation, discarding image %d", idx+1, job.JobID, i+1)
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
+				}
+
 				// Base64 → []byte 변환
 				generatedImageData, err := base64DecodeString(generatedBase64)
 				if err != nil {
@@ -387,6 +397,19 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("✅ All combinations completed in parallel")
 
 	// Phase 5: 최종 완료 처리
+	// 🛑 취소된 Job은 user_cancelled 상태 유지 (completed로 덮어쓰지 않음)
+	if service.IsJobCancelled(job.JobID) {
+		log.Printf("🛑 Job %s was cancelled, keeping user_cancelled status", job.JobID)
+		// attach_ids만 업데이트 (이미 생성된 이미지들)
+		if job.ProductionID != nil && len(generatedAttachIds) > 0 {
+			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, generatedAttachIds); err != nil {
+				log.Printf("Failed to update production attach_ids: %v", err)
+			}
+		}
+		log.Printf("Single Batch processing completed for job: %s (cancelled with %d images)", job.JobID, len(generatedAttachIds))
+		return
+	}
+
 	finalStatus := model.StatusCompleted
 	if completedCount == 0 {
 		log.Printf("⚠️ No images generated; marking job as completed with fallbacks")
