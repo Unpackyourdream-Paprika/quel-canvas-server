@@ -224,8 +224,11 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 	log.Printf("   🔗 Base URL: %s", cfg.SupabaseStorageBaseURL)
 	log.Printf("   📁 File Path: %s", filePath)
 
-	// 4. HTTP GET으로 직접 다운로드
-	httpResp, err := http.Get(fullURL)
+	// 4. HTTP GET으로 직접 다운로드 (30초 타임아웃)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	httpResp, err := client.Get(fullURL)
 	if err != nil {
 		log.Printf("❌ HTTP GET failed: %v", err)
 		return nil, fmt.Errorf("failed to download image: %w", err)
