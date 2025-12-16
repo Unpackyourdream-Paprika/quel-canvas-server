@@ -534,41 +534,36 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	var mainInstruction string
 	if hasModel {
 		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION PHOTOGRAPHER'S DRAMATIC COMPOSITION]\n" +
-			"You are a world-class fashion photographer shooting an editorial campaign.\n" +
-			"The PERSON is the HERO - their natural proportions are SACRED and CANNOT be distorted.\n" +
-			"The environment serves the subject, NOT the other way around.\n\n" +
-			"Create ONE photorealistic photograph with DRAMATIC CINEMATIC STORYTELLING:\n" +
-			"• The model wears ALL clothing and accessories in ONE complete outfit\n" +
-			"• Dynamic pose and angle - NOT static or stiff\n" +
-			"• Environmental storytelling - use the location for drama\n" +
-			"• Directional lighting creates mood and depth\n" +
-			"• This is a MOMENT full of energy and narrative\n\n"
+		mainInstruction = "[FASHION EDITORIAL PHOTOGRAPHER]\n" +
+			"You are a fashion photographer shooting an editorial campaign.\n" +
+			"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n" +
+			"The PERSON is the HERO - their natural proportions are SACRED.\n\n" +
+			"Create ONE photorealistic photograph:\n" +
+			"• ONLY ONE MODEL - solo fashion shoot\n" +
+			"• FULL BODY SHOT - model's ENTIRE body from head to TOE visible\n" +
+			"• FEET MUST BE VISIBLE - both feet and shoes completely in frame\n" +
+			"• SERIOUS FACIAL EXPRESSION - stern/fierce/intense gaze, NO SMILING\n" +
+			"• STRONG POSTURE - elongated body lines, poised stance\n" +
+			"• The model wears ALL clothing and accessories\n" +
+			"• Use the EXACT background from the reference image\n\n"
 	} else if hasProducts {
 		// 프로덕트만 → 프로덕트 포토그래피
-		mainInstruction = "[CINEMATIC PRODUCT PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class product photographer creating editorial-style still life.\n" +
-			"The PRODUCTS are the STARS - showcase them as beautiful objects with perfect details.\n" +
+		mainInstruction = "[PRODUCT PHOTOGRAPHER]\n" +
+			"You are a product photographer creating still life.\n" +
+			"The PRODUCTS are the STARS.\n" +
 			"⚠️ CRITICAL: NO people or models in this shot - products only.\n" +
 			"⚠️ CRITICAL: Do NOT invent new items or props. Show ONLY the items provided in the reference images. The count and types must match exactly.\n" +
 			"⚠️ IF ONLY ONE PRODUCT is provided: show exactly that single item by itself on a clean surface/background. Do NOT add shoes, hats, sunglasses, jewelry, watches, wallets, chains, papers, books, boxes, or any extra objects.\n\n" +
-			"Create ONE photorealistic photograph with ARTISTIC STORYTELLING:\n" +
-			"• Artistic arrangement of all items - creative composition\n" +
-			"• Dramatic lighting that highlights textures and materials\n" +
-			"• Environmental context (if location provided) or studio elegance\n" +
-			"• Directional lighting creates depth and mood\n" +
-			"• This is high-end product photography with cinematic quality\n\n"
+			"Create ONE photorealistic photograph:\n" +
+			"• Artistic arrangement of all items\n" +
+			"• Good lighting that highlights textures\n" +
+			"• Use the EXACT background from the reference if provided\n\n"
 	} else {
 		// 배경만 → 환경 포토그래피
-		mainInstruction = "[CINEMATIC ENVIRONMENTAL PHOTOGRAPHER'S APPROACH]\n" +
-			"You are a world-class environmental photographer capturing pure atmosphere.\n" +
-			"The LOCATION is the SUBJECT - showcase its mood, scale, and character.\n" +
+		mainInstruction = "[ENVIRONMENTAL PHOTOGRAPHER]\n" +
+			"You are a photographer capturing atmosphere.\n" +
 			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n\n" +
-			"Create ONE photorealistic photograph with ATMOSPHERIC STORYTELLING:\n" +
-			"• Dramatic composition that captures the location's essence\n" +
-			"• Layers of depth - foreground, midground, background\n" +
-			"• Directional lighting creates mood and drama\n" +
-			"• This is cinematic environmental photography with narrative quality\n\n"
+			"Create ONE photorealistic photograph of the referenced environment.\n\n"
 	}
 
 	var instructions []string
@@ -595,203 +590,207 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (LOCATION INSPIRATION): This shows the MOOD and ATMOSPHERE you should recreate - NOT a background to paste. Like a photographer's location scout photo, use this to understand the setting, lighting direction, and visual style. Generate a COMPLETELY NEW environment inspired by this reference that serves as the perfect stage for your subject", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND - MUST USE EXACTLY): ⚠️ CRITICAL: You MUST use this EXACT background. If it is a white/gray studio, use a WHITE/GRAY STUDIO. If it is an outdoor location, use that EXACT outdoor location. DO NOT invent a different background. The background must match the reference image 100%%.", imageIndex))
 		imageIndex++
 	}
 
-	// 시네마틱 구성 지시사항
+	// 구성 지시사항
 	var compositionInstruction string
 
-	// 케이스 1: 모델 이미지가 있는 경우 → 모델 착용 샷 (패션 에디토리얼)
+	// 케이스 1: 모델 이미지가 있는 경우
 	if hasModel {
 		compositionInstruction = "\n[FASHION EDITORIAL COMPOSITION]\n" +
-			"Generate ONE photorealistic film photograph showing the referenced model wearing the complete outfit (all clothing + accessories).\n" +
-			"This is a high-end fashion editorial shoot with the model as the star."
+			"Generate ONE photorealistic photograph showing the referenced model wearing the complete outfit."
 	} else if hasProducts {
-		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
-		compositionInstruction = "\n[CINEMATIC PRODUCT PHOTOGRAPHY]\n" +
+		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷
+		compositionInstruction = "\n[PRODUCT PHOTOGRAPHY]\n" +
 			"Generate ONE photorealistic product photograph showcasing the clothing and accessories as OBJECTS.\n" +
 			"⚠️ DO NOT add any people, models, or human figures.\n" +
 			"⚠️ DO NOT add any extra products, props, or accessories that are not in the references.\n" +
-			"⚠️ The number of products in the shot must match the references exactly. If only one product is referenced, show exactly that single item by itself on a clean surface.\n" +
-			"⚠️ Display ONLY the referenced items artistically arranged - like high-end product photography.\n"
+			"⚠️ The number of products in the shot must match the references exactly. If only one product is referenced, show exactly that single item by itself on a clean surface.\n"
 
 		if hasBackground {
-			compositionInstruction += "The products are placed naturally within the referenced environment - " +
-				"as if styled by a professional photographer on location.\n" +
-				"The items interact with the space (resting on surfaces, hanging naturally, artfully positioned)."
+			compositionInstruction += "The products are placed naturally within the referenced environment."
 		} else {
-			compositionInstruction += "Create a stunning studio product shot with professional lighting and composition.\n" +
-				"The items are arranged artistically - flat lay, suspended, or elegantly displayed."
+			compositionInstruction += "Create a studio product shot with professional lighting."
 		}
 	} else if hasBackground {
 		// 케이스 3: 배경만 → 환경 사진
-		compositionInstruction = "\n[CINEMATIC ENVIRONMENTAL PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic cinematic photograph of the referenced environment.\n" +
-			"⚠️ DO NOT add any people, models, or products to this scene.\n" +
-			"Focus on capturing the atmosphere, lighting, and mood of the location itself."
+		compositionInstruction = "\n[ENVIRONMENTAL PHOTOGRAPHY]\n" +
+			"Generate ONE photorealistic photograph of the referenced environment.\n" +
+			"⚠️ DO NOT add any people, models, or products to this scene."
 	} else {
-		// 케이스 4: 아무것도 없는 경우 (에러 케이스)
-		compositionInstruction = "\n[CINEMATIC COMPOSITION]\n" +
+		// 케이스 4: 아무것도 없는 경우
+		compositionInstruction = "\n[COMPOSITION]\n" +
 			"Generate a high-quality photorealistic image based on the references provided."
 	}
 
 	// 배경 관련 지시사항 - 모델이 있을 때만 추가
 	if hasModel && hasBackground {
-		// 모델 + 배경 케이스 → 환경 통합 지시사항
-		compositionInstruction += " shot on location with environmental storytelling.\n\n" +
-			"[PHOTOGRAPHER'S APPROACH TO LOCATION]\n" +
-			"The photographer CHOSE this environment to complement the subject - not to overwhelm them.\n" +
-			"🎬 Use the background reference as INSPIRATION ONLY:\n" +
-			"   • Recreate the atmosphere, lighting mood, and setting type\n" +
-			"   • Generate a NEW scene - do NOT paste or overlay the reference\n" +
-			"   • The location serves as a STAGE for the subject's story\n\n" +
-			"[ABSOLUTE PRIORITY: SUBJECT INTEGRITY]\n" +
-			"⚠️ CRITICAL: The person's body proportions are UNTOUCHABLE\n" +
-			"⚠️ DO NOT distort, stretch, compress, or alter the person to fit the frame\n" +
-			"⚠️ The background adapts to showcase the subject - NEVER the reverse\n\n" +
-			"[DRAMATIC ENVIRONMENTAL INTEGRATION]\n" +
-			"✓ Subject positioned naturally in the space (standing, sitting, moving)\n" +
-			"✓ Realistic ground contact with natural shadows\n" +
-			"✓ Background elements create DEPTH - use foreground/midground/background layers\n" +
-			"✓ Directional lighting from the environment enhances drama\n" +
-			"✓ Environmental light wraps around the subject naturally\n" +
-			"✓ Atmospheric perspective adds cinematic depth\n" +
-			"✓ Shot composition tells a STORY - what is happening in this moment?\n\n" +
-			"[TECHNICAL EXECUTION]\n" +
-			"✓ Single camera angle - this is ONE photograph\n" +
-			"✓ Film photography aesthetic with natural color grading\n" +
-			"✓ Rule of thirds or dynamic asymmetric composition\n" +
-			"✓ Depth of field focuses attention on the subject\n" +
-			"✓ The environment and subject look like they exist in the SAME REALITY"
+		// 모델 + 배경 케이스 → 배경 레퍼런스에 집중
+		compositionInstruction += " in the EXACT background from the reference image.\n\n" +
+			"[BACKGROUND - MUST MATCH REFERENCE]\n" +
+			"⚠️ CRITICAL: The background MUST match the reference image EXACTLY.\n" +
+			"⚠️ If the reference shows a WHITE STUDIO, use a WHITE STUDIO.\n" +
+			"⚠️ If the reference shows a GRAY STUDIO, use a GRAY STUDIO.\n" +
+			"⚠️ If the reference shows an outdoor location, use that EXACT location.\n" +
+			"⚠️ DO NOT invent backgrounds. DO NOT add locations not in the reference.\n\n" +
+			"[SUBJECT INTEGRATION]\n" +
+			"✓ Place the subject naturally in the referenced background\n" +
+			"✓ Lighting must match the background reference\n" +
+			"✓ Natural shadows consistent with the background\n" +
+			"✓ The subject and background must look like ONE unified photograph"
 	} else if hasModel && !hasBackground {
-		// 모델만 있고 배경 없음 → 스튜디오
-		compositionInstruction += " in a cinematic studio setting with professional film lighting."
+		// 모델만 있고 배경 없음 → 기본 스튜디오
+		compositionInstruction += " in a clean studio setting with professional lighting."
 	}
-	// 프로덕트 샷이나 배경만 있는 케이스는 위에서 이미 처리됨
+
+	// 공통 금지사항
+	commonForbidden := "\n\n[CRITICAL: FORBIDDEN]\n\n" +
+		"⚠️ NO SPLIT/DUAL COMPOSITION:\n" +
+		"❌ NO vertical dividing lines\n" +
+		"❌ NO left-right split layouts\n" +
+		"❌ NO duplicate subject on both sides\n" +
+		"❌ NO grid or collage\n" +
+		"❌ ONE continuous scene only\n\n" +
+		"⚠️ ONLY ONE PERSON:\n" +
+		"❌ NO multiple models\n" +
+		"❌ NO background people\n" +
+		"❌ This is SOLO photography\n\n" +
+		"[REQUIRED]:\n" +
+		"✓ ONE single photograph\n" +
+		"✓ ONE unified moment\n" +
+		"✓ Fill entire frame - NO empty margins\n" +
+		"✓ Natural asymmetric composition\n"
 
 	// 핵심 요구사항 - 케이스별로 다르게
 	var criticalRules string
 	if hasModel {
-		// 모델 있는 케이스 - 드라마틱 패션 에디토리얼 규칙
-		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Person's body proportions are PERFECT and NATURAL - ZERO tolerance for distortion\n" +
-			"🎯 The subject is the STAR - everything else supports their presence\n" +
-			"🎯 Dramatic composition with ENERGY and MOVEMENT\n" +
-			"🎯 Environmental storytelling - what's the narrative of this moment?\n" +
-			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
-			"🎯 Single cohesive photograph - looks like ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY distortion of the person's proportions (stretched, compressed, squashed)\n" +
-			"❌ Person looking pasted, floating, or artificially placed\n" +
-			"❌ Static, boring, catalog-style poses\n" +
-			"❌ Split-screen, collage, or multiple separate images\n" +
-			"❌ Background reference directly pasted or overlaid\n" +
-			"❌ Centered, symmetrical composition without drama\n" +
-			"❌ Flat lighting that doesn't create mood"
-	} else if hasProducts {
-		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
-		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Showcase the products as beautiful OBJECTS with perfect details\n" +
-			"🎯 Artistic arrangement - creative composition like high-end product photography\n" +
-			"🎯 Dramatic lighting that highlights textures and materials\n" +
-			"🎯 Environmental storytelling through product placement\n" +
-			"🎯 ALL items displayed clearly and beautifully\n" +
-			"🎯 Single cohesive photograph - ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and depth creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY people, models, or human figures in the frame\n" +
-			"❌ Products looking pasted or artificially placed\n" +
-			"❌ Boring, flat catalog-style layouts\n" +
-			"❌ Split-screen, collage, or multiple separate images\n" +
-			"❌ Background reference directly pasted or overlaid\n" +
-			"❌ Cluttered composition without focal point\n" +
-			"❌ Flat lighting that doesn't create depth\n" +
-			"❌ Adding ANY extra items not present in the reference (no shoes, hats, sunglasses, jewelry, watches, chains, wallets, books, papers, phones, boxes, or props). If only one product reference is provided, show EXACTLY that single item alone."
-	} else {
-		// 배경만 있는 케이스 - 환경 촬영 규칙
-		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Capture the pure atmosphere and mood of the location\n" +
-			"🎯 Dramatic composition with depth and visual interest\n" +
-			"🎯 Environmental storytelling - what story does this place tell?\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and layers creatively\n\n" +
+		// 모델 있는 케이스
+		criticalRules = commonForbidden + "\n[FASHION EDITORIAL REQUIREMENTS]\n" +
+			"🎯 ONLY ONE MODEL in the photograph\n" +
+			"🎯 SERIOUS FACIAL EXPRESSION - fierce/stern/intense (NO SMILING)\n" +
+			"🎯 FULL BODY SHOT - head to TOE visible\n" +
+			"🎯 FEET MUST BE VISIBLE - both feet in frame\n" +
+			"🎯 ALL clothing and accessories worn\n" +
+			"🎯 Use EXACT background from reference\n\n" +
 			"[FORBIDDEN]\n" +
-			"❌ DO NOT add people, models, or products to the scene\n" +
-			"❌ Background reference directly pasted or overlaid\n" +
-			"❌ Flat, boring composition without depth\n" +
-			"❌ Split-screen or collage layouts"
+			"❌ SMILING - model must be serious\n" +
+			"❌ CROPPED FEET - feet must be visible\n" +
+			"❌ WRONG BACKGROUND - must match reference exactly\n" +
+			"❌ Multiple people\n" +
+			"❌ Distorted proportions"
+	} else if hasProducts {
+		// 프로덕트 샷 케이스
+		criticalRules = commonForbidden + "\n[PRODUCT REQUIREMENTS]\n" +
+			"🎯 Showcase products beautifully\n" +
+			"🎯 Good lighting\n" +
+			"🎯 ALL items displayed clearly\n" +
+			"🎯 Use EXACT background from reference\n\n" +
+			"[FORBIDDEN]\n" +
+			"❌ ANY people or models\n" +
+			"❌ Products looking pasted\n" +
+			"❌ Adding ANY extra items not present in the reference. If only one product reference is provided, show EXACTLY that single item alone."
+	} else {
+		// 배경만 있는 케이스
+		criticalRules = commonForbidden + "\n[ENVIRONMENT REQUIREMENTS]\n" +
+			"🎯 Capture the atmosphere of the location\n\n" +
+			"[FORBIDDEN]\n" +
+			"❌ DO NOT add people or products"
 	}
 
-	// 16:9 비율 전용 추가 지시사항
+	// aspect ratio별 추가 지시사항
 	var aspectRatioInstruction string
-	if aspectRatio == "16:9" {
+	if aspectRatio == "9:16" {
 		if hasModel {
-			// 모델이 있는 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
-				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE COMPOSITION:\n" +
-				"✓ Subject positioned off-center (rule of thirds) creating dynamic tension\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground elements, subject, background scenery\n" +
-				"✓ Leading lines guide the eye to the subject\n" +
-				"✓ Negative space creates breathing room and drama\n\n" +
-				"🎬 SUBJECT INTEGRITY IN WIDE FRAME:\n" +
-				"⚠️ The wide frame is NOT an excuse to distort proportions\n" +
-				"⚠️ Person maintains PERFECT natural proportions - just smaller in frame if needed\n" +
-				"⚠️ Use the space to tell a STORY, not to force-fit the subject\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates mood across the wide frame\n" +
-				"✓ Atmospheric perspective - distant elements are hazier\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes the subject while showing environment\n\n" +
-				"GOAL: A breathtaking wide shot from a high-budget fashion editorial - \n" +
-				"like Annie Leibovitz or Steven Meisel capturing a MOMENT of drama and beauty."
+			aspectRatioInstruction = "\n\n[9:16 VERTICAL FORMAT]\n" +
+				"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
+				"✓ FEET MUST BE VISIBLE at bottom\n" +
+				"✓ Leave space below feet\n" +
+				"✓ Use EXACT background from reference"
 		} else if hasProducts {
-			// 프로덕트 샷 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PRODUCT SHOT]\n" +
-				"This is a WIDE ANGLE product shot - use the horizontal space for artistic storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE PRODUCT COMPOSITION:\n" +
-				"✓ Products positioned creatively using the full width\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground, products, background elements\n" +
-				"✓ Leading lines guide the eye to the key products\n" +
-				"✓ Negative space creates elegance and breathing room\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates drama and highlights textures\n" +
-				"✓ Atmospheric perspective adds depth\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes products while showing environment\n\n" +
-				"GOAL: A stunning wide product shot like high-end editorial still life photography."
+			aspectRatioInstruction = "\n\n[9:16 VERTICAL PRODUCT SHOT]\n" +
+				"✓ Products arranged vertically\n" +
+				"✓ Use EXACT background from reference"
 		} else {
-			// 배경만 있는 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE LANDSCAPE SHOT]\n" +
-				"This is a WIDE ANGLE environmental shot - showcase the location's grandeur.\n\n" +
-				"🎬 DRAMATIC LANDSCAPE COMPOSITION:\n" +
-				"✓ Use the full WIDTH to capture the environment's scale and atmosphere\n" +
-				"✓ Layers of depth - foreground, midground, background elements\n" +
-				"✓ Leading lines guide the eye through the scene\n" +
-				"✓ Asymmetric composition creates visual tension and interest\n" +
-				"✓ Negative space emphasizes the mood and emptiness (if appropriate)\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates mood and drama\n" +
-				"✓ Atmospheric perspective - distant elements are hazier\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field adds dimension to the scene\n\n" +
-				"GOAL: A stunning environmental shot that tells a story without people - \n" +
-				"like a cinematic establishing shot from a high-budget film."
+			aspectRatioInstruction = "\n\n[9:16 VERTICAL SHOT]\n" +
+				"✓ Use the HEIGHT to capture vertical elements"
+		}
+	} else if aspectRatio == "16:9" {
+		if hasModel {
+			aspectRatioInstruction = "\n\n[16:9 WIDE FORMAT]\n" +
+				"✓ Model's ENTIRE BODY from head to TOE must be visible\n" +
+				"✓ FEET MUST BE VISIBLE at bottom\n" +
+				"✓ Subject positioned using rule of thirds\n" +
+				"✓ Use EXACT background from reference\n\n" +
+				"⚠️ BACKGROUND RULE:\n" +
+				"⚠️ If reference shows WHITE/GRAY STUDIO, use WHITE/GRAY STUDIO\n" +
+				"⚠️ If reference shows outdoor location, use that EXACT location\n" +
+				"⚠️ DO NOT invent locations not in reference"
+		} else if hasProducts {
+			aspectRatioInstruction = "\n\n[16:9 WIDE PRODUCT SHOT]\n" +
+				"✓ Products positioned using the full width\n" +
+				"✓ Use EXACT background from reference"
+		} else {
+			aspectRatioInstruction = "\n\n[16:9 WIDE SHOT]\n" +
+				"✓ Use the full WIDTH to capture the environment"
+		}
+	} else {
+		// 1:1 및 기타 비율
+		if hasModel {
+			aspectRatioInstruction = "\n\n[SQUARE FORMAT]\n" +
+				"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
+				"✓ FEET MUST BE VISIBLE at bottom\n" +
+				"✓ Balanced composition\n" +
+				"✓ Use EXACT background from reference"
+		} else if hasProducts {
+			aspectRatioInstruction = "\n\n[SQUARE PRODUCT SHOT]\n" +
+				"✓ Balanced product arrangement\n" +
+				"✓ Use EXACT background from reference"
+		} else {
+			aspectRatioInstruction = "\n\n[SQUARE SHOT]\n" +
+				"✓ Balanced composition"
 		}
 	}
 
-	// 최종 조합: 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
-	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+	// ⚠️ 최우선 지시사항
+	criticalHeader := "⚠️ CRITICAL REQUIREMENTS ⚠️\n\n" +
+		"[MANDATORY - FEET VISIBLE]:\n" +
+		"🚨 BOTH FEET MUST APPEAR IN FRAME\n" +
+		"🚨 DO NOT CROP AT ANKLES OR CALVES\n" +
+		"🚨 FULL BODY means HEAD TO TOE\n\n" +
+		"[MANDATORY - FACIAL EXPRESSION]:\n" +
+		"🚨 MODEL MUST NOT SMILE\n" +
+		"🚨 SERIOUS/STERN/FIERCE expression only\n" +
+		"🚨 NO happy expression, NO grin, NO teeth showing\n\n" +
+		"[MANDATORY - BACKGROUND]:\n" +
+		"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
+		"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
+		"🚨 If reference is GRAY STUDIO, use GRAY STUDIO\n" +
+		"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
+		"[FORBIDDEN]:\n" +
+		"❌ NO split layouts, NO grid, NO collage\n" +
+		"❌ NO multiple people\n" +
+		"❌ NO smiling\n" +
+		"❌ NO cropped feet\n" +
+		"❌ NO wrong background\n\n"
+
+	// 최종 조합
+	var finalPrompt string
 
 	if userPrompt != "" {
-		finalPrompt += "\n\n[ADDITIONAL STYLING]\n" + userPrompt
+		finalPrompt = criticalHeader + "[USER REQUEST]\n" + userPrompt + "\n\n"
+	} else {
+		finalPrompt = criticalHeader
 	}
+
+	// 카테고리별 스타일 가이드
+	categoryStyleGuide := "\n\n[STYLE GUIDE]\n" +
+		"Fashion photography style. Professional lighting. High-end editorial composition.\n\n" +
+		"[TECHNICAL]\n" +
+		"Fill entire frame. NO empty margins. NO letterboxing.\n"
+
+	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + categoryStyleGuide + criticalRules + aspectRatioInstruction
 
 	return finalPrompt
 }
