@@ -28,20 +28,13 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 케이스별 메인 지시사항
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 뷰티 포트레이트 (얼굴 클로즈업)
+		// 모델 있음 → 뷰티 포트레이트
 		mainInstruction = "[BEAUTY PHOTOGRAPHER'S CLOSE-UP PORTRAIT]\n" +
-			"You are a world-class beauty photographer specializing in cosmetic editorial and makeup photography.\n" +
-			"The FACE is the HERO - skin texture, makeup details, and facial features are SACRED.\n" +
-			"⚠️ CRITICAL: This is a BEAUTY SHOT, NOT a fashion shot.\n" +
-			"⚠️ MANDATORY: CLOSE-UP PORTRAIT ONLY - face and shoulders composition.\n" +
-			"⚠️ FORBIDDEN: NO full body shots, NO fashion model poses, NO runway looks.\n\n" +
+			"You are a world-class beauty photographer specializing in cosmetic editorial and makeup photography.\n\n" +
 			"Create ONE photorealistic beauty photograph with FLAWLESS SKIN DETAIL:\n" +
-			"• CLOSE-UP PORTRAIT: Face fills most of the frame (head and shoulders only)\n" +
-			"• Focus on facial features, skin texture, makeup details\n" +
 			"• Soft, flattering lighting for beauty photography (butterfly or loop lighting)\n" +
 			"• Professional studio beauty photography composition\n" +
-			"• High-end cosmetic editorial quality\n" +
-			"• This is about BEAUTY and MAKEUP, not fashion or outfits\n\n"
+			"• High-end cosmetic editorial quality\n\n"
 	} else if hasProduct {
 		// 프로덕트만 → 뷰티 프로덕트 (화장품/제품) - 개수에 따라 동적 프롬프트
 		productCount := len(categories.Product)
@@ -118,16 +111,16 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 각 카테고리별 명확한 설명 (Beauty-specific)
 	if categories.Model != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL FACE): This person's FACE, facial features, skin tone, bone structure, and expression - use EXACTLY this appearance. Focus on face and shoulders only for beauty closeup", imageIndex))
+			fmt.Sprintf("Reference Image %d (MODEL - MUST MATCH EXACTLY): ⚠️ CRITICAL: You MUST use this EXACT person. Copy this person's face EXACTLY - same ethnicity, same facial structure, same skin tone, same bone structure, same eyes, same nose, same lips. DO NOT change or replace with a different person. The model's identity must be 100%% preserved. ⚠️ SKIN TONE: The model's skin tone must match the reference EXACTLY. DO NOT let product colors affect the model's skin tone. If the model has fair/pale skin, keep it fair/pale regardless of product color.", imageIndex))
 		imageIndex++
 	}
 
 	if len(categories.Product) > 0 {
 		productCount := len(categories.Product)
 		if hasModel {
-			// 모델 + 제품: 메이크업 레퍼런스로 사용
+			// 모델 + 제품: 제품을 들고 있는 CF 샷
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (MAKEUP/COSMETIC REFERENCE): These beauty products show the makeup style and color palette to apply to the model's face - lipstick shade, eyeshadow tones, skin finish. Use these as inspiration for the model's makeup look, NOT as products to place in the shot", imageIndex))
+				fmt.Sprintf("Reference Image %d (PRODUCT TO HOLD): This is the EXACT product the model must HOLD in the shot. Recreate this product EXACTLY - same shape, same color, same packaging, same labels. The model should elegantly hold or present this product like a cosmetic CF/commercial. ⚠️ NATURAL INTEGRATION: The product must look NATURALLY held - proper shadows on hand, realistic lighting matching the scene, natural reflections. DO NOT paste the product like a sticker. The product must be rendered as part of the SAME 3D scene with consistent lighting, shadows, and depth.", imageIndex))
 		} else {
 			// 제품만: 순수 제품 촬영 - 개수 명시
 			var countDesc string
