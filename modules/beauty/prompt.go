@@ -28,8 +28,21 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 케이스별 메인 지시사항
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 뷰티 포트레이트
-		mainInstruction = "[BEAUTY PHOTOGRAPHER'S CLOSE-UP PORTRAIT]\n" +
+		// 모델 있음 → 뷰티 포트레이트 (FACE IDENTITY가 최우선)
+		mainInstruction = "🚨🚨🚨 ABSOLUTE PRIORITY #1: FACE IDENTITY PRESERVATION 🚨🚨🚨\n\n" +
+			"[FACE IDENTITY - THIS IS THE MOST IMPORTANT RULE]:\n" +
+			"🚨 YOU MUST CLONE THE EXACT FACE FROM THE MODEL REFERENCE IMAGE\n" +
+			"🚨 THE PERSON'S FACE MUST BE IDENTICAL - NOT SIMILAR, BUT IDENTICAL\n" +
+			"🚨 COPY: Same eyes shape, same nose shape, same lips shape, same face shape\n" +
+			"🚨 COPY: Same skin tone, same ethnicity, same age appearance\n" +
+			"🚨 COPY: Same eyebrows, same cheekbones, same jawline, same chin\n" +
+			"🚨 COPY: Same hair color, same hair style, same hair texture\n" +
+			"🚨 IF THE MODEL IS ASIAN, THE RESULT MUST BE THE SAME ASIAN PERSON\n" +
+			"🚨 IF THE MODEL IS CAUCASIAN, THE RESULT MUST BE THE SAME CAUCASIAN PERSON\n" +
+			"🚨 DO NOT CREATE A DIFFERENT PERSON - USE THE EXACT SAME PERSON\n" +
+			"🚨 DO NOT BEAUTIFY OR MODIFY THE FACE - KEEP IT EXACTLY AS REFERENCE\n" +
+			"🚨 THE VIEWER SHOULD RECOGNIZE THIS AS THE SAME INDIVIDUAL\n\n" +
+			"[BEAUTY PHOTOGRAPHER'S CLOSE-UP PORTRAIT]\n" +
 			"You are a world-class beauty photographer specializing in cosmetic editorial and makeup photography.\n\n" +
 			"Create ONE photorealistic beauty photograph with FLAWLESS SKIN DETAIL:\n" +
 			"• Soft, flattering lighting for beauty photography (butterfly or loop lighting)\n" +
@@ -111,7 +124,27 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 각 카테고리별 명확한 설명 (Beauty-specific)
 	if categories.Model != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL - MUST MATCH EXACTLY): ⚠️ CRITICAL: You MUST use this EXACT person. Copy this person's face EXACTLY - same ethnicity, same facial structure, same skin tone, same bone structure, same eyes, same nose, same lips. DO NOT change or replace with a different person. The model's identity must be 100%% preserved. ⚠️ SKIN TONE: The model's skin tone must match the reference EXACTLY. DO NOT let product colors affect the model's skin tone. If the model has fair/pale skin, keep it fair/pale regardless of product color.", imageIndex))
+			fmt.Sprintf("Reference Image %d (MODEL - FACE IDENTITY SOURCE):\n"+
+				"🚨🚨🚨 THIS PERSON'S FACE IS SACRED - YOU MUST CLONE IT EXACTLY 🚨🚨🚨\n\n"+
+				"[FACE CLONING REQUIREMENTS - MANDATORY]:\n"+
+				"• CLONE this exact face - the result must show THE SAME PERSON\n"+
+				"• CLONE: Eye shape, eye color, eye size, eye spacing\n"+
+				"• CLONE: Nose shape, nose size, nostril shape\n"+
+				"• CLONE: Lip shape, lip thickness, lip color\n"+
+				"• CLONE: Face shape (round/oval/square/heart)\n"+
+				"• CLONE: Cheekbone position, jawline, chin shape\n"+
+				"• CLONE: Eyebrow shape, eyebrow thickness\n"+
+				"• CLONE: Skin tone, skin texture, any freckles/moles\n"+
+				"• CLONE: Hair color, hair style, hair length, hair texture\n"+
+				"• CLONE: Ethnicity - if Asian, result must be the SAME Asian person\n"+
+				"• CLONE: Age appearance - if young, result must look the same age\n\n"+
+				"⚠️ SKIN TONE PRESERVATION: The model's skin tone must match the reference EXACTLY.\n"+
+				"DO NOT let product colors affect the model's skin tone.\n\n"+
+				"[IDENTITY CHECK]: A friend of this person should INSTANTLY recognize them in the output\n\n"+
+				"⚠️ IGNORE FROM THIS MODEL IMAGE (USE ONLY FOR FACE/BODY):\n"+
+				"❌ IGNORE the background in this model photo - use ONLY the separate BACKGROUND reference\n"+
+				"❌ IGNORE any clothing/accessories in this model photo\n"+
+				"❌ This model image is ONLY for FACE and BODY reference - NOTHING else", imageIndex))
 		imageIndex++
 	}
 

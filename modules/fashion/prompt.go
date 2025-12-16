@@ -34,7 +34,6 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"• ONLY ONE MODEL - solo fashion shoot\n" +
 			"• FULL BODY SHOT - model's ENTIRE body from head to TOE visible\n" +
 			"• FEET MUST BE VISIBLE - both feet and shoes completely in frame\n" +
-			"• SERIOUS FACIAL EXPRESSION - stern/fierce/intense gaze, NO SMILING\n" +
 			"• STRONG POSTURE - elongated body lines, poised stance\n" +
 			"• The model wears ALL clothing and accessories\n" +
 			"• Use the EXACT background from the reference image\n\n"
@@ -62,7 +61,25 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 각 카테고리별 명확한 설명
 	if categories.Model != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
+			fmt.Sprintf("Reference Image %d (MODEL - FACE IDENTITY SOURCE):\n"+
+				"🚨🚨🚨 THIS PERSON'S FACE IS SACRED - YOU MUST CLONE IT EXACTLY 🚨🚨🚨\n\n"+
+				"[FACE CLONING REQUIREMENTS - MANDATORY]:\n"+
+				"• CLONE this exact face - the result must show THE SAME PERSON\n"+
+				"• CLONE: Eye shape, eye color, eye size, eye spacing\n"+
+				"• CLONE: Nose shape, nose size, nostril shape\n"+
+				"• CLONE: Lip shape, lip thickness, lip color\n"+
+				"• CLONE: Face shape (round/oval/square/heart)\n"+
+				"• CLONE: Cheekbone position, jawline, chin shape\n"+
+				"• CLONE: Eyebrow shape, eyebrow thickness\n"+
+				"• CLONE: Skin tone, skin texture, any freckles/moles\n"+
+				"• CLONE: Hair color, hair style, hair length, hair texture\n"+
+				"• CLONE: Ethnicity - if Asian, result must be the SAME Asian person\n"+
+				"• CLONE: Age appearance - if young, result must look the same age\n\n"+
+				"[IDENTITY CHECK]: A friend of this person should INSTANTLY recognize them in the output\n\n"+
+				"⚠️ IGNORE FROM THIS MODEL IMAGE (USE ONLY FOR FACE/BODY):\n"+
+				"❌ IGNORE the background in this model photo - use ONLY the separate BACKGROUND reference\n"+
+				"❌ IGNORE the clothing/outfit in this model photo - use ONLY the separate CLOTHING references\n"+
+				"❌ This model image is ONLY for FACE and BODY SHAPE reference - NOTHING else", imageIndex))
 		imageIndex++
 	}
 
@@ -158,13 +175,11 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		// 모델 있는 케이스
 		criticalRules = commonForbidden + "\n[FASHION EDITORIAL REQUIREMENTS]\n" +
 			"🎯 ONLY ONE MODEL in the photograph\n" +
-			"🎯 SERIOUS FACIAL EXPRESSION - fierce/stern/intense (NO SMILING)\n" +
 			"🎯 FULL BODY SHOT - head to TOE visible\n" +
 			"🎯 FEET MUST BE VISIBLE - both feet in frame\n" +
 			"🎯 ALL clothing and accessories worn\n" +
 			"🎯 Use EXACT background from reference\n\n" +
 			"[FORBIDDEN]\n" +
-			"❌ SMILING - model must be serious\n" +
 			"❌ CROPPED FEET - feet must be visible\n" +
 			"❌ WRONG BACKGROUND - must match reference exactly\n" +
 			"❌ Multiple people\n" +
@@ -241,16 +256,25 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		}
 	}
 
-	// ⚠️ 최우선 지시사항
-	criticalHeader := "⚠️ CRITICAL REQUIREMENTS ⚠️\n\n" +
+	// ⚠️ 최우선 지시사항 - FACE IDENTITY가 가장 먼저
+	criticalHeader := "🚨🚨🚨 ABSOLUTE PRIORITY #1: FACE IDENTITY PRESERVATION 🚨🚨🚨\n\n" +
+		"[FACE IDENTITY - THIS IS THE MOST IMPORTANT RULE]:\n" +
+		"🚨 YOU MUST CLONE THE EXACT FACE FROM THE MODEL REFERENCE IMAGE\n" +
+		"🚨 THE PERSON'S FACE MUST BE IDENTICAL - NOT SIMILAR, BUT IDENTICAL\n" +
+		"🚨 COPY: Same eyes shape, same nose shape, same lips shape, same face shape\n" +
+		"🚨 COPY: Same skin tone, same ethnicity, same age appearance\n" +
+		"🚨 COPY: Same eyebrows, same cheekbones, same jawline, same chin\n" +
+		"🚨 COPY: Same hair color, same hair style, same hair texture\n" +
+		"🚨 IF THE MODEL IS ASIAN, THE RESULT MUST BE THE SAME ASIAN PERSON\n" +
+		"🚨 IF THE MODEL IS CAUCASIAN, THE RESULT MUST BE THE SAME CAUCASIAN PERSON\n" +
+		"🚨 DO NOT CREATE A DIFFERENT PERSON - USE THE EXACT SAME PERSON\n" +
+		"🚨 DO NOT BEAUTIFY OR MODIFY THE FACE - KEEP IT EXACTLY AS REFERENCE\n" +
+		"🚨 THE VIEWER SHOULD RECOGNIZE THIS AS THE SAME INDIVIDUAL\n\n" +
+		"⚠️ CRITICAL REQUIREMENTS ⚠️\n\n" +
 		"[MANDATORY - FEET VISIBLE]:\n" +
 		"🚨 BOTH FEET MUST APPEAR IN FRAME\n" +
 		"🚨 DO NOT CROP AT ANKLES OR CALVES\n" +
 		"🚨 FULL BODY means HEAD TO TOE\n\n" +
-		"[MANDATORY - FACIAL EXPRESSION]:\n" +
-		"🚨 MODEL MUST NOT SMILE\n" +
-		"🚨 SERIOUS/STERN/FIERCE expression only\n" +
-		"🚨 NO happy expression, NO grin, NO teeth showing\n\n" +
 		"[MANDATORY - BACKGROUND]:\n" +
 		"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
 		"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
@@ -259,9 +283,9 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"[FORBIDDEN]:\n" +
 		"❌ NO split layouts, NO grid, NO collage\n" +
 		"❌ NO multiple people\n" +
-		"❌ NO smiling\n" +
 		"❌ NO cropped feet\n" +
-		"❌ NO wrong background\n\n"
+		"❌ NO wrong background\n" +
+		"❌ NO changing the model's face or identity\n\n"
 
 	// 최종 조합
 	var finalPrompt string

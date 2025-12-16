@@ -269,10 +269,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				shotTypeText = "full body shot" // 기본값
 			}
 
+			// 카메라 앵글만 enhancedPrompt에 포함 (shotType은 generateDynamicPrompt에서 처리)
 			enhancedPrompt := fmt.Sprintf(
-				"%s, %s. %s. Create a single unified photorealistic photograph. Use the EXACT background from the reference image. No split screens or collage.",
+				"%s. %s. Create a single unified photorealistic photograph. Use the EXACT background from the reference image. No split screens or collage.",
 				cameraAngleText,
-				shotTypeText,
 				basePrompt,
 			)
 
@@ -292,8 +292,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				log.Printf("Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
-				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio, shotType 포함)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio, shot)
 				if err != nil {
 					log.Printf("Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
 					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
@@ -680,8 +680,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				log.Printf("Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
-				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, stagePrompt, aspectRatio)
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함, full shot 기본)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, stagePrompt, aspectRatio, "full")
 				if err != nil {
 					log.Printf("Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
 					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
@@ -894,9 +894,9 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 			log.Printf("Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
-			// Gemini API 호출 (카테고리별 이미지 전달)
+			// Gemini API 호출 (카테고리별 이미지 전달, full shot 기본)
 			retryPrompt := ensureProductOnlyPrompt(prompt, retryCategories)
-			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, retryPrompt, aspectRatio)
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, retryPrompt, aspectRatio, "full")
 			if err != nil {
 				log.Printf("Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
 				if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
