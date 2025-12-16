@@ -522,7 +522,8 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 }
 
 // generateDynamicPrompt - 상황별 동적 프롬프트 생성
-func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
+// shotType: "tight", "middle", "full" (기본값: "full")
+func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string, shotType string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
 	hasClothing := len(categories.Clothing) > 0
@@ -530,22 +531,61 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	hasProducts := hasClothing || hasAccessories
 	hasBackground := categories.Background != nil
 
+	// shotType 기본값
+	if shotType == "" {
+		shotType = "full"
+	}
+
 	// 케이스별 메인 지시사항
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 패션 에디토리얼
-		mainInstruction = "[FASHION EDITORIAL PHOTOGRAPHER]\n" +
-			"You are a fashion photographer shooting an editorial campaign.\n" +
-			"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n" +
-			"The PERSON is the HERO - their natural proportions are SACRED.\n\n" +
-			"Create ONE photorealistic photograph:\n" +
-			"• ONLY ONE MODEL - solo fashion shoot\n" +
-			"• FULL BODY SHOT - model's ENTIRE body from head to TOE visible\n" +
-			"• FEET MUST BE VISIBLE - both feet and shoes completely in frame\n" +
-			"• SERIOUS FACIAL EXPRESSION - stern/fierce/intense gaze, NO SMILING\n" +
-			"• STRONG POSTURE - elongated body lines, poised stance\n" +
-			"• The model wears ALL clothing and accessories\n" +
-			"• Use the EXACT background from the reference image\n\n"
+		// 모델 있음 → 패션 에디토리얼 (샷 타입별 분기)
+		switch shotType {
+		case "tight":
+			mainInstruction = "[FASHION EDITORIAL - TIGHT SHOT / CLOSE-UP]\n" +
+				"You are a fashion photographer shooting a CLOSE-UP portrait.\n" +
+				"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n\n" +
+				"⚠️ CRITICAL FRAMING - TIGHT SHOT:\n" +
+				"🚨 FRAME FROM SHOULDERS UP ONLY\n" +
+				"🚨 CROP BELOW THE SHOULDERS - do NOT show chest/torso\n" +
+				"🚨 Focus on FACE and SHOULDERS only\n" +
+				"🚨 DO NOT show waist, arms below shoulders, or any lower body\n\n" +
+				"Create ONE photorealistic photograph:\n" +
+				"• ONLY ONE MODEL - solo fashion shoot\n" +
+				"• TIGHT CLOSE-UP - shoulders and head only\n" +
+				"• Face is the main focus\n" +
+				"• Use the EXACT background from the reference image\n\n"
+		case "middle":
+			mainInstruction = "[FASHION EDITORIAL - MEDIUM SHOT / WAIST-UP]\n" +
+				"You are a fashion photographer shooting a MEDIUM portrait.\n" +
+				"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n\n" +
+				"⚠️ CRITICAL FRAMING - MEDIUM SHOT:\n" +
+				"🚨 FRAME FROM WAIST UP ONLY\n" +
+				"🚨 CROP AT THE WAIST - do NOT show hips, legs, or feet\n" +
+				"🚨 Show upper body, arms, and head\n" +
+				"🚨 DO NOT show anything below the waist\n\n" +
+				"Create ONE photorealistic photograph:\n" +
+				"• ONLY ONE MODEL - solo fashion shoot\n" +
+				"• MEDIUM SHOT - waist up only, showing upper body outfit\n" +
+				"• Show clothing details on upper body\n" +
+				"• Use the EXACT background from the reference image\n\n"
+		default: // "full"
+			mainInstruction = "[FASHION EDITORIAL - FULL BODY SHOT]\n" +
+				"You are a fashion photographer shooting an editorial campaign.\n" +
+				"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n" +
+				"The PERSON is the HERO - their natural proportions are SACRED.\n\n" +
+				"⚠️ CRITICAL FRAMING - FULL BODY:\n" +
+				"🚨 ENTIRE BODY from HEAD to TOE must be visible\n" +
+				"🚨 FEET MUST BE VISIBLE - both feet completely in frame\n" +
+				"🚨 DO NOT crop at ankles, calves, or knees\n\n" +
+				"Create ONE photorealistic photograph:\n" +
+				"• ONLY ONE MODEL - solo fashion shoot\n" +
+				"• FULL BODY SHOT - model's ENTIRE body from head to TOE visible\n" +
+				"• FEET MUST BE VISIBLE - both feet and shoes completely in frame\n" +
+				"• STRONG POSTURE - elongated body lines, poised stance\n" +
+				"• The model wears ALL clothing and accessories\n" +
+				"• Use the EXACT background from the reference image\n\n"
+		}
 	} else if hasProducts {
 		// 프로덕트만 → 프로덕트 포토그래피
 		mainInstruction = "[PRODUCT PHOTOGRAPHER]\n" +
@@ -572,7 +612,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 각 카테고리별 명확한 설명
 	if categories.Model != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL): This person's face, body shape, skin tone, and physical features - use EXACTLY this appearance", imageIndex))
+			fmt.Sprintf("Reference Image %d (MODEL - FACE/BODY ONLY): ⚠️ CRITICAL: You MUST use this EXACT person's FACE and BODY only. Copy this person's face EXACTLY - same ethnicity, same facial structure, same skin tone, same bone structure, same eyes, same nose, same lips, same hair color, same hair style. DO NOT change or replace with a different person. DO NOT change the face to look more Western or more Asian. The model's identity must be 100%% preserved.\n\n⚠️ IGNORE FROM THIS MODEL IMAGE:\n❌ IGNORE the background in this model photo - use ONLY the separate BACKGROUND reference image\n❌ IGNORE the clothing/outfit in this model photo - use ONLY the separate CLOTHING reference images\n❌ This model image is ONLY for face and body reference - NOTHING else", imageIndex))
 		imageIndex++
 	}
 
@@ -666,20 +706,40 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// 핵심 요구사항 - 케이스별로 다르게
 	var criticalRules string
 	if hasModel {
-		// 모델 있는 케이스
-		criticalRules = commonForbidden + "\n[FASHION EDITORIAL REQUIREMENTS]\n" +
-			"🎯 ONLY ONE MODEL in the photograph\n" +
-			"🎯 SERIOUS FACIAL EXPRESSION - fierce/stern/intense (NO SMILING)\n" +
-			"🎯 FULL BODY SHOT - head to TOE visible\n" +
-			"🎯 FEET MUST BE VISIBLE - both feet in frame\n" +
-			"🎯 ALL clothing and accessories worn\n" +
-			"🎯 Use EXACT background from reference\n\n" +
-			"[FORBIDDEN]\n" +
-			"❌ SMILING - model must be serious\n" +
-			"❌ CROPPED FEET - feet must be visible\n" +
-			"❌ WRONG BACKGROUND - must match reference exactly\n" +
-			"❌ Multiple people\n" +
-			"❌ Distorted proportions"
+		// 모델 있는 케이스 - 샷 타입별 분기
+		switch shotType {
+		case "tight":
+			criticalRules = commonForbidden + "\n[TIGHT SHOT REQUIREMENTS]\n" +
+				"🎯 ONLY ONE MODEL in the photograph\n" +
+				"🎯 SHOULDERS UP ONLY - close-up framing\n" +
+				"🎯 Use EXACT background from reference\n\n" +
+				"[FORBIDDEN]\n" +
+				"❌ SHOWING BODY BELOW SHOULDERS\n" +
+				"❌ WRONG BACKGROUND - must match reference exactly\n" +
+				"❌ Multiple people"
+		case "middle":
+			criticalRules = commonForbidden + "\n[MEDIUM SHOT REQUIREMENTS]\n" +
+				"🎯 ONLY ONE MODEL in the photograph\n" +
+				"🎯 WAIST UP ONLY - medium framing\n" +
+				"🎯 Show upper body outfit details\n" +
+				"🎯 Use EXACT background from reference\n\n" +
+				"[FORBIDDEN]\n" +
+				"❌ SHOWING LEGS OR FEET\n" +
+				"❌ WRONG BACKGROUND - must match reference exactly\n" +
+				"❌ Multiple people"
+		default: // "full"
+			criticalRules = commonForbidden + "\n[FULL BODY REQUIREMENTS]\n" +
+				"🎯 ONLY ONE MODEL in the photograph\n" +
+				"🎯 FULL BODY SHOT - head to TOE visible\n" +
+				"🎯 FEET MUST BE VISIBLE - both feet in frame\n" +
+				"🎯 ALL clothing and accessories worn\n" +
+				"🎯 Use EXACT background from reference\n\n" +
+				"[FORBIDDEN]\n" +
+				"❌ CROPPED FEET - feet must be visible\n" +
+				"❌ WRONG BACKGROUND - must match reference exactly\n" +
+				"❌ Multiple people\n" +
+				"❌ Distorted proportions"
+		}
 	} else if hasProducts {
 		// 프로덕트 샷 케이스
 		criticalRules = commonForbidden + "\n[PRODUCT REQUIREMENTS]\n" +
@@ -699,15 +759,28 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"❌ DO NOT add people or products"
 	}
 
-	// aspect ratio별 추가 지시사항
+	// aspect ratio별 추가 지시사항 (샷 타입 고려)
 	var aspectRatioInstruction string
 	if aspectRatio == "9:16" {
 		if hasModel {
-			aspectRatioInstruction = "\n\n[9:16 VERTICAL FORMAT]\n" +
-				"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
-				"✓ FEET MUST BE VISIBLE at bottom\n" +
-				"✓ Leave space below feet\n" +
-				"✓ Use EXACT background from reference"
+			switch shotType {
+			case "tight":
+				aspectRatioInstruction = "\n\n[9:16 VERTICAL - TIGHT SHOT]\n" +
+					"✓ Close-up portrait framing\n" +
+					"✓ SHOULDERS UP ONLY\n" +
+					"✓ Use EXACT background from reference"
+			case "middle":
+				aspectRatioInstruction = "\n\n[9:16 VERTICAL - MEDIUM SHOT]\n" +
+					"✓ WAIST UP framing\n" +
+					"✓ Show upper body outfit\n" +
+					"✓ Use EXACT background from reference"
+			default:
+				aspectRatioInstruction = "\n\n[9:16 VERTICAL - FULL BODY]\n" +
+					"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
+					"✓ FEET MUST BE VISIBLE at bottom\n" +
+					"✓ Leave space below feet\n" +
+					"✓ Use EXACT background from reference"
+			}
 		} else if hasProducts {
 			aspectRatioInstruction = "\n\n[9:16 VERTICAL PRODUCT SHOT]\n" +
 				"✓ Products arranged vertically\n" +
@@ -718,15 +791,28 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		}
 	} else if aspectRatio == "16:9" {
 		if hasModel {
-			aspectRatioInstruction = "\n\n[16:9 WIDE FORMAT]\n" +
-				"✓ Model's ENTIRE BODY from head to TOE must be visible\n" +
-				"✓ FEET MUST BE VISIBLE at bottom\n" +
-				"✓ Subject positioned using rule of thirds\n" +
-				"✓ Use EXACT background from reference\n\n" +
-				"⚠️ BACKGROUND RULE:\n" +
-				"⚠️ If reference shows WHITE/GRAY STUDIO, use WHITE/GRAY STUDIO\n" +
-				"⚠️ If reference shows outdoor location, use that EXACT location\n" +
-				"⚠️ DO NOT invent locations not in reference"
+			switch shotType {
+			case "tight":
+				aspectRatioInstruction = "\n\n[16:9 WIDE - TIGHT SHOT]\n" +
+					"✓ Close-up portrait in wide frame\n" +
+					"✓ SHOULDERS UP ONLY - face centered\n" +
+					"✓ Use EXACT background from reference"
+			case "middle":
+				aspectRatioInstruction = "\n\n[16:9 WIDE - MEDIUM SHOT]\n" +
+					"✓ WAIST UP framing in wide format\n" +
+					"✓ Subject positioned using rule of thirds\n" +
+					"✓ Use EXACT background from reference"
+			default:
+				aspectRatioInstruction = "\n\n[16:9 WIDE - FULL BODY]\n" +
+					"✓ Model's ENTIRE BODY from head to TOE must be visible\n" +
+					"✓ FEET MUST BE VISIBLE at bottom\n" +
+					"✓ Subject positioned using rule of thirds\n" +
+					"✓ Use EXACT background from reference\n\n" +
+					"⚠️ BACKGROUND RULE:\n" +
+					"⚠️ If reference shows WHITE/GRAY STUDIO, use WHITE/GRAY STUDIO\n" +
+					"⚠️ If reference shows outdoor location, use that EXACT location\n" +
+					"⚠️ DO NOT invent locations not in reference"
+			}
 		} else if hasProducts {
 			aspectRatioInstruction = "\n\n[16:9 WIDE PRODUCT SHOT]\n" +
 				"✓ Products positioned using the full width\n" +
@@ -738,11 +824,24 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	} else {
 		// 1:1 및 기타 비율
 		if hasModel {
-			aspectRatioInstruction = "\n\n[SQUARE FORMAT]\n" +
-				"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
-				"✓ FEET MUST BE VISIBLE at bottom\n" +
-				"✓ Balanced composition\n" +
-				"✓ Use EXACT background from reference"
+			switch shotType {
+			case "tight":
+				aspectRatioInstruction = "\n\n[SQUARE - TIGHT SHOT]\n" +
+					"✓ Close-up portrait framing\n" +
+					"✓ SHOULDERS UP ONLY\n" +
+					"✓ Use EXACT background from reference"
+			case "middle":
+				aspectRatioInstruction = "\n\n[SQUARE - MEDIUM SHOT]\n" +
+					"✓ WAIST UP framing\n" +
+					"✓ Balanced composition\n" +
+					"✓ Use EXACT background from reference"
+			default:
+				aspectRatioInstruction = "\n\n[SQUARE - FULL BODY]\n" +
+					"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
+					"✓ FEET MUST BE VISIBLE at bottom\n" +
+					"✓ Balanced composition\n" +
+					"✓ Use EXACT background from reference"
+			}
 		} else if hasProducts {
 			aspectRatioInstruction = "\n\n[SQUARE PRODUCT SHOT]\n" +
 				"✓ Balanced product arrangement\n" +
@@ -753,27 +852,56 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		}
 	}
 
-	// ⚠️ 최우선 지시사항
-	criticalHeader := "⚠️ CRITICAL REQUIREMENTS ⚠️\n\n" +
-		"[MANDATORY - FEET VISIBLE]:\n" +
-		"🚨 BOTH FEET MUST APPEAR IN FRAME\n" +
-		"🚨 DO NOT CROP AT ANKLES OR CALVES\n" +
-		"🚨 FULL BODY means HEAD TO TOE\n\n" +
-		"[MANDATORY - FACIAL EXPRESSION]:\n" +
-		"🚨 MODEL MUST NOT SMILE\n" +
-		"🚨 SERIOUS/STERN/FIERCE expression only\n" +
-		"🚨 NO happy expression, NO grin, NO teeth showing\n\n" +
-		"[MANDATORY - BACKGROUND]:\n" +
-		"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
-		"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
-		"🚨 If reference is GRAY STUDIO, use GRAY STUDIO\n" +
-		"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
-		"[FORBIDDEN]:\n" +
-		"❌ NO split layouts, NO grid, NO collage\n" +
-		"❌ NO multiple people\n" +
-		"❌ NO smiling\n" +
-		"❌ NO cropped feet\n" +
-		"❌ NO wrong background\n\n"
+	// ⚠️ 최우선 지시사항 (샷 타입별 분기)
+	var criticalHeader string
+	switch shotType {
+	case "tight":
+		criticalHeader = "⚠️ CRITICAL REQUIREMENTS - TIGHT SHOT ⚠️\n\n" +
+			"[MANDATORY - FRAMING]:\n" +
+			"🚨 TIGHT SHOT = SHOULDERS UP ONLY\n" +
+			"🚨 CROP BELOW SHOULDERS - NO chest, NO torso\n" +
+			"🚨 FACE is the main subject\n\n" +
+			"[MANDATORY - BACKGROUND]:\n" +
+			"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
+			"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
+			"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
+			"[FORBIDDEN]:\n" +
+			"❌ NO full body - this is a CLOSE-UP\n" +
+			"❌ NO waist or below showing\n" +
+			"❌ NO split layouts, NO grid, NO collage\n" +
+			"❌ NO multiple people\n\n"
+	case "middle":
+		criticalHeader = "⚠️ CRITICAL REQUIREMENTS - MEDIUM SHOT ⚠️\n\n" +
+			"[MANDATORY - FRAMING]:\n" +
+			"🚨 MEDIUM SHOT = WAIST UP ONLY\n" +
+			"🚨 CROP AT WAIST - NO hips, NO legs, NO feet\n" +
+			"🚨 Show upper body and outfit details\n\n" +
+			"[MANDATORY - BACKGROUND]:\n" +
+			"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
+			"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
+			"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
+			"[FORBIDDEN]:\n" +
+			"❌ NO full body - this is WAIST-UP only\n" +
+			"❌ NO legs or feet showing\n" +
+			"❌ NO split layouts, NO grid, NO collage\n" +
+			"❌ NO multiple people\n\n"
+	default: // "full"
+		criticalHeader = "⚠️ CRITICAL REQUIREMENTS - FULL BODY ⚠️\n\n" +
+			"[MANDATORY - FEET VISIBLE]:\n" +
+			"🚨 BOTH FEET MUST APPEAR IN FRAME\n" +
+			"🚨 DO NOT CROP AT ANKLES OR CALVES\n" +
+			"🚨 FULL BODY means HEAD TO TOE\n\n" +
+			"[MANDATORY - BACKGROUND]:\n" +
+			"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
+			"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
+			"🚨 If reference is GRAY STUDIO, use GRAY STUDIO\n" +
+			"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
+			"[FORBIDDEN]:\n" +
+			"❌ NO split layouts, NO grid, NO collage\n" +
+			"❌ NO multiple people\n" +
+			"❌ NO cropped feet\n" +
+			"❌ NO wrong background\n\n"
+	}
 
 	// 최종 조합
 	var finalPrompt string
@@ -796,7 +924,8 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 }
 
 // GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
-func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
+// shotType: "tight", "middle", "full" (기본값: "full")
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string, shotType string) (string, error) {
 	cfg := config.GetConfig()
 
 	// aspect-ratio 기본값 처리
@@ -880,8 +1009,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 Added Background image (resized)")
 	}
 
-	// 동적 프롬프트 생성
-	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
+	// 동적 프롬프트 생성 (shotType 전달)
+	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio, shotType)
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
