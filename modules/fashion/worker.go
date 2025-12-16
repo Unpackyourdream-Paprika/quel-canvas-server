@@ -221,19 +221,19 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	completedCount := 0
 	cancelled := false // 취소 플래그
 
-	// Camera Angle 매핑 (시네마틱 톤)
+	// Camera Angle 매핑
 	cameraAngleTextMap := map[string]string{
-		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
-		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
-		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
-		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
+		"front":   "Front-facing angle, direct eye contact with camera",
+		"side":    "Side profile angle, 90-degree perspective",
+		"profile": "Professional portrait, formal front-facing composition with confident posture",
+		"back":    "Rear angle, back view composition",
 	}
 
-	// Shot Type 매핑 (시네마틱 톤)
+	// Shot Type 매핑
 	shotTypeTextMap := map[string]string{
-		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
-		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
-		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
+		"tight":  "Tight shot, close-up framing from shoulders up",
+		"middle": "Medium shot, framing from waist up, showing upper body and outfit details",
+		"full":   "Full body shot, head to toe, complete outfit visible",
 	}
 
 	log.Printf("Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
@@ -270,7 +270,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			}
 
 			enhancedPrompt := fmt.Sprintf(
-				"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
+				"%s, %s. %s. Create a single unified photorealistic photograph. Use the EXACT background from the reference image. No split screens or collage.",
 				cameraAngleText,
 				shotTypeText,
 				basePrompt,
