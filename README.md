@@ -1,4 +1,4 @@
-# Quel Canvas Collaboration Server
+# Quel Canvas Collaboration Server.
 
 Canvas collaboration을 위한 WebSocket 서버입니다.
 
