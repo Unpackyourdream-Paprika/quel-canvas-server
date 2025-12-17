@@ -532,259 +532,81 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	hasProp := len(categories.Prop) > 0
 	hasBackground := categories.Background != nil
 
-	// 케이스별 메인 지시사항
+	// 케이스별 메인 지시사항 - 간소화
 	var mainInstruction string
 	if hasCharacter {
-		// 캐릭터 있음 → 웹툰/카툰 스타일
 		if characterCount == 1 {
-			mainInstruction = "[WEBTOON/CARTOON STYLE - UNIFIED MASTERPIECE]\n" +
-				"You are a professional webtoon artist creating a SINGLE, COHESIVE illustration.\n" +
-				"The character and background must be rendered TOGETHER as one unified piece of art.\n" +
-				"Do NOT paste the character onto the background. Paint them into the scene.\n" +
-				"Apply a GLOBAL COLOR PALETTE and LIGHTING SCHEME that affects both the character and the environment equally.\n\n" +
-				"Create ONE high-quality webtoon illustration:\n" +
-				"• The character is anchored firmly in the scene (feet on ground, interacting with objects)\n" +
-				"• Shadows from the character fall naturally on the background elements\n" +
-				"• Ambient light from the background reflects on the character\n" +
-				"• The entire image has a consistent artistic style (line weight, shading, color saturation)\n\n"
+			mainInstruction = "[IMAGE GENERATION]\n" +
+				"Create ONE unified illustration with the character.\n" +
+				"Character and background rendered together as one piece.\n\n"
 		} else {
-			mainInstruction = fmt.Sprintf("[WEBTOON/CARTOON STYLE - UNIFIED MASTERPIECE - %d CHARACTERS]\n"+
-				"You are a professional webtoon artist creating a SINGLE, COHESIVE illustration with MULTIPLE CHARACTERS.\n"+
-				"The characters and background must be rendered TOGETHER as one unified piece of art.\n"+
-				"Do NOT paste characters onto the background. Paint them into the scene.\n"+
-				"Apply a GLOBAL COLOR PALETTE and LIGHTING SCHEME that affects both the characters and the environment equally.\n\n"+
-				"Create ONE high-quality webtoon illustration featuring %d DISTINCT CHARACTERS:\n"+
-				"• EACH character MUST appear exactly as shown in their reference image\n"+
-				"• Characters are anchored firmly in the scene\n"+
-				"• Shadows from characters fall naturally on the background elements\n"+
-				"• The entire image has a consistent artistic style\n\n", characterCount, characterCount)
+			mainInstruction = fmt.Sprintf("[IMAGE GENERATION - %d CHARACTERS]\n"+
+				"Create ONE unified illustration with %d DISTINCT CHARACTERS.\n"+
+				"Each character MUST appear exactly as shown in their reference.\n\n", characterCount, characterCount)
 		}
 	} else if hasProp {
-		// 프로덕트만 → 프로덕트 포토그래피
-		mainInstruction = "[CARTOON PRODUCT ILLUSTRATOR'S APPROACH]\n" +
-			"You are a world-class cartoon/webtoon illustrator creating editorial-style still life in consistent cartoon style.\n" +
-			"The PRODUCTS are the STARS - showcase ONLY the provided objects with stylized, drawn look.\n" +
-			"⚠️ CRITICAL: NO people or models in this shot - products only.\n" +
-			"⚠️ CRITICAL: Apply the SAME cartoon/illustration rendering to every element (products and background).\n\n" +
-			"Create ONE high-quality cartoon illustration with ARTISTIC STORYTELLING:\n" +
-			"• Artistic arrangement of all items - creative composition\n" +
-			"• Stylized lighting that highlights shapes without photoreal textures\n" +
-			"• If a location is provided, render it in the SAME cartoon style; otherwise use a simple illustrated set\n" +
-			"• This is high-end illustrated product art with cinematic framing, not a photo\n\n"
+		mainInstruction = "[PRODUCT IMAGE]\n" +
+			"Create ONE illustration showcasing the products.\n" +
+			"NO people - products only.\n\n"
 	} else {
-		// 배경만 → 환경 포토그래피
-		mainInstruction = "[CARTOON ENVIRONMENT ARTIST'S APPROACH]\n" +
-			"You are a world-class cartoon/background artist capturing pure atmosphere in illustrated style.\n" +
-			"The LOCATION is the SUBJECT - showcase its mood, scale, and character in cartoon/webtoon rendering.\n" +
-			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n" +
-			"⚠️ CRITICAL: Convert the provided background into the SAME cartoon style; do NOT leave it photorealistic.\n\n" +
-			"Create ONE high-quality cartoon environment illustration with ATMOSPHERIC STORYTELLING:\n" +
-			"• Composition that respects the original layout and perspective\n" +
-			"• Layers of depth - foreground, midground, background\n" +
-			"• Stylized lighting creates mood and drama without photoreal textures\n" +
-			"• This is cinematic environmental art with narrative quality\n\n"
+		mainInstruction = "[ENVIRONMENT IMAGE]\n" +
+			"Create ONE illustration of the environment.\n" +
+			"NO people or products.\n\n"
 	}
 
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명 - 다중 캐릭터 지원
+	// 각 카테고리별 설명 - 간소화
 	for i := range categories.Character {
 		if len(categories.Character) == 1 {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (CHARACTER): This character's face, body shape, style, and visual features - use EXACTLY this appearance", imageIndex))
+				fmt.Sprintf("Reference Image %d (CHARACTER): Use this character's appearance exactly.", imageIndex))
 		} else {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (CHARACTER %d): This character's face, body shape, style, and visual features - CHARACTER %d MUST appear exactly as shown in this reference", imageIndex, i+1, i+1))
+				fmt.Sprintf("Reference Image %d (CHARACTER %d): Use this character's appearance exactly.", imageIndex, i+1))
 		}
 		imageIndex++
 	}
 
 	if len(categories.Prop) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (PROPS/ITEMS): ALL items - clothing, accessories, objects the character wears/carries. The character MUST have EVERY item shown here", imageIndex))
+			fmt.Sprintf("Reference Image %d (PROPS): Include all these items.", imageIndex))
 		imageIndex++
 	}
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BACKGROUND INSPIRATION): Use this image as a loose reference for setting and atmosphere. Do NOT copy the layout exactly. Create a background that fits the character naturally.", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND): Use this exact background.", imageIndex))
 		imageIndex++
 	}
 
-	// 시네마틱 구성 지시사항
+	// 구성 지시사항 - 간소화
 	var compositionInstruction string
 
-	// 케이스 1: 캐릭터 이미지가 있는 경우 → 웹툰/카툰 장면
 	if hasCharacter {
-		compositionInstruction = "\n[WEBTOON/CARTOON SCENE COMPOSITION]\n" +
-			"Generate ONE high-quality webtoon/cartoon illustration showing the referenced character(s) in a dynamic scene.\n" +
-			"This is a professional webtoon/cartoon artwork with the character(s) as the star.\n" +
-			"Apply the SAME cartoon/anime rendering to characters AND background; no photoreal elements."
-	} else if hasProp {
-		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷 (오브젝트만)
-		compositionInstruction = "\n[CARTOON PRODUCT ILLUSTRATION]\n" +
-			"Generate ONE cartoon/webtoon-style product illustration showcasing the clothing and accessories as OBJECTS.\n" +
-			"⚠️ DO NOT add any people, models, or human figures.\n" +
-			"⚠️ Display the items artistically arranged - like high-end product artwork.\n" +
-			"⚠️ Render ALL elements (items + background) in the SAME cartoon style; no photoreal sections.\n"
-
+		compositionInstruction = "\n[COMPOSITION]\nGenerate ONE illustration with the character(s)."
 		if hasBackground {
-			compositionInstruction += "The products are placed naturally within the referenced environment - " +
-				"as if styled by a professional illustrator on location.\n" +
-				"The items interact with the space (resting on surfaces, hanging naturally, artfully positioned) in cartoon style."
-		} else {
-			compositionInstruction += "Create a stunning studio product shot with professional lighting and composition.\n" +
-				"The items are arranged artistically - flat lay, suspended, or elegantly displayed - all in cartoon rendering."
+			compositionInstruction += " Use the exact background from reference."
 		}
-	} else if hasBackground {
-		// 케이스 3: 배경만 → 환경 사진
-		compositionInstruction = "\n[CARTOON ENVIRONMENT ILLUSTRATION]\n" +
-			"Generate ONE cartoon/webtoon background illustration of the referenced environment.\n" +
-			"⚠️ DO NOT add any people, models, or products to this scene.\n" +
-			"Convert the provided layout and perspective into the SAME cartoon style; focus on atmosphere, lighting, and mood."
-	} else {
-		// 케이스 4: 아무것도 없는 경우 (에러 케이스)
-		compositionInstruction = "\n[CINEMATIC COMPOSITION]\n" +
-			"Generate a high-quality photorealistic image based on the references provided."
-	}
-
-	// 배경 관련 지시사항 - 캐릭터가 있을 때만 추가
-	if hasCharacter && hasBackground {
-		// 모델 + 배경 케이스 → 환경 통합 지시사항
-		compositionInstruction += " shot on location with UNIFIED RENDERING.\n\n" +
-			"[GLOBAL UNITY]\n" +
-			"Treat this as a single painting.\n" +
-			"🎬 UNITY RULES:\n" +
-			"   • ATMOSPHERIC BLENDING: The character must feel like they are breathing the same air as the background.\n" +
-			"   • GLOBAL ILLUMINATION: Light and color must be consistent across the entire image.\n" +
-			"   • NO STICKERS: The character is PART of the scene, not pasted on top.\n" +
-			"   • BACKGROUND FREEDOM: Adjust the background layout if needed to make the character fit better.\n\n" +
-			"[TECHNICAL EXECUTION]\n" +
-			"✓ Single cohesive illustration\n" +
-			"✓ Consistent artistic style"
-	} else if hasCharacter && !hasBackground {
-		// 캐릭터만 있고 배경 없음 → 심플 배경
-		compositionInstruction += " with a clean, stylized background that complements the character(s)."
-	}
-	// 프로덕트 샷이나 배경만 있는 케이스는 위에서 이미 처리됨
-
-	// 핵심 요구사항 - 케이스별로 다르게
-	var criticalRules string
-	if hasCharacter {
-		// 캐릭터 있는 케이스 - 웹툰/카툰 규칙
-		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 UNIFIED ARTWORK - Must look like one single painting\n" +
-			"🎯 Character's stylized proportions are CONSISTENT\n" +
-			"🎯 PERFECT INTEGRATION - Character must be anchored in the scene\n" +
-			"🎯 Realistic shadows and lighting interaction\n" +
-			"🎯 ALL clothing and accessories worn/carried simultaneously\n" +
-			"🎯 Professional webtoon/cartoon aesthetic\n\n" +
-			"[FORBIDDEN]\n" +
-			"❌ STICKER EFFECT (Character looking pasted or floating)\n" +
-			"❌ Cut-out look or white outlines around character\n" +
-			"❌ Mismatched lighting or shadows\n" +
-			"❌ Incorrect scale (character too big or too small)\n" +
-			"❌ Split-screen, collage, or multiple separate images"
 	} else if hasProp {
-		// 프로덕트 샷 케이스 - 오브젝트 촬영 규칙
-		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Showcase the products as beautiful OBJECTS with perfect details\n" +
-			"🎯 Artistic arrangement - creative composition like high-end product photography\n" +
-			"🎯 Dramatic lighting that highlights textures and materials\n" +
-			"🎯 Environmental storytelling through product placement\n" +
-			"🎯 ALL items displayed clearly and beautifully\n" +
-			"🎯 Single cohesive photograph - ONE shot from ONE camera\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and depth creatively\n\n" +
-			"[FORBIDDEN - THESE WILL RUIN THE SHOT]\n" +
-			"❌ ANY people, models, or human figures in the frame\n" +
-			"❌ Products looking pasted or artificially placed\n" +
-			"❌ Boring, flat catalog-style layouts\n" +
-			"❌ Split-screen, collage, or multiple separate images\n" +
-			"❌ Background reference directly pasted or overlaid\n" +
-			"❌ Cluttered composition without focal point\n" +
-			"❌ Flat lighting that doesn't create depth"
-	} else {
-		// 배경만 있는 케이스 - 환경 촬영 규칙
-		criticalRules = "\n\n[NON-NEGOTIABLE REQUIREMENTS]\n" +
-			"🎯 Capture the pure atmosphere and mood of the location\n" +
-			"🎯 Dramatic composition with depth and visual interest\n" +
-			"🎯 Environmental storytelling - what story does this place tell?\n" +
-			"🎯 Film photography aesthetic - not digital, not flat\n" +
-			"🎯 Dynamic framing - use negative space and layers creatively\n\n" +
-			"[FORBIDDEN]\n" +
-			"❌ DO NOT add people, models, or products to the scene\n" +
-			"❌ Background reference directly pasted or overlaid\n" +
-			"❌ Flat, boring composition without depth\n" +
-			"❌ Split-screen or collage layouts"
+		compositionInstruction = "\n[COMPOSITION]\nGenerate ONE product illustration. NO people."
+	} else if hasBackground {
+		compositionInstruction = "\n[COMPOSITION]\nGenerate ONE environment illustration. NO people or products."
 	}
 
-	// 16:9 비율 전용 추가 지시사항
-	var aspectRatioInstruction string
-	if aspectRatio == "16:9" {
-		if hasCharacter {
-			// 모델이 있는 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE SHOT - DRAMATIC STORYTELLING]\n" +
-				"This is a WIDE ANGLE shot - use the horizontal space for powerful visual storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE COMPOSITION:\n" +
-				"✓ Subject positioned off-center (rule of thirds) creating dynamic tension\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground elements, subject, background scenery\n" +
-				"✓ Leading lines guide the eye to the subject\n" +
-				"✓ Negative space creates breathing room and drama\n\n" +
-				"🎬 SUBJECT INTEGRITY IN WIDE FRAME:\n" +
-				"⚠️ The wide frame is NOT an excuse to distort proportions\n" +
-				"⚠️ Person maintains PERFECT natural proportions - just smaller in frame if needed\n" +
-				"⚠️ Use the space to tell a STORY, not to force-fit the subject\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates mood across the wide frame\n" +
-				"✓ Atmospheric perspective - distant elements are hazier\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes the subject while showing environment\n\n" +
-				"GOAL: A breathtaking wide shot from a high-budget fashion editorial - \n" +
-				"like Annie Leibovitz or Steven Meisel capturing a MOMENT of drama and beauty."
-		} else if hasProp {
-			// 프로덕트 샷 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC PRODUCT SHOT]\n" +
-				"This is a WIDE ANGLE product shot - use the horizontal space for artistic storytelling.\n\n" +
-				"🎬 DRAMATIC WIDE PRODUCT COMPOSITION:\n" +
-				"✓ Products positioned creatively using the full width\n" +
-				"✓ Use the WIDTH to show environmental context and atmosphere\n" +
-				"✓ Layers of depth - foreground, products, background elements\n" +
-				"✓ Leading lines guide the eye to the key products\n" +
-				"✓ Negative space creates elegance and breathing room\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates drama and highlights textures\n" +
-				"✓ Atmospheric perspective adds depth\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field emphasizes products while showing environment\n\n" +
-				"GOAL: A stunning wide product shot like high-end editorial still life photography."
-		} else {
-			// 배경만 있는 16:9 케이스
-			aspectRatioInstruction = "\n\n[16:9 CINEMATIC WIDE LANDSCAPE SHOT]\n" +
-				"This is a WIDE ANGLE environmental shot - showcase the location's grandeur.\n\n" +
-				"🎬 DRAMATIC LANDSCAPE COMPOSITION:\n" +
-				"✓ Use the full WIDTH to capture the environment's scale and atmosphere\n" +
-				"✓ Layers of depth - foreground, midground, background elements\n" +
-				"✓ Leading lines guide the eye through the scene\n" +
-				"✓ Asymmetric composition creates visual tension and interest\n" +
-				"✓ Negative space emphasizes the mood and emptiness (if appropriate)\n\n" +
-				"🎬 CINEMATIC EXECUTION:\n" +
-				"✓ Directional lighting creates mood and drama\n" +
-				"✓ Atmospheric perspective - distant elements are hazier\n" +
-				"✓ Film grain and natural color grading\n" +
-				"✓ Depth of field adds dimension to the scene\n\n" +
-				"GOAL: A stunning environmental shot that tells a story without people - \n" +
-				"like a cinematic establishing shot from a high-budget film."
-		}
-	}
+	// 핵심 요구사항 - 최소화
+	var criticalRules string
+	criticalRules = "\n\n[REQUIREMENTS]\n" +
+		"• ONE single unified image\n" +
+		"• NO split-screen or collage\n" +
+		"• Character integrated naturally (not pasted)\n"
 
-	// 최종 조합: 시네마틱 지시사항 → 참조 이미지 설명 → 구성 요구사항 → 핵심 규칙 → 16:9 특화
-	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules + aspectRatioInstruction
+	// 최종 조합 - 간소화
+	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules
 
 	if userPrompt != "" {
-		finalPrompt += "\n\n[ADDITIONAL STYLING]\n" + userPrompt
+		finalPrompt += "\n\n[USER REQUEST]\n" + userPrompt
 	}
 
 	return finalPrompt
