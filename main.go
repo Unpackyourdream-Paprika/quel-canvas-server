@@ -16,6 +16,7 @@ import (
 	"quel-canvas-server/modules/unified-prompt/studio"
 	"quel-canvas-server/modules/worker"
 	landingdemo "quel-canvas-server/modules/landing-demo"
+	"quel-canvas-server/modules/submodule/nanobanana"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -678,6 +679,15 @@ func main() {
 		log.Println("⚠️ Failed to initialize Multiview handler")
 	}
 
+	// Nanobanana (Gemini) 라우트 등록 - 랜딩 템플릿용
+	nanobananaHandler := nanobanana.NewHandler()
+	if nanobananaHandler != nil {
+		r.HandleFunc("/api/nanobanana/generate", nanobananaHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		log.Println("✅ Nanobanana routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Nanobanana handler")
+	}
+
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -696,6 +706,7 @@ func main() {
 	log.Printf("Unified Prompt Studio: http://localhost:%s/api/unified-prompt/studio/generate", port)
 	log.Printf("Landing Demo: http://localhost:%s/api/landing-demo/generate", port)
 	log.Printf("Multiview 360: http://localhost:%s/api/multiview/generate", port)
+	log.Printf("Nanobanana: http://localhost:%s/api/nanobanana/generate", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
