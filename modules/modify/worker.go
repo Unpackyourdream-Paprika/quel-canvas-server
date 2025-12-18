@@ -195,8 +195,13 @@ func (s *Service) parseInputData(data map[string]interface{}) (*ModifyInputData,
 				if prompt, ok := layerMap["prompt"].(string); ok {
 					layer.Prompt = prompt
 				}
-				if layer.Color != "" && layer.Prompt != "" {
+				if refImg, ok := layerMap["referenceImage"].(string); ok && refImg != "" {
+					layer.ReferenceImage = &refImg
+				}
+				// Color만 있으면 layer 추가 (prompt나 referenceImage 중 하나만 있어도 됨)
+				if layer.Color != "" {
 					inputData.Layers = append(inputData.Layers, layer)
+					log.Printf("  - Layer %s: prompt='%s', hasRefImg=%v", layer.Color, layer.Prompt, layer.ReferenceImage != nil)
 				}
 			}
 		}
@@ -288,9 +293,39 @@ func (s *Service) performInpaint(
 		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. Seamlessly fill in the selected area with natural content. %s Keep all other parts of the image exactly the same.`, paintRemovalInstruction)
 	}
 
-	// Reference 이미지가 있는 경우 프롬프트에 추가
+	// Reference 이미지 수집 (전역 + 레이어별)
+	var referenceImages []struct {
+		base64   string
+		mimeType string
+		desc     string
+	}
+
+	// 전역 참조 이미지
 	if referenceBase64 != "" {
-		inpaintPrompt += "\n\nUse the reference image as a style guide for the modification."
+		referenceImages = append(referenceImages, struct {
+			base64   string
+			mimeType string
+			desc     string
+		}{referenceBase64, referenceMimeType, "global style"})
+	}
+
+	// 레이어별 참조 이미지
+	for _, layer := range layers {
+		if layer.ReferenceImage != nil && *layer.ReferenceImage != "" {
+			refBase64 := extractBase64Data(*layer.ReferenceImage)
+			refMimeType := extractMimeType(*layer.ReferenceImage)
+			referenceImages = append(referenceImages, struct {
+				base64   string
+				mimeType string
+				desc     string
+			}{refBase64, refMimeType, fmt.Sprintf("reference for %s area", layer.Color)})
+			log.Printf("📷 Layer %s has reference image", layer.Color)
+		}
+	}
+
+	// Reference 이미지가 있는 경우 프롬프트에 추가
+	if len(referenceImages) > 0 {
+		inpaintPrompt += "\n\nUse the reference image(s) as a style guide for the modification."
 	}
 
 	// Base64 디코딩
@@ -317,12 +352,12 @@ func (s *Service) performInpaint(
 		genai.NewPartFromBytes(mergedImageData, "image/png"), // 합성된 이미지
 	}
 
-	// Reference 이미지 추가 (있는 경우)
-	if referenceBase64 != "" && referenceMimeType != "" {
-		referenceData := mustDecodeBase64(referenceBase64)
+	// Reference 이미지들 추가 (전역 + 레이어별)
+	for _, refImg := range referenceImages {
+		referenceData := mustDecodeBase64(refImg.base64)
 		if len(referenceData) > 0 {
-			parts = append(parts, genai.NewPartFromBytes(referenceData, referenceMimeType))
-			log.Printf("  - Reference image size: %d bytes", len(referenceData))
+			parts = append(parts, genai.NewPartFromBytes(referenceData, refImg.mimeType))
+			log.Printf("  - Reference image (%s): %d bytes", refImg.desc, len(referenceData))
 		}
 	}
 

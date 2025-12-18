@@ -26,8 +26,9 @@ type ModifyJob struct {
 
 // Layer - 색상별 inpaint 지시사항
 type Layer struct {
-	Color  string `json:"color"`  // 페인트 색상 (red, yellow, blue, etc.)
-	Prompt string `json:"prompt"` // 해당 색상 영역에 대한 지시사항
+	Color          string  `json:"color"`          // 페인트 색상 (red, yellow, blue, etc.)
+	Prompt         string  `json:"prompt"`         // 해당 색상 영역에 대한 지시사항
+	ReferenceImage *string `json:"referenceImage"` // 레이어별 참조 이미지 (Base64, optional)
 }
 
 // ModifyInputData - job_input_data JSONB 구조
