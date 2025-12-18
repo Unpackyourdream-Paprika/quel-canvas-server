@@ -272,25 +272,50 @@ func (s *Service) performInpaint(
 	// 프롬프트 구성 - layers가 있으면 색상별 지시사항 통합
 	var inpaintPrompt string
 
-	// 공통 지시사항: 페인트 자국이 결과물에 남지 않도록
-	paintRemovalInstruction := "IMPORTANT: The colored paint strokes are ONLY markers to indicate areas. You MUST completely remove all paint strokes from the final image - no trace of the colored markings should remain in the output."
+	// 강화된 공통 지시사항: 마스킹된 영역만 수정하고 나머지는 절대 건드리지 않도록
+	strictInpaintInstruction := `CRITICAL RULES YOU MUST FOLLOW:
+1. ONLY modify the areas marked with colored paint strokes. These colored areas are the ONLY parts you should change.
+2. DO NOT modify, alter, change, or regenerate ANY other part of the image outside the painted areas.
+3. The unpainted areas must remain PIXEL-PERFECT identical to the original - same colors, same textures, same lighting, same everything.
+4. Remove all paint stroke markings from the final output - no trace of the colored markers should remain.
+5. The modification should blend naturally with the surrounding unchanged areas.
+6. Even if other parts of the image look similar to the marked area, DO NOT change them.`
 
 	if len(layers) > 0 {
 		// layers에서 색상별 프롬프트 추출하여 통합
 		var layerInstructions []string
 		for _, layer := range layers {
-			instruction := fmt.Sprintf("%s색 부분: %s", layer.Color, layer.Prompt)
+			instruction := fmt.Sprintf("%s colored area: %s", layer.Color, layer.Prompt)
 			layerInstructions = append(layerInstructions, instruction)
 		}
-		combinedInstructions := strings.Join(layerInstructions, ", ")
-		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. Instructions by color: %s. %s Keep all other parts of the image exactly the same.`, combinedInstructions, paintRemovalInstruction)
+		combinedInstructions := strings.Join(layerInstructions, " | ")
+		inpaintPrompt = fmt.Sprintf(`You are performing a PRECISE inpainting task.
+
+%s
+
+TASK: Modify ONLY the colored paint stroke areas with these instructions:
+%s
+
+Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the original image. Do not touch them at all.`, strictInpaintInstruction, combinedInstructions)
 		log.Printf("📝 Using layers prompt: %s", combinedInstructions)
 	} else if prompt != "" {
 		// 기존 prompt 사용
-		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. %s. %s Keep all other parts of the image exactly the same.`, prompt, paintRemovalInstruction)
+		inpaintPrompt = fmt.Sprintf(`You are performing a PRECISE inpainting task.
+
+%s
+
+TASK: Modify ONLY the areas marked with colored paint strokes according to this instruction: %s
+
+Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the original image. Do not touch them at all.`, strictInpaintInstruction, prompt)
 	} else {
 		// 기본 프롬프트
-		inpaintPrompt = fmt.Sprintf(`Look at this image. The areas marked with colored paint strokes indicate where changes should be made. Seamlessly fill in the selected area with natural content. %s Keep all other parts of the image exactly the same.`, paintRemovalInstruction)
+		inpaintPrompt = fmt.Sprintf(`You are performing a PRECISE inpainting task.
+
+%s
+
+TASK: Seamlessly fill in ONLY the areas marked with colored paint strokes with natural content that matches the surrounding context.
+
+Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the original image. Do not touch them at all.`, strictInpaintInstruction)
 	}
 
 	// Reference 이미지 수집 (전역 + 레이어별)
