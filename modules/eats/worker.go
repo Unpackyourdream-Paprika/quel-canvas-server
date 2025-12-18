@@ -136,13 +136,6 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
 		len(individualImageAttachIds), basePrompt, len(combinations), userID)
 
-	// 🔍 DEBUG: 받은 이미지 데이터 상세 출력
-	for i, attachObj := range individualImageAttachIds {
-		if attachMap, ok := attachObj.(map[string]interface{}); ok {
-			log.Printf("🔍 [DEBUG] Image[%d]: attachId=%v, type=%v", i, attachMap["attachId"], attachMap["type"])
-		}
-	}
-
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
 		log.Printf("❌ Failed to update job status: %v", err)
@@ -157,6 +150,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Phase 3: 이미지 다운로드 및 카테고리별 분류 (Eats 전용)
 	categories := &ImageCategories{
+		Food:       [][]byte{}, // Food 배열 초기화
 		Ingredient: [][]byte{},
 		Prop:       [][]byte{},
 	}
@@ -190,32 +184,26 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		// type에 따라 카테고리별로 분류 (Eats 전용)
 		switch attachType {
 		case "food":
-			categories.Food = imageData
-			log.Printf("✅ [Eats] Food image added")
+			categories.Food = append(categories.Food, imageData)
 		case "ingredient":
 			categories.Ingredient = append(categories.Ingredient, imageData)
-			log.Printf("✅ [Eats] Ingredient image added")
 		case "prop":
 			categories.Prop = append(categories.Prop, imageData)
-			log.Printf("✅ [Eats] Prop image added")
 		case "background":
 			categories.Background = imageData
-			log.Printf("✅ [Eats] Background image added")
 		case "none":
 			// none은 Food로 처리
-			categories.Food = imageData
-			log.Printf("✅ [Eats] None type → Food image added")
+			categories.Food = append(categories.Food, imageData)
 		default:
 			// 알 수 없는 타입은 Food로 처리
-			categories.Food = imageData
-			log.Printf("⚠️  [Eats] Unknown type: %s → Food image added", attachType)
+			categories.Food = append(categories.Food, imageData)
 		}
 	}
 
 	normalizeEatsCategories(categories, &basePrompt)
 
-	log.Printf("✅ [Eats] Images classified - Food:%v, Ingredient:%d, Prop:%d, BG:%v",
-		categories.Food != nil, len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
+	log.Printf("✅ [Eats] Images classified - Food:%d, Ingredient:%d, Prop:%d, BG:%v",
+		len(categories.Food), len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -443,30 +431,23 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
-	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
-	hasAnyImage := categories.Food != nil || len(categories.Ingredient) > 0 || len(categories.Prop) > 0 || categories.Background != nil
+	// 이미지가 전혀 없는 경우 (텍스트만으로 생성)
+	hasAnyImage := len(categories.Food) > 0 || len(categories.Ingredient) > 0 || len(categories.Prop) > 0 || categories.Background != nil
 	if !hasAnyImage {
-		log.Printf("🔧 [Eats] No images provided - will generate with text prompt only")
 		if prompt != nil {
 			*prompt = strings.TrimSpace(*prompt + "\nGenerate a completely new image based on the text description only.")
 		}
 		return
 	}
 
-	if categories.Food == nil {
+	if len(categories.Food) == 0 {
 		switch {
 		case len(categories.Ingredient) > 0:
-			categories.Food = categories.Ingredient[0]
-			log.Printf("🔧 Using ingredient image as main food placeholder")
+			categories.Food = append(categories.Food, categories.Ingredient[0])
 		case len(categories.Prop) > 0:
-			categories.Food = categories.Prop[0]
-			log.Printf("🔧 Using prop image as main food placeholder")
+			categories.Food = append(categories.Food, categories.Prop[0])
 		case categories.Background != nil:
-			categories.Food = categories.Background
-			log.Printf("🔧 Using background image as main food placeholder")
-		default:
-			// 🔧 더 이상 1x1 placeholder 사용 안 함
-			log.Printf("🔧 [Eats] No main food image available - will use text-only generation")
+			categories.Food = append(categories.Food, categories.Background)
 		}
 
 		if prompt != nil {
@@ -475,9 +456,8 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 	}
 
 	// Food가 있을 때만 Ingredient 채우기
-	if len(categories.Ingredient) == 0 && categories.Food != nil {
-		categories.Ingredient = append(categories.Ingredient, categories.Food)
-		log.Printf("🔧 No ingredient images provided; reusing main food reference")
+	if len(categories.Ingredient) == 0 && len(categories.Food) > 0 {
+		categories.Ingredient = append(categories.Ingredient, categories.Food[0])
 	}
 }
 
@@ -567,6 +547,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{
+				Food:       [][]byte{}, // Food 배열 초기화
 				Ingredient: [][]byte{},
 				Prop:       [][]byte{},
 			}
@@ -578,6 +559,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
+					Food:       [][]byte{}, // Food 배열 초기화
 					Ingredient: [][]byte{},
 					Prop:       [][]byte{},
 				}
@@ -612,21 +594,16 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					switch attachType {
 					case "model", "food", "dish", "main":
 						foods = append(foods, imageData)
-						log.Printf("✅ [Eats Pipeline] Stage %d: Food/Main image added (Total: %d)", stageIndex, len(foods))
 					case "bg", "background":
 						backgrounds = append(backgrounds, imageData)
-						log.Printf("✅ [Eats Pipeline] Stage %d: Background image added (Total: %d)", stageIndex, len(backgrounds))
 					default:
 						if ingredientTypes[attachType] {
 							stageCategories.Ingredient = append(stageCategories.Ingredient, imageData)
-							log.Printf("✅ [Eats Pipeline] Stage %d: Ingredient/Side image added (type: %s)", stageIndex, attachType)
 						} else if toppingTypes[attachType] {
 							stageCategories.Prop = append(stageCategories.Prop, imageData)
-							log.Printf("✅ [Eats Pipeline] Stage %d: Topping/Garnish/Prop image added (type: %s)", stageIndex, attachType)
 						} else {
 							// 알 수 없는 타입은 부재료로 처리
 							stageCategories.Ingredient = append(stageCategories.Ingredient, imageData)
-							log.Printf("⚠️  [Eats Pipeline] Stage %d: Unknown type '%s' treated as ingredient", stageIndex, attachType)
 						}
 					}
 				}
@@ -678,16 +655,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					return
 				}
 
-				// 여러 음식 이미지가 있으면 rotate
+				// 여러 음식 이미지가 있으면 모두 배열에 넣기 (병합을 위해)
 				if len(foods) > 0 {
-					stageCategories.Food = foods[i%len(foods)]
-					log.Printf("🔄 [Eats Pipeline] Stage %d: Using food %d/%d for image %d", stageIndex, (i%len(foods))+1, len(foods), i+1)
+					stageCategories.Food = foods
 				}
 
 				// 여러 배경이 있으면 rotate
 				if len(backgrounds) > 0 {
 					stageCategories.Background = backgrounds[i%len(backgrounds)]
-					log.Printf("🔄 [Eats Pipeline] Stage %d: Using background %d/%d for image %d", stageIndex, (i%len(backgrounds))+1, len(backgrounds), i+1)
 				}
 
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
@@ -843,6 +818,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 		// individualImageAttachIds 또는 mergedImageAttachId 지원
 		retryCategories := &ImageCategories{
+			Food:       [][]byte{}, // Food 배열 초기화
 			Ingredient: [][]byte{},
 			Prop:       [][]byte{},
 		}
@@ -866,7 +842,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				switch attachType {
 				case "model", "food", "dish", "main":
-					retryCategories.Food = imageData
+					retryCategories.Food = append(retryCategories.Food, imageData)
 				case "bg", "background":
 					retryCategories.Background = imageData
 				default:

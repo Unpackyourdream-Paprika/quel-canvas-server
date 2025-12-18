@@ -343,7 +343,8 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	}
 
 	// API 호출 (새 google.golang.org/genai 패키지 사용)
-	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
+	seed := rand.Int31()
+	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s, seed: %d", aspectRatio, seed)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -352,6 +353,7 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
 			},
+			Seed: &seed,
 		},
 	)
 	if err != nil {
@@ -1011,6 +1013,19 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	// 동적 프롬프트 생성 (shotType 전달)
 	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio, shotType)
+
+	// 이미지 갯수 계산 (parts에서 이미지만 카운트, 텍스트 제외)
+	imageCount := len(parts)
+
+	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가
+	if imageCount >= 2 {
+		fusionPrompt := "\n\n[MULTI-IMAGE FUSION INSTRUCTION]\n" +
+			"Seamlessly blend the background and objects into one unified photorealistic scene.\n" +
+			"Maintain natural lighting, shadows, and atmosphere throughout the entire composition.\n"
+		dynamicPrompt = fusionPrompt + dynamicPrompt
+		log.Printf("📎 [Fashion Service] Added multi-image fusion prompt (%d images)", imageCount)
+	}
+
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
@@ -1021,7 +1036,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	// API 호출
-	log.Printf("📤 Sending request to Gemini API with %d parts...", len(parts))
+	seed := rand.Int31()
+	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d", len(parts), seed)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -1031,6 +1047,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				AspectRatio: aspectRatio,
 			},
 			Temperature: floatPtr(0.45),
+			Seed:        &seed,
 		},
 	)
 	if err != nil {

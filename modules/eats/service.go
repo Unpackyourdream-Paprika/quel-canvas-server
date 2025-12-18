@@ -37,7 +37,7 @@ type Service struct {
 // ImageCategories - Eats 모듈 전용 이미지 분류 구조체
 // 프론트 type: food, ingredient, prop, background
 type ImageCategories struct {
-	Food       []byte   // Food (메인 음식) 이미지 (최대 1장)
+	Food       [][]byte // Food (메인 음식) 이미지 배열
 	Ingredient [][]byte // Ingredient (재료) 이미지 배열
 	Prop       [][]byte // Prop (소품) 이미지 배열
 	Background []byte   // Background (배경) 이미지 (최대 1장)
@@ -531,93 +531,119 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		aspectRatio = "16:9"
 	}
 
-	log.Printf("🎨 [Eats] Calling Gemini API with categories - Food:%v, Ingredient:%d, Prop:%d, BG:%v",
-		categories.Food != nil, len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
+	// 이미지 개수 제한 (Gemini API 20MB 제한 고려)
+	const maxFoodImages = 6
+	const maxIngredientImages = 6
+	const maxPropImages = 6
 
-	// 카테고리별 병합 및 resize
-	var mergedIngredient []byte
-	var mergedProp []byte
-	var err error
+	log.Printf("🎨 [Eats] Calling Gemini API with categories - Food:%d, Ingredient:%d, Prop:%d, BG:%v",
+		len(categories.Food), len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
 
-	if len(categories.Ingredient) > 0 {
-		mergedIngredient, err = mergeImages(categories.Ingredient, aspectRatio)
-		if err != nil {
-			return "", fmt.Errorf("failed to merge ingredient images: %w", err)
-		}
-	}
-
-	if len(categories.Prop) > 0 {
-		mergedProp, err = mergeImages(categories.Prop, aspectRatio)
-		if err != nil {
-			return "", fmt.Errorf("failed to merge prop images: %w", err)
-		}
-	}
-
-	// Gemini Part 배열 구성
+	// Gemini Part 배열 구성 (이미지 병합 없이 개별 전달)
 	var parts []*genai.Part
 
 	// 순서: Food → Ingredient → Prop → Background
-	if categories.Food != nil {
-		// Food 이미지도 resize
-		resizedFood, err := mergeImages([][]byte{categories.Food}, aspectRatio)
-		if err != nil {
-			return "", fmt.Errorf("failed to resize food image: %w", err)
-		}
+
+	// 1. Food 이미지 추가 (최대 6장, 머지 없이 개별 전달)
+	foodCount := len(categories.Food)
+	if foodCount > maxFoodImages {
+		log.Printf("⚠️ Food images exceed limit: %d > %d, using first %d images",
+			foodCount, maxFoodImages, maxFoodImages)
+		foodCount = maxFoodImages
+	}
+	for i := 0; i < foodCount; i++ {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     resizedFood,
+				Data:     categories.Food[i],
 			},
 		})
-		log.Printf("📎 [Eats] Added Food image (resized)")
+	}
+	if foodCount > 0 {
+		log.Printf("📎 [Eats] Added %d Food images (original, no merge)", foodCount)
 	}
 
-	if mergedIngredient != nil {
+	// 2. Ingredient 이미지 추가 (최대 6장)
+	ingredientCount := len(categories.Ingredient)
+	if ingredientCount > maxIngredientImages {
+		log.Printf("⚠️ Ingredient images exceed limit: %d > %d, using first %d images",
+			ingredientCount, maxIngredientImages, maxIngredientImages)
+		ingredientCount = maxIngredientImages
+	}
+	for i := 0; i < ingredientCount; i++ {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     mergedIngredient,
+				Data:     categories.Ingredient[i],
 			},
 		})
-		log.Printf("📎 [Eats] Added Ingredient image (merged from %d items)", len(categories.Ingredient))
+	}
+	if ingredientCount > 0 {
+		log.Printf("📎 [Eats] Added %d Ingredient images (original, no merge)", ingredientCount)
 	}
 
-	if mergedProp != nil {
+	// 3. Prop 이미지 추가 (최대 6장)
+	propCount := len(categories.Prop)
+	if propCount > maxPropImages {
+		log.Printf("⚠️ Prop images exceed limit: %d > %d, using first %d images",
+			propCount, maxPropImages, maxPropImages)
+		propCount = maxPropImages
+	}
+	for i := 0; i < propCount; i++ {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     mergedProp,
+				Data:     categories.Prop[i],
 			},
 		})
-		log.Printf("📎 [Eats] Added Prop image (merged from %d items)", len(categories.Prop))
+	}
+	if propCount > 0 {
+		log.Printf("📎 [Eats] Added %d Prop images (original, no merge)", propCount)
 	}
 
+	// 4. Background 이미지 추가 (1장)
 	if categories.Background != nil {
-		// Background 이미지도 resize
-		resizedBG, err := mergeImages([][]byte{categories.Background}, aspectRatio)
-		if err != nil {
-			return "", fmt.Errorf("failed to resize background image: %w", err)
-		}
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
 				MIMEType: "image/png",
-				Data:     resizedBG,
+				Data:     categories.Background,
 			},
 		})
-		log.Printf("📎 [Eats] Added Background image (resized)")
+		log.Printf("📎 [Eats] Added Background image (original)")
 	}
 
-	// Log ImageCategories for debugging
-	log.Printf("🔍 [Eats DEBUG] ImageCategories Inspection:")
-	log.Printf("  - Food: %v (Size: %d bytes)", categories.Food != nil, len(categories.Food))
-	log.Printf("  - Ingredient: %d items", len(categories.Ingredient))
-	log.Printf("  - Prop: %d items", len(categories.Prop))
-	log.Printf("  - Background: %v (Size: %d bytes)", categories.Background != nil, len(categories.Background))
+	// 이미지 개수 카운트
+	imageCount := len(parts)
+	log.Printf("🔍 [Eats DEBUG] Total images to send: %d (Food: %d/%d, Ingredient: %d/%d, Prop: %d/%d, BG: %v)",
+		imageCount,
+		foodCount, len(categories.Food),
+		ingredientCount, len(categories.Ingredient),
+		propCount, len(categories.Prop),
+		categories.Background != nil)
 
 	// 동적 프롬프트 생성
 	dynamicPrompt := GenerateDynamicPrompt(categories, userPrompt, aspectRatio)
-	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
+	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가
+	if imageCount >= 2 {
+		fusionPrompt := "\n\n[MULTI-IMAGE FUSION INSTRUCTION]\n" +
+			"Seamlessly blend the background and objects into one unified photorealistic scene.\n" +
+			"Maintain natural lighting, shadows, and atmosphere throughout the entire composition.\n"
+		dynamicPrompt = fusionPrompt + dynamicPrompt
+		log.Printf("📎 [Eats Service] Added multi-image fusion prompt (%d images)", imageCount)
+	}
+
+	// Food 이미지가 여러 개일 때 겹침 방지 프롬프트 추가
+	if foodCount > 1 {
+		noOverlapPrompt := "\n\n[FOOD ARRANGEMENT INSTRUCTION]\n" +
+			"IMPORTANT: Arrange all food items WITHOUT OVERLAPPING each other.\n" +
+			"Each food item should be clearly visible and separated with natural spacing.\n" +
+			"Maintain proper depth and perspective while keeping items distinct and non-overlapping.\n"
+		dynamicPrompt = noOverlapPrompt + dynamicPrompt
+		log.Printf("📎 [Eats Service] Added no-overlap prompt for %d food items", foodCount)
+	}
+
+	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
 
 	// Content 생성
