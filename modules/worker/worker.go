@@ -14,6 +14,7 @@ import (
 	"quel-canvas-server/modules/cinema"
 	"quel-canvas-server/modules/eats"
 	"quel-canvas-server/modules/fashion"
+	landingdemo "quel-canvas-server/modules/landing-demo"
 	"quel-canvas-server/modules/modify"
 	"quel-canvas-server/modules/multiview"
 )
@@ -144,6 +145,10 @@ func processJob(ctx context.Context, dbClient *database.Client, jobID string) {
 	case "multiview":
 		log.Printf("🌐 Routing to Multiview module")
 		multiview.ProcessJob(ctx, job)
+
+	case "landing":
+		log.Printf("🎨 Routing to Landing module")
+		landingdemo.ProcessJob(ctx, job)
 
 	default:
 		log.Printf("⚠️  Unknown quel_production_path: %s, using Fashion as default", path)

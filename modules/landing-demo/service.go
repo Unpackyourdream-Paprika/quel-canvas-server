@@ -4,23 +4,33 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/draw"
 	_ "image/jpeg" // JPEG 디코더 등록
 	"image/png"
+	"io"
 	"log"
 	"math"
+	"math/rand"
+	"net/http"
 	"strings"
+	"time"
 
+	webp "github.com/gen2brain/webp"
 	_ "github.com/gen2brain/webp" // WebP 디코더 등록
+	"github.com/supabase-community/supabase-go"
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	"quel-canvas-server/modules/common/model"
+	redisClient "quel-canvas-server/modules/common/redis"
 )
 
 type Service struct {
 	genaiClient *genai.Client
+	supabase    *supabase.Client
 }
 
 func NewService() *Service {
@@ -433,4 +443,562 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 	}
 
 	return dst
+}
+
+// ============================================
+// Worker용 메서드들 (DB 연동)
+// ============================================
+
+// NewServiceWithDB - DB 연동 포함 서비스 초기화 (Worker용)
+func NewServiceWithDB() *Service {
+	cfg := config.GetConfig()
+
+	// Genai 클라이언트 초기화
+	ctx := context.Background()
+	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  cfg.GeminiAPIKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		log.Printf("❌ [Landing] Failed to create Genai client: %v", err)
+		return nil
+	}
+
+	// Supabase 클라이언트 초기화
+	supabaseClient, err := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceKey, nil)
+	if err != nil {
+		log.Printf("❌ [Landing] Failed to create Supabase client: %v", err)
+		return nil
+	}
+
+	log.Println("✅ [Landing] Service with DB initialized")
+	return &Service{
+		genaiClient: genaiClient,
+		supabase:    supabaseClient,
+	}
+}
+
+// FetchJobFromSupabase - Job 데이터 조회
+func (s *Service) FetchJobFromSupabase(jobID string) (*model.ProductionJob, error) {
+	log.Printf("🔍 [Landing] Fetching job: %s", jobID)
+
+	var jobs []model.ProductionJob
+	data, _, err := s.supabase.From("quel_production_jobs").
+		Select("*", "exact", false).
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query job: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &jobs); err != nil {
+		return nil, fmt.Errorf("failed to parse job: %w", err)
+	}
+
+	if len(jobs) == 0 {
+		return nil, fmt.Errorf("job not found: %s", jobID)
+	}
+
+	return &jobs[0], nil
+}
+
+// UpdateJobStatus - Job 상태 업데이트
+func (s *Service) UpdateJobStatus(ctx context.Context, jobID string, status string) error {
+	log.Printf("📝 [Landing] Updating job %s status to: %s", jobID, status)
+
+	updateData := map[string]interface{}{
+		"job_status": status,
+		"updated_at": "now()",
+	}
+
+	_, _, err := s.supabase.From("quel_production_jobs").
+		Update(updateData, "", "").
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to update job status: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Job %s status updated to: %s", jobID, status)
+	return nil
+}
+
+// UpdateProductionPhotoStatus - Production 상태 업데이트
+func (s *Service) UpdateProductionPhotoStatus(ctx context.Context, productionID string, status string) error {
+	log.Printf("📝 [Landing] Updating production %s status to: %s", productionID, status)
+
+	updateData := map[string]interface{}{
+		"production_status": status,
+	}
+
+	_, _, err := s.supabase.From("quel_production_photo").
+		Update(updateData, "", "").
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to update production status: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Production %s status updated to: %s", productionID, status)
+	return nil
+}
+
+// IsJobCancelled - Job 취소 여부 확인
+func (s *Service) IsJobCancelled(jobID string) bool {
+	return redisClient.IsJobCancelled(jobID)
+}
+
+// FetchAttachInfo - Attach 정보 조회
+func (s *Service) FetchAttachInfo(attachID int) (*model.Attach, error) {
+	log.Printf("🔍 [Landing] Fetching attach info: %d", attachID)
+
+	var attaches []model.Attach
+	data, _, err := s.supabase.From("quel_attach").
+		Select("*", "exact", false).
+		Eq("attach_id", fmt.Sprintf("%d", attachID)).
+		Execute()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query attach: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &attaches); err != nil {
+		return nil, fmt.Errorf("failed to parse attach: %w", err)
+	}
+
+	if len(attaches) == 0 {
+		return nil, fmt.Errorf("attach not found: %d", attachID)
+	}
+
+	return &attaches[0], nil
+}
+
+// DownloadImageFromStorage - Storage에서 이미지 다운로드
+func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
+	cfg := config.GetConfig()
+
+	attach, err := s.FetchAttachInfo(attachID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filePath string
+	if attach.AttachFilePath != nil && *attach.AttachFilePath != "" {
+		filePath = *attach.AttachFilePath
+	} else if attach.AttachDirectory != nil && *attach.AttachDirectory != "" {
+		filePath = *attach.AttachDirectory
+	} else {
+		return nil, fmt.Errorf("no file path for attach: %d", attachID)
+	}
+
+	// uploads/ 폴더 자동 추가
+	if len(filePath) > 0 && filePath[0] != '/' && len(filePath) >= 7 && filePath[:7] == "upload-" {
+		filePath = "uploads/" + filePath
+	}
+
+	fullURL := cfg.SupabaseStorageBaseURL + filePath
+	log.Printf("📥 [Landing] Downloading image: %s", fullURL)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(fullURL)
+	if err != nil {
+		return nil, fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("download failed: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read failed: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Image downloaded: %d bytes", len(imageData))
+	return imageData, nil
+}
+
+// ConvertPNGToWebP - PNG를 WebP로 변환
+func (s *Service) ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, error) {
+	pngReader := bytes.NewReader(pngData)
+	img, err := png.Decode(pngReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PNG: %w", err)
+	}
+
+	var webpBuffer bytes.Buffer
+	err = webp.Encode(&webpBuffer, img, webp.Options{Quality: int(quality)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode WebP: %w", err)
+	}
+
+	return webpBuffer.Bytes(), nil
+}
+
+// UploadImageToStorage - Storage에 이미지 업로드
+func (s *Service) UploadImageToStorage(ctx context.Context, imageData []byte, userID string) (string, int64, error) {
+	cfg := config.GetConfig()
+
+	// PNG to WebP
+	webpData, err := s.ConvertPNGToWebP(imageData, 90.0)
+	if err != nil {
+		return "", 0, fmt.Errorf("webp conversion failed: %w", err)
+	}
+
+	// 파일명 생성
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+	randomID := rand.Intn(999999)
+	fileName := fmt.Sprintf("generated_%d_%d.webp", timestamp, randomID)
+	filePath := fmt.Sprintf("generated-images/user-%s/%s", userID, fileName)
+
+	log.Printf("📤 [Landing] Uploading image: %s", filePath)
+
+	uploadURL := fmt.Sprintf("%s/storage/v1/object/attachments/%s", cfg.SupabaseURL, filePath)
+	req, err := http.NewRequestWithContext(ctx, "POST", uploadURL, bytes.NewReader(webpData))
+	if err != nil {
+		return "", 0, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+cfg.SupabaseServiceKey)
+	req.Header.Set("Content-Type", "image/webp")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return "", 0, fmt.Errorf("upload failed: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	webpSize := int64(len(webpData))
+	log.Printf("✅ [Landing] Image uploaded: %s (%d bytes)", filePath, webpSize)
+	return filePath, webpSize, nil
+}
+
+// CreateAttachRecord - Attach 레코드 생성
+func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileSize int64) (int, error) {
+	fileName := filePath
+	for i := len(filePath) - 1; i >= 0; i-- {
+		if filePath[i] == '/' {
+			fileName = filePath[i+1:]
+			break
+		}
+	}
+
+	insertData := map[string]interface{}{
+		"attach_original_name": fileName,
+		"attach_file_name":     fileName,
+		"attach_file_path":     filePath,
+		"attach_file_size":     fileSize,
+		"attach_file_type":     "image/webp",
+		"attach_directory":     filePath,
+		"attach_storage_type":  "supabase",
+	}
+
+	data, _, err := s.supabase.From("quel_attach").
+		Insert(insertData, false, "", "", "").
+		Execute()
+
+	if err != nil {
+		return 0, fmt.Errorf("insert failed: %w", err)
+	}
+
+	var attaches []model.Attach
+	if err := json.Unmarshal(data, &attaches); err != nil {
+		return 0, fmt.Errorf("parse failed: %w", err)
+	}
+
+	if len(attaches) == 0 {
+		return 0, fmt.Errorf("no attach returned")
+	}
+
+	attachID := int(attaches[0].AttachID)
+	log.Printf("✅ [Landing] Attach created: ID=%d", attachID)
+	return attachID, nil
+}
+
+// UpdateJobProgress - Job 진행 상황 업데이트
+func (s *Service) UpdateJobProgress(ctx context.Context, jobID string, completedImages int, generatedAttachIds []int) error {
+	// 중복 제거
+	uniqueIds := make([]int, 0, len(generatedAttachIds))
+	seen := make(map[int]bool)
+	for _, id := range generatedAttachIds {
+		if !seen[id] {
+			seen[id] = true
+			uniqueIds = append(uniqueIds, id)
+		}
+	}
+
+	updateData := map[string]interface{}{
+		"completed_images":     completedImages,
+		"generated_attach_ids": uniqueIds,
+		"updated_at":           "now()",
+	}
+
+	_, _, err := s.supabase.From("quel_production_jobs").
+		Update(updateData, "", "").
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Progress updated: %d images", completedImages)
+	return nil
+}
+
+// UpdateProductionAttachIds - Production attach_ids 업데이트
+func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID string, newAttachIds []int) error {
+	log.Printf("📎 [Landing] Updating production %s attach_ids: %d IDs", productionID, len(newAttachIds))
+
+	// 기존 attach_ids 조회
+	var productions []struct {
+		AttachIds []interface{} `json:"attach_ids"`
+	}
+
+	data, _, err := s.supabase.From("quel_production_photo").
+		Select("attach_ids", "", false).
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("fetch failed: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &productions); err != nil {
+		return fmt.Errorf("parse failed: %w", err)
+	}
+
+	// 병합
+	var existingIds []int
+	if len(productions) > 0 && productions[0].AttachIds != nil {
+		for _, id := range productions[0].AttachIds {
+			if floatID, ok := id.(float64); ok {
+				existingIds = append(existingIds, int(floatID))
+			}
+		}
+	}
+
+	mergedIds := append(existingIds, newAttachIds...)
+
+	// 업데이트
+	updateData := map[string]interface{}{
+		"attach_ids": mergedIds,
+	}
+
+	_, _, err = s.supabase.From("quel_production_photo").
+		Update(updateData, "", "").
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Production attach_ids updated: %v", mergedIds)
+	return nil
+}
+
+// DeductCredits - 크레딧 차감
+func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int) error {
+	cfg := config.GetConfig()
+	creditsPerImage := cfg.ImagePerPrice
+	totalCredits := len(attachIds) * creditsPerImage
+
+	isOrgCredit := orgID != nil && *orgID != ""
+
+	if isOrgCredit {
+		log.Printf("💰 [Landing] Deducting ORG credits: %s, %d credits", *orgID, totalCredits)
+
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", *orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("fetch org failed: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &orgs); err != nil || len(orgs) == 0 {
+			return fmt.Errorf("org not found: %s", *orgID)
+		}
+
+		newBalance := int(orgs[0].OrgCredit) - totalCredits
+
+		_, _, err = s.supabase.From("quel_organization").
+			Update(map[string]interface{}{"org_credit": newBalance}, "", "").
+			Eq("org_id", *orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("deduct org failed: %w", err)
+		}
+
+		// 트랜잭션 기록
+		for _, attachID := range attachIds {
+			s.supabase.From("quel_credits").
+				Insert(map[string]interface{}{
+					"user_id":           userID,
+					"org_id":            *orgID,
+					"used_by_member_id": userID,
+					"transaction_type":  "DEDUCT",
+					"amount":            -creditsPerImage,
+					"balance_after":     newBalance,
+					"description":       "Landing Template Generated",
+					"attach_idx":        attachID,
+					"production_idx":    productionID,
+				}, false, "", "", "").
+				Execute()
+		}
+	} else {
+		log.Printf("💰 [Landing] Deducting PERSONAL credits: %s, %d credits", userID, totalCredits)
+
+		var members []struct {
+			QuelMemberCredit int `json:"quel_member_credit"`
+		}
+		data, _, err := s.supabase.From("quel_member").
+			Select("quel_member_credit", "", false).
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("fetch member failed: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &members); err != nil || len(members) == 0 {
+			return fmt.Errorf("member not found: %s", userID)
+		}
+
+		newBalance := members[0].QuelMemberCredit - totalCredits
+
+		_, _, err = s.supabase.From("quel_member").
+			Update(map[string]interface{}{"quel_member_credit": newBalance}, "", "").
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("deduct member failed: %w", err)
+		}
+
+		// 트랜잭션 기록
+		for _, attachID := range attachIds {
+			s.supabase.From("quel_credits").
+				Insert(map[string]interface{}{
+					"user_id":          userID,
+					"transaction_type": "DEDUCT",
+					"amount":           -creditsPerImage,
+					"balance_after":    newBalance,
+					"description":      "Landing Template Generated",
+					"attach_idx":       attachID,
+					"production_idx":   productionID,
+				}, false, "", "", "").
+				Execute()
+		}
+	}
+
+	log.Printf("✅ [Landing] Credits deducted: %d", totalCredits)
+	return nil
+}
+
+// GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini 호출
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
+	cfg := config.GetConfig()
+
+	if aspectRatio == "" {
+		aspectRatio = "1:1"
+	}
+
+	log.Printf("🎨 [Landing] Generating with categories - Clothing:%d, Accessories:%d, Model:%v, BG:%v",
+		len(categories.Clothing), len(categories.Accessories), categories.Model != nil, categories.Background != nil)
+
+	// Parts 구성
+	var parts []*genai.Part
+
+	// 모델 이미지
+	if categories.Model != nil {
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Model},
+		})
+	}
+
+	// Clothing 이미지 (최대 6장)
+	maxImages := 6
+	clothingCount := len(categories.Clothing)
+	if clothingCount > maxImages {
+		clothingCount = maxImages
+	}
+	for i := 0; i < clothingCount; i++ {
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Clothing[i]},
+		})
+	}
+
+	// Accessories 이미지 (최대 6장)
+	accessoryCount := len(categories.Accessories)
+	if accessoryCount > maxImages {
+		accessoryCount = maxImages
+	}
+	for i := 0; i < accessoryCount; i++ {
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Accessories[i]},
+		})
+	}
+
+	// 배경 이미지
+	if categories.Background != nil {
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Background},
+		})
+	}
+
+	// 프롬프트
+	prompt := BuildDynamicPrompt(categories, userPrompt, aspectRatio)
+	parts = append(parts, genai.NewPartFromText(prompt))
+
+	// Content 생성
+	content := &genai.Content{Parts: parts}
+
+	// API 호출
+	log.Printf("📤 [Landing] Calling Gemini API with %d parts...", len(parts))
+	result, err := s.genaiClient.Models.GenerateContent(
+		ctx,
+		cfg.GeminiModel,
+		[]*genai.Content{content},
+		&genai.GenerateContentConfig{
+			ImageConfig: &genai.ImageConfig{AspectRatio: aspectRatio},
+			Temperature: floatPtr(0.45),
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("Gemini API error: %w", err)
+	}
+
+	// 응답에서 이미지 추출
+	for _, candidate := range result.Candidates {
+		if candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+				imageBase64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
+				log.Printf("✅ [Landing] Image generated: %d bytes", len(part.InlineData.Data))
+				return imageBase64, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no image in response")
 }
