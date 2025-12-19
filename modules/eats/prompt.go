@@ -17,34 +17,32 @@ type PromptCategories struct {
 // GenerateDynamicPrompt - Eats 모듈 전용 프롬프트 생성 (음식 사진)
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의 (프론트 type 기준)
-	hasFood := len(categories.Food) > 0           // type: food
+	hasFood := len(categories.Food) > 0             // type: food
 	hasIngredient := len(categories.Ingredient) > 0 // type: ingredient
-	hasProp := len(categories.Prop) > 0            // type: prop
+	hasProp := len(categories.Prop) > 0             // type: prop
 	hasFoodItems := hasIngredient || hasProp
 	hasBackground := categories.Background != nil // type: background
 
 	// 배경 설정에 따른 환경 지시
 	var backgroundInstruction string
 	if hasBackground {
-		backgroundInstruction = "Use the provided background image as the environment.\n"
+		backgroundInstruction = "Use the provided background image as the environment.\n" +
+			"STRONG studio lighting creating intense specular highlights and glossy reflections on food.\n"
 	} else {
-		backgroundInstruction = "🚨 MANDATORY BACKGROUND: SOLID PURE WHITE (RGB 255,255,255) ONLY\n" +
-			"❌ NO shadows on background, NO gradient, NO surface texture\n" +
-			"❌ NO table, NO floor, NO wall, NO environment - ONLY white void\n" +
-			"✓ Food items floating in pure white space like product catalog\n" +
-			"✓ Shadows ONLY under food items, NOT on background\n\n"
+		backgroundInstruction = "White background with HIGH-INTENSITY professional food photography lighting.\n" +
+			"CRITICAL: Lighting MUST create very strong bright highlights and wet glossy appearance on all food surfaces.\n"
 	}
 
 	// 간결한 메인 지시사항
 	var mainInstruction string
 	if hasFood || hasFoodItems {
 		mainInstruction = backgroundInstruction +
-			"\n🚨 CRITICAL: Generate ONE SINGLE UNIFIED PHOTOGRAPH\n" +
-			"• This is NOT a collage - all food items exist together naturally in ONE SCENE\n" +
-			"• ALL items clustered together in the CENTER of the frame - like a composed dish\n" +
-			"• Items are closely grouped and naturally arranged, NOT scattered across the image\n" +
-			"• Natural shadows, depth, and spatial relationships between items\n" +
-			"• Professional food photography - photorealistic, appetizing, natural colors\n\n"
+			"\nPREMIUM FOOD PHOTOGRAPHY - ULTRA GLOSSY:\n" +
+			"• Every food element must have individual shine and light reflection\n" +
+			"• Food surface appears freshly oiled or moistened - extremely glossy and wet-looking\n" +
+			"• Strong directional lighting creates bright specular highlights on all food surfaces\n" +
+			"• Deep shadows and high-contrast lighting enhance three-dimensional form\n" +
+			"• Professional studio lighting setup specifically for maximum gloss and shine\n\n"
 	} else {
 		mainInstruction = "Environment photography.\n"
 	}
@@ -56,27 +54,33 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	if len(categories.Food) > 0 {
 		if len(categories.Food) == 1 {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (MAIN FOOD): This is a FOOD photograph showing colors, textures, and presentation. This is NOT a person - it's FOOD. Recreate this FOOD EXACTLY with the same culinary style", imageIndex))
+				fmt.Sprintf("Reference Image %d (MAIN FOOD): Recreate this SAME FOOD TYPE with the SAME INGREDIENTS.\n"+
+					"KEEP: Same food identity, same core ingredients, same basic structure\n"+
+					"ENHANCE: Make it look fresher, glossier, more appetizing with better lighting and presentation\n"+
+					"Goal: Same food, elevated to professional food photography quality", imageIndex))
 		} else {
 			instructions = append(instructions,
 				fmt.Sprintf("Reference Image %d (MAIN FOOD - MULTIPLE ITEMS): These are %d FOOD items shown in a GRID LAYOUT for reference only.\n"+
 					"⚠️ CRITICAL: DO NOT recreate this grid layout in the final image!\n"+
-					"Instead: CLUSTER all these foods together in the CENTER of the frame - grouped closely like a composed meal.\n"+
-					"Arrange them naturally as if they were served together, NOT scattered in a grid pattern.\n"+
-					"Create ONE UNIFIED SCENE with all items naturally integrated with shadows and depth.", imageIndex, len(categories.Food)))
+					"KEEP: Same food types, same ingredients from all items\n"+
+					"CHANGE: CLUSTER all foods together naturally - NOT in a grid pattern\n"+
+					"ENHANCE: Make them look fresher, glossier, more appetizing with professional lighting\n"+
+					"Goal: Same foods, better composition and presentation quality", imageIndex, len(categories.Food)))
 		}
 		imageIndex++
 	}
 
 	if len(categories.Ingredient) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (INGREDIENTS/SIDES): ALL visible ingredients, side items, or components. The food MUST include EVERY item shown here", imageIndex))
+			fmt.Sprintf("Reference Image %d (INGREDIENTS/SIDES): Include these SAME ingredients/components.\n"+
+				"ENHANCE with better freshness and visual appeal.", imageIndex))
 		imageIndex++
 	}
 
 	if len(categories.Prop) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (TOPPINGS/GARNISH): ALL toppings, garnishes, sauces, herbs, or finishing touches. The food MUST feature EVERY element shown here", imageIndex))
+			fmt.Sprintf("Reference Image %d (TOPPINGS/GARNISH): Include these SAME toppings/garnishes.\n"+
+				"ENHANCE with better color vibrancy and appetizing look.", imageIndex))
 		imageIndex++
 	}
 
@@ -90,16 +94,9 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	compositionInstruction := ""
 
 	// 간결한 핵심 규칙
-	criticalRules := "\n⚠️ IMPORTANT CLARIFICATION:\n" +
-		"The reference images may show items in a GRID LAYOUT - this is for your reference only to see all items clearly.\n" +
-		"DO NOT recreate this grid pattern in your final photograph!\n\n" +
-		"[FORBIDDEN]\n" +
-		"❌ NO collage, NO split screen, NO grid layout\n" +
-		"❌ NO sticker effect - items must NOT look like separate cutouts pasted together\n" +
-		"❌ NO scattered placement - items must be GROUPED in the center\n" +
-		"❌ NO items floating separately - everything must be UNIFIED and CLUSTERED\n" +
-		"❌ NO recreating the grid pattern from the reference image\n" +
-		"❌ NO vertical dividing lines or borders\n\n"
+	criticalRules := "\n[FORBIDDEN]\n" +
+		"❌ NO collage or split screen layout\n" +
+		"❌ NO grid pattern from reference images\n\n"
 
 	// 간결한 aspect ratio 지시
 	aspectRatioInstruction := ""
@@ -107,50 +104,66 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	// ⚠️ 최우선 지시사항 - 맨 앞에 배치
 	var criticalHeader string
 	if !hasBackground {
-		// 배경 없을 때 - 순수한 흰색 배경 최우선
-		criticalHeader = "🚨🚨🚨 ABSOLUTE TOP PRIORITY - REJECT IMAGE IF NOT FOLLOWED 🚨🚨🚨\n\n" +
-			"[#1 PRIORITY - BACKGROUND]:\n" +
-			"🔴 SOLID PURE WHITE BACKGROUND (RGB 255,255,255) - NO EXCEPTIONS\n" +
-			"🔴 NO table, NO surface, NO floor, NO texture, NO shadows on background\n" +
-			"🔴 NO environment - pure white void like Amazon product photos\n" +
-			"🔴 Food items isolated in white space - NO props, NO context\n\n" +
-			"[#2 PRIORITY - NOT A COLLAGE]:\n" +
-			"🔴 ONE SINGLE UNIFIED PHOTOGRAPH - all items photographed together\n" +
-			"🔴 NOT separate images pasted together - natural integration\n" +
-			"🔴 Items have natural spatial relationships and shadows between each other\n\n" +
-			"[FORBIDDEN]:\n" +
-			"❌ NO table surface, wood, marble, or any texture in background\n" +
-			"❌ NO environment shadows or gradients on background\n" +
-			"❌ NO collage effect or sticker-like placement\n" +
-			"❌ NO split screen, grid, or comparison layout\n\n"
+		criticalHeader = "🚨 CRITICAL: ULTRA HIGH-GLOSS FOOD PHOTOGRAPHY 🚨\n\n" +
+			"SURFACE QUALITY (ABSOLUTE PRIORITY):\n" +
+			"• EVERY food element MUST sparkle with bright glossy highlights - like jewels\n" +
+			"• Food surface MUST appear SOAKING WET with visible oil coating - EXTREMELY glossy\n" +
+			"• INTENSE specular highlights creating bright white spots on ALL ingredients and surfaces\n" +
+			"• Water droplets, moisture beads, or condensation on food surface HIGHLY PREFERRED\n" +
+			"• MAXIMUM contrast - very bright highlights next to deep shadows\n" +
+			"• Food looks like it was JUST sprayed with water or brushed with oil - ULTRA SHINY\n" +
+			"• Every texture appears glistening and wet with individual light reflections\n\n" +
+			"FORBIDDEN:\n" +
+			"❌ ABSOLUTELY NO dry, matte, or dull appearance\n" +
+			"❌ NO subtle or weak lighting - must be STRONG and BRIGHT\n" +
+			"❌ NO flat cutout appearance\n\n"
 	} else {
-		// 배경 있을 때 - 기존 지시사항
-		criticalHeader = "⚠️⚠️⚠️ CRITICAL REQUIREMENTS - ABSOLUTE PRIORITY ⚠️⚠️⚠️\n\n" +
-			"[MANDATORY - UNIFIED SCENE]:\n" +
-			"🚨 ONE SINGLE PHOTOGRAPH taken in ONE MOMENT\n" +
-			"🚨 All items naturally integrated in the provided environment\n" +
-			"🚨 NOT a collage - natural shadows and spatial relationships\n" +
-			"🚨 PHOTOREALISTIC - looks like real food photography\n\n" +
-			"[FORBIDDEN]:\n" +
-			"❌ NO split screen, NO collage, NO sticker effect\n" +
-			"❌ NO grid layout or comparison view\n\n"
+		criticalHeader = "🚨 CRITICAL: ULTRA HIGH-GLOSS FOOD PHOTOGRAPHY 🚨\n\n" +
+			"SURFACE QUALITY (ABSOLUTE PRIORITY):\n" +
+			"• EVERY food element MUST sparkle with bright glossy highlights - like jewels\n" +
+			"• Food surface MUST appear SOAKING WET with visible oil coating - EXTREMELY glossy\n" +
+			"• INTENSE specular highlights creating bright white spots on ALL food elements\n" +
+			"• MAXIMUM contrast - very bright highlights next to deep shadows\n" +
+			"• Food looks like it was JUST sprayed with water or brushed with oil\n\n" +
+			"FORBIDDEN:\n" +
+			"❌ ABSOLUTELY NO dry or matte appearance\n" +
+			"❌ NO weak lighting\n\n"
 	}
 
 	// 최종 조합
 	var finalPrompt string
 
-	// 1️⃣ 크리티컬 요구사항을 맨 앞에 배치
-	if userPrompt != "" {
-		finalPrompt = criticalHeader + "[ADDITIONAL STYLING]\n" + userPrompt + "\n\n"
-	} else {
-		finalPrompt = criticalHeader
-	}
+	// 🚨 ABSOLUTE PROHIBITIONS - 맨 앞에 배치하여 절대 금지 사항 명확히
+	absoluteProhibitions := "⛔ ABSOLUTE PROHIBITIONS (MUST NEVER HAPPEN):\n" +
+		"❌ NEVER create images with BLACK or DARK backgrounds\n" +
+		"❌ NEVER make food appear as floating PNG cutout on black/dark background\n" +
+		"❌ NEVER use transparent or isolated product shot style\n" +
+		"❌ NEVER create collage or split-screen layouts\n" +
+		"❌ Background MUST be WHITE or light-colored studio environment\n\n" +
+		"✅ MANDATORY: Clean white studio background with professional food photography lighting\n" +
+		"✅ MANDATORY: Food naturally placed on surface with proper shadows and depth\n" +
+		"✅ MANDATORY: Cohesive studio photograph - NOT a cutout or isolated element\n\n" +
+		"📐 COMPOSITION VARIETY (avoid rigid centering):\n" +
+		"• Use diverse professional food photography compositions\n" +
+		"• Consider rule of thirds, off-center placement, dynamic angles\n" +
+		"• Overhead shots, 45-degree angles, close-ups, cross-sections - vary naturally\n" +
+		"• Avoid always centering single food items - be creative with placement\n" +
+		"• Natural, editorial-style food photography composition\n\n"
+
+	// 🔥 CRITICAL: 항상 강력한 시스템 프롬프트 먼저 (food photography 기본 품질 보장)
+	finalPrompt = absoluteProhibitions + criticalHeader + mainInstruction + strings.Join(instructions, "\n") + compositionInstruction
 
 	// 간결한 스타일 가이드
 	categoryStyleGuide := ""
 
-	// 2️⃣ 나머지 지시사항들
-	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + categoryStyleGuide + criticalRules + aspectRatioInstruction
+	// 사용자 프롬프트가 있으면 추가 (시스템 프롬프트 뒤에 배치하여 보완 역할)
+	if userPrompt != "" {
+		finalPrompt += "\n\n[ADDITIONAL USER REQUIREMENTS]:\n" + userPrompt + "\n" +
+			"(Apply these additional requirements while maintaining the glossy professional food photography style above)\n\n"
+	}
+
+	// 마지막 필수 규칙들
+	finalPrompt += categoryStyleGuide + criticalRules + aspectRatioInstruction
 
 	return finalPrompt
 }
