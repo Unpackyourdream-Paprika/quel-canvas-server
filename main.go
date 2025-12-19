@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"quel-canvas-server/modules/common/config"
+	landingdemo "quel-canvas-server/modules/landing-demo"
 	"quel-canvas-server/modules/modify"
 	"quel-canvas-server/modules/multiview"
 	"quel-canvas-server/modules/preview"
+	"quel-canvas-server/modules/submodule/nanobanana"
 	"quel-canvas-server/modules/unified-prompt/landing"
 	"quel-canvas-server/modules/unified-prompt/studio"
 	"quel-canvas-server/modules/worker"
-	landingdemo "quel-canvas-server/modules/landing-demo"
-	"quel-canvas-server/modules/submodule/nanobanana"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"

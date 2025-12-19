@@ -652,7 +652,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	// API 호출
-	log.Printf("📤 Sending request to Gemini API with %d parts...", len(parts))
+	seed := rand.Int31()
+	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d", len(parts), seed)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -662,6 +663,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				AspectRatio: aspectRatio,
 			},
 			Temperature: floatPtr(0.45),
+			Seed:        &seed,
 		},
 	)
 	if err != nil {
