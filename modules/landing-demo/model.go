@@ -28,3 +28,51 @@ type ImageCategories struct {
 	Accessories [][]byte // 악세사리 이미지 배열 (shoes, bag, accessory)
 	Background  []byte   // 배경 이미지 (최대 1장)
 }
+
+// RunwareRequest - Runware API 요청 구조체
+type RunwareRequest struct {
+	TaskType       string   `json:"taskType"`
+	TaskUUID       string   `json:"taskUUID"`
+	PositivePrompt string   `json:"positivePrompt"`
+	Model          string   `json:"model"`
+	Width          int      `json:"width"`
+	Height         int      `json:"height"`
+	NumberResults  int      `json:"numberResults"`
+	OutputFormat   string   `json:"outputFormat"`
+	Steps          int      `json:"steps,omitempty"`
+	CFGScale       float64  `json:"CFGScale,omitempty"`
+	NegativePrompt string   `json:"negativePrompt,omitempty"`
+	ReferenceImages []string `json:"referenceImages,omitempty"` // Seedream용
+	InputImage     string   `json:"inputImage,omitempty"`       // 일반 RUNWARE용
+	Strength       float64  `json:"strength,omitempty"`
+}
+
+// RunwareResponse - Runware API 응답 구조체
+type RunwareResponse struct {
+	Data []struct {
+		ImageURL string `json:"imageURL"`
+	} `json:"data"`
+}
+
+// OpenAIRequest - OpenAI API 요청 구조체
+type OpenAIRequest struct {
+	Model       string            `json:"model"`
+	Messages    []OpenAIMessage   `json:"messages"`
+	MaxTokens   int               `json:"max_tokens"`
+	Temperature float64           `json:"temperature"`
+}
+
+// OpenAIMessage - OpenAI 메시지 구조체
+type OpenAIMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// OpenAIResponse - OpenAI API 응답 구조체
+type OpenAIResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}

@@ -78,6 +78,29 @@ func SafeInt(value interface{}, fallback int) int {
 	return fallback
 }
 
+// SafeFloat converts common number shapes into float64 with a fallback.
+func SafeFloat(value interface{}, fallback float64) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		if n, err := strconv.ParseFloat(v.String(), 64); err == nil {
+			return n
+		}
+	case string:
+		if n, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
 // SafeAspectRatio provides a sane default aspect ratio.
 func SafeAspectRatio(value interface{}) string {
 	return SafeString(value, "16:9")

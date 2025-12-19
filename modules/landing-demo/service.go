@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	webp "github.com/gen2brain/webp"
 	_ "github.com/gen2brain/webp" // WebP 디코더 등록
 	"github.com/supabase-community/supabase-go"
@@ -25,16 +27,24 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
-	redisClient "quel-canvas-server/modules/common/redis"
+	redisutil "quel-canvas-server/modules/common/redis"
 )
 
 type Service struct {
 	genaiClient *genai.Client
 	supabase    *supabase.Client
+	redis       *redis.Client
 }
 
 func NewService() *Service {
 	cfg := config.GetConfig()
+
+	// Supabase 클라이언트 초기화
+	supabaseClient, err := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceKey, &supabase.ClientOptions{})
+	if err != nil {
+		log.Printf("❌ [LandingDemo] Failed to create Supabase client: %v", err)
+		return nil
+	}
 
 	// Genai 클라이언트 초기화
 	ctx := context.Background()
@@ -47,9 +57,17 @@ func NewService() *Service {
 		return nil
 	}
 
+	// Redis 클라이언트 초기화
+	redisClient := redisutil.Connect(cfg)
+	if redisClient == nil {
+		log.Printf("⚠️ [LandingDemo] Failed to connect to Redis - cancel feature will be disabled")
+	}
+
 	log.Println("✅ [LandingDemo] Service initialized")
 	return &Service{
+		supabase:    supabaseClient,
 		genaiClient: genaiClient,
+		redis:       redisClient,
 	}
 }
 
@@ -548,7 +566,10 @@ func (s *Service) UpdateProductionPhotoStatus(ctx context.Context, productionID 
 
 // IsJobCancelled - Job 취소 여부 확인
 func (s *Service) IsJobCancelled(jobID string) bool {
-	return redisClient.IsJobCancelled(jobID)
+	if s.redis == nil {
+		return false
+	}
+	return redisutil.IsJobCancelled(s.redis, jobID)
 }
 
 // FetchAttachInfo - Attach 정보 조회
@@ -623,13 +644,14 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 	return imageData, nil
 }
 
-// ConvertPNGToWebP - PNG를 WebP로 변환
-func (s *Service) ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, error) {
-	pngReader := bytes.NewReader(pngData)
-	img, err := png.Decode(pngReader)
+// ConvertToWebP - 이미지를 WebP로 변환 (PNG, JPEG 등 모든 포맷 지원)
+func (s *Service) ConvertPNGToWebP(imageData []byte, quality float32) ([]byte, error) {
+	reader := bytes.NewReader(imageData)
+	img, format, err := image.Decode(reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode PNG: %w", err)
+		return nil, fmt.Errorf("failed to decode image: %w", err)
 	}
+	log.Printf("🔄 [Landing] Converting %s to WebP", format)
 
 	var webpBuffer bytes.Buffer
 	err = webp.Encode(&webpBuffer, img, webp.Options{Quality: int(quality)})
@@ -1001,4 +1023,265 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	return "", fmt.Errorf("no image in response")
+}
+
+// ============================================
+// Runware API 호출 함수들
+// ============================================
+
+// GenerateImageWithRunware - Runware API로 이미지 생성
+func (s *Service) GenerateImageWithRunware(ctx context.Context, prompt string, modelID string, aspectRatio string, steps int, cfgScale float64, negativePrompt string, inputImageBase64 string) ([]byte, error) {
+	cfg := config.GetConfig()
+
+	if cfg.RunwareAPIKey == "" {
+		return nil, fmt.Errorf("RUNWARE_API_KEY not configured")
+	}
+
+	// Seedream 모델 체크
+	isSeedream := strings.Contains(modelID, "seedream") || strings.HasPrefix(modelID, "bytedance:")
+
+	// 해상도 계산
+	var width, height int
+	if isSeedream {
+		width, height = 2048, 2048
+	} else {
+		width, height = 1024, 1024
+	}
+
+	switch aspectRatio {
+	case "16:9":
+		if isSeedream {
+			width, height = 2048, 1152
+		} else {
+			width, height = 1024, 576
+		}
+	case "9:16":
+		if isSeedream {
+			width, height = 1152, 2048
+		} else {
+			width, height = 576, 1024
+		}
+	case "4:5":
+		if isSeedream {
+			width, height = 1638, 2048
+		} else {
+			width, height = 819, 1024
+		}
+	}
+
+	// 요청 구성
+	reqBody := RunwareRequest{
+		TaskType:       "imageInference",
+		TaskUUID:       generateUUID(),
+		PositivePrompt: prompt,
+		Model:          modelID,
+		Width:          width,
+		Height:         height,
+		NumberResults:  1,
+		OutputFormat:   "JPEG",
+	}
+
+	// Seedream이 아닌 경우에만 steps, cfgScale 추가
+	if !isSeedream {
+		if steps > 0 {
+			reqBody.Steps = steps
+		}
+		if cfgScale > 0 {
+			reqBody.CFGScale = cfgScale
+		}
+		if negativePrompt != "" {
+			reqBody.NegativePrompt = negativePrompt
+		}
+	}
+
+	// 입력 이미지 처리
+	if inputImageBase64 != "" {
+		if isSeedream {
+			reqBody.ReferenceImages = []string{"data:image/png;base64," + inputImageBase64}
+		} else {
+			reqBody.InputImage = "data:image/png;base64," + inputImageBase64
+			reqBody.Strength = 0.7
+		}
+	}
+
+	log.Printf("🎨 [Landing] Runware request: model=%s, size=%dx%d, seedream=%v", modelID, width, height, isSeedream)
+
+	// API 호출
+	jsonBody, err := json.Marshal([]RunwareRequest{reqBody})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.RunwareAPIURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.RunwareAPIKey)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Runware API error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Runware API error: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var runwareResp RunwareResponse
+	if err := json.NewDecoder(resp.Body).Decode(&runwareResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(runwareResp.Data) == 0 || runwareResp.Data[0].ImageURL == "" {
+		return nil, fmt.Errorf("no image in Runware response")
+	}
+
+	// 이미지 다운로드
+	imageURL := runwareResp.Data[0].ImageURL
+	log.Printf("📥 [Landing] Downloading Runware image: %s", imageURL[:50]+"...")
+
+	imgResp, err := http.Get(imageURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download image: %w", err)
+	}
+	defer imgResp.Body.Close()
+
+	imageData, err := io.ReadAll(imgResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Runware image generated: %d bytes", len(imageData))
+	return imageData, nil
+}
+
+// RefinePromptWithOpenAI - OpenAI GPT-4o로 프롬프트 정제
+func (s *Service) RefinePromptWithOpenAI(ctx context.Context, userPrompt string, templatePrompt string) (string, error) {
+	cfg := config.GetConfig()
+
+	if cfg.OpenAIAPIKey == "" {
+		log.Printf("⚠️ [Landing] OpenAI API key not configured, using original prompt")
+		if templatePrompt != "" {
+			return templatePrompt + ", " + userPrompt, nil
+		}
+		return userPrompt, nil
+	}
+
+	systemMessage := `You are an expert image generation prompt engineer. Your task is to:
+1. Take the user's input (which may be in any language - Korean, Japanese, Chinese, etc.)
+2. Understand their intent and what kind of image they want
+3. Transform it into a clear, detailed English prompt optimized for image generation AI
+4. Add helpful details about lighting, composition, style, and quality if not specified
+5. Keep the prompt concise but descriptive (max 200 words)
+
+IMPORTANT: Only output the refined English prompt, nothing else. No explanations, no quotes, just the prompt.`
+
+	if templatePrompt != "" {
+		systemMessage += fmt.Sprintf("\n\nThe user has selected a template with this base prompt: \"%s\". Incorporate their input while maintaining the template's style.", templatePrompt)
+	}
+
+	reqBody := OpenAIRequest{
+		Model: "gpt-4o",
+		Messages: []OpenAIMessage{
+			{Role: "system", Content: systemMessage},
+			{Role: "user", Content: userPrompt},
+		},
+		MaxTokens:   500,
+		Temperature: 0.7,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return userPrompt, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	if err != nil {
+		return userPrompt, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.OpenAIAPIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️ [Landing] OpenAI API error: %v, using original prompt", err)
+		if templatePrompt != "" {
+			return templatePrompt + ", " + userPrompt, nil
+		}
+		return userPrompt, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("⚠️ [Landing] OpenAI API error: status %d, body: %s", resp.StatusCode, string(body))
+		if templatePrompt != "" {
+			return templatePrompt + ", " + userPrompt, nil
+		}
+		return userPrompt, nil
+	}
+
+	var openaiResp OpenAIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&openaiResp); err != nil {
+		log.Printf("⚠️ [Landing] Failed to decode OpenAI response: %v", err)
+		if templatePrompt != "" {
+			return templatePrompt + ", " + userPrompt, nil
+		}
+		return userPrompt, nil
+	}
+
+	if len(openaiResp.Choices) == 0 || openaiResp.Choices[0].Message.Content == "" {
+		if templatePrompt != "" {
+			return templatePrompt + ", " + userPrompt, nil
+		}
+		return userPrompt, nil
+	}
+
+	refinedPrompt := strings.TrimSpace(openaiResp.Choices[0].Message.Content)
+	log.Printf("✅ [Landing] Prompt refined: %s", truncateString(refinedPrompt, 100))
+	return refinedPrompt, nil
+}
+
+// generateUUID - UUID 생성 헬퍼 (UUIDv4 형식)
+func generateUUID() string {
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		rand.Uint32(),
+		rand.Uint32()&0xffff,
+		(rand.Uint32()&0x0fff)|0x4000, // version 4
+		(rand.Uint32()&0x3fff)|0x8000, // variant
+		rand.Uint64()&0xffffffffffff,
+	)
+}
+
+// IsRunwareModel - Runware 모델 여부 확인
+func IsRunwareModel(modelID string) bool {
+	if modelID == "" {
+		return false
+	}
+	return strings.HasPrefix(modelID, "runware:") ||
+		strings.HasPrefix(modelID, "civitai:") ||
+		strings.HasPrefix(modelID, "bytedance:")
+}
+
+// IsGeminiModel - Gemini 모델 여부 확인
+func IsGeminiModel(modelID string) bool {
+	if modelID == "" {
+		return true // 기본값은 Gemini
+	}
+	return strings.HasPrefix(modelID, "gemini:")
+}
+
+// IsMultiviewModel - Multiview 모델 여부 확인
+func IsMultiviewModel(modelID string) bool {
+	if modelID == "" {
+		return false
+	}
+	return strings.HasPrefix(modelID, "multiview:")
 }

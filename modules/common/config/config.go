@@ -27,6 +27,13 @@ type Config struct {
 	GeminiAPIKey string
 	GeminiModel  string
 
+	// Runware API
+	RunwareAPIKey string
+	RunwareAPIURL string
+
+	// OpenAI API (for prompt refinement)
+	OpenAIAPIKey string
+
 	// Server
 	Port string
 
@@ -76,6 +83,13 @@ func LoadConfig() (*Config, error) {
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
 
+		// Runware API
+		RunwareAPIKey: getEnv("RUNWARE_API_KEY", ""),
+		RunwareAPIURL: getEnv("RUNWARE_API_URL", "https://api.runware.ai/v1"),
+
+		// OpenAI API
+		OpenAIAPIKey: getEnv("OPENAI_API_KEY", ""),
+
 		// Server
 		Port: getEnv("PORT", "8080"),
 
@@ -92,6 +106,8 @@ func LoadConfig() (*Config, error) {
 	log.Printf("   Redis: %s:%s (TLS: %v)", globalConfig.RedisHost, globalConfig.RedisPort, globalConfig.RedisUseTLS)
 	log.Printf("   Supabase: %s", globalConfig.SupabaseURL)
 	log.Printf("   Gemini: %s", globalConfig.GeminiModel)
+	log.Printf("   Runware: %s (key: %v)", globalConfig.RunwareAPIURL, globalConfig.RunwareAPIKey != "")
+	log.Printf("   OpenAI: %v", globalConfig.OpenAIAPIKey != "")
 	log.Printf("   Credit: %d per image", globalConfig.ImagePerPrice)
 
 	return globalConfig, nil

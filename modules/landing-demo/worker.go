@@ -47,7 +47,7 @@ func ProcessJob(ctx context.Context, job *model.ProductionJob) {
 	}
 }
 
-// processLandingSimpleGeneral - Landing 이미지 생성 처리
+// processLandingSimpleGeneral - Landing 이미지 생성 처리 (model_id 기반 라우팅)
 func processLandingSimpleGeneral(ctx context.Context, service *Service, job *model.ProductionJob) {
 	log.Printf("🚀 [Landing] Starting Simple General processing for job: %s", job.JobID)
 
@@ -60,8 +60,16 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	}
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
 
+	// 모델 관련 파라미터 추출
+	modelID := fallback.SafeString(job.JobInputData["modelId"], "")
+	templatePrompt := fallback.SafeString(job.JobInputData["templatePrompt"], "")
+	negativePrompt := fallback.SafeString(job.JobInputData["negativePrompt"], "")
+	modelSteps := fallback.SafeInt(job.JobInputData["modelSteps"], 4)
+	modelCfgScale := fallback.SafeFloat(job.JobInputData["modelCfgScale"], 1.0)
+
 	log.Printf("📦 [Landing] Input: Prompt=%s, AspectRatio=%s, Quantity=%d, UserID=%s",
 		truncateString(prompt, 50), aspectRatio, quantity, userID)
+	log.Printf("📦 [Landing] Model: ID=%s, Steps=%d, CFG=%.1f", modelID, modelSteps, modelCfgScale)
 
 	// Status 업데이트 - processing
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -74,6 +82,18 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 			log.Printf("⚠️ [Landing] Failed to update production status: %v", err)
 		}
 	}
+
+	// OpenAI로 프롬프트 정제
+	refinedPrompt, err := service.RefinePromptWithOpenAI(ctx, prompt, templatePrompt)
+	if err != nil {
+		log.Printf("⚠️ [Landing] Prompt refinement failed: %v, using original", err)
+		if templatePrompt != "" {
+			refinedPrompt = templatePrompt + ", " + prompt
+		} else {
+			refinedPrompt = prompt
+		}
+	}
+	log.Printf("📝 [Landing] Refined prompt: %s", truncateString(refinedPrompt, 100))
 
 	// 입력 이미지 다운로드 (있는 경우)
 	var inputImages [][]byte
@@ -101,6 +121,18 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 	log.Printf("✅ [Landing] %d input images prepared", len(inputImages))
 
+	// 모델 타입 판별
+	isRunware := IsRunwareModel(modelID)
+	isMultiview := IsMultiviewModel(modelID)
+
+	if isRunware {
+		log.Printf("🎨 [Landing] Using Runware API: %s", modelID)
+	} else if isMultiview {
+		log.Printf("🌐 [Landing] Using Multiview API: %s", modelID)
+	} else {
+		log.Printf("🎨 [Landing] Using Gemini API (default)")
+	}
+
 	// 이미지 생성 루프
 	generatedAttachIds := []int{}
 	completedCount := 0
@@ -118,25 +150,63 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 		log.Printf("🎨 [Landing] Generating image %d/%d...", i+1, quantity)
 
-		// Gemini API 호출
-		var generatedBase64 string
-		var err error
+		var generatedImageData []byte
+		var genErr error
 
+		// 입력 이미지 base64 준비 (Runware용)
+		var inputImageBase64 string
 		if len(inputImages) > 0 {
-			// 입력 이미지가 있는 경우 - 카테고리 분류 후 생성
-			categories := &ImageCategories{
-				Clothing:    inputImages,
-				Accessories: [][]byte{},
-			}
-			generatedBase64, err = service.GenerateImageWithGeminiMultiple(ctx, categories, prompt, aspectRatio)
-		} else {
-			// 입력 이미지가 없는 경우 - 텍스트만으로 생성
-			generatedBase64, err = service.GenerateImageWithGeminiTextOnly(ctx, prompt, aspectRatio)
+			inputImageBase64 = base64.StdEncoding.EncodeToString(inputImages[0])
 		}
 
-		if err != nil {
-			log.Printf("❌ [Landing] Gemini API failed for image %d: %v", i+1, err)
-			if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "429") {
+		if isRunware {
+			// Runware API 사용
+			generatedImageData, genErr = service.GenerateImageWithRunware(
+				ctx,
+				refinedPrompt,
+				modelID,
+				aspectRatio,
+				modelSteps,
+				modelCfgScale,
+				negativePrompt,
+				inputImageBase64,
+			)
+		} else if isMultiview {
+			// Multiview는 일단 Gemini로 fallback (추후 구현)
+			log.Printf("⚠️ [Landing] Multiview not implemented yet, using Gemini")
+			var generatedBase64 string
+			if len(inputImages) > 0 {
+				categories := &ImageCategories{
+					Clothing:    inputImages,
+					Accessories: [][]byte{},
+				}
+				generatedBase64, genErr = service.GenerateImageWithGeminiMultiple(ctx, categories, refinedPrompt, aspectRatio)
+			} else {
+				generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
+			}
+			if genErr == nil {
+				generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+			}
+		} else {
+			// Gemini API 사용 (기본)
+			var generatedBase64 string
+			if len(inputImages) > 0 {
+				categories := &ImageCategories{
+					Clothing:    inputImages,
+					Accessories: [][]byte{},
+				}
+				generatedBase64, genErr = service.GenerateImageWithGeminiMultiple(ctx, categories, refinedPrompt, aspectRatio)
+			} else {
+				generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
+			}
+			if genErr == nil {
+				generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+			}
+		}
+
+		if genErr != nil {
+			log.Printf("❌ [Landing] Image generation failed for image %d: %v", i+1, genErr)
+			if strings.Contains(genErr.Error(), "403") || strings.Contains(genErr.Error(), "429") {
 				log.Printf("🚨 [Landing] API error detected - stopping job")
 				service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
 				if job.ProductionID != nil {
@@ -144,13 +214,6 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 				}
 				return
 			}
-			continue
-		}
-
-		// Base64 → []byte 변환
-		generatedImageData, err := base64.StdEncoding.DecodeString(generatedBase64)
-		if err != nil {
-			log.Printf("❌ [Landing] Failed to decode image %d: %v", i+1, err)
 			continue
 		}
 
