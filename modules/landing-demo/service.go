@@ -779,6 +779,27 @@ func (s *Service) UpdateJobProgress(ctx context.Context, jobID string, completed
 	return nil
 }
 
+// UpdateJobProgressWithURLs - URL 포함 진행 상황 업데이트 (빠른 응답용)
+func (s *Service) UpdateJobProgressWithURLs(ctx context.Context, jobID string, completedImages int, imageURLs []string) error {
+	updateData := map[string]interface{}{
+		"completed_images": completedImages,
+		"generated_urls":   imageURLs, // 즉시 표시용 URL
+		"updated_at":       "now()",
+	}
+
+	_, _, err := s.supabase.From("quel_production_jobs").
+		Update(updateData, "", "").
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Progress updated with URLs: %d images", completedImages)
+	return nil
+}
+
 // UpdateProductionAttachIds - Production attach_ids 업데이트
 func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID string, newAttachIds []int) error {
 	log.Printf("📎 [Landing] Updating production %s attach_ids: %d IDs", productionID, len(newAttachIds))
@@ -829,6 +850,11 @@ func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID st
 
 	log.Printf("✅ [Landing] Production attach_ids updated: %v", mergedIds)
 	return nil
+}
+
+// AppendProductionAttachId - 단일 attach_id를 production에 추가 (백그라운드용)
+func (s *Service) AppendProductionAttachId(ctx context.Context, productionID string, attachID int) error {
+	return s.UpdateProductionAttachIds(ctx, productionID, []int{attachID})
 }
 
 // DeductCredits - 크레딧 차감
@@ -1158,6 +1184,144 @@ func (s *Service) GenerateImageWithRunware(ctx context.Context, prompt string, m
 
 	log.Printf("✅ [Landing] Runware image generated: %d bytes", len(imageData))
 	return imageData, nil
+}
+
+// GenerateImageWithRunwareURL - Runware로 이미지 생성 후 URL만 반환 (빠른 응답용)
+func (s *Service) GenerateImageWithRunwareURL(ctx context.Context, prompt string, modelID string, aspectRatio string, steps int, cfgScale float64, negativePrompt string, inputImageBase64 string) (string, error) {
+	cfg := config.GetConfig()
+
+	if cfg.RunwareAPIKey == "" {
+		return "", fmt.Errorf("RUNWARE_API_KEY not configured")
+	}
+
+	// Seedream 모델 체크
+	isSeedream := strings.Contains(modelID, "seedream") || strings.HasPrefix(modelID, "bytedance:")
+
+	// 해상도 계산
+	var width, height int
+	if isSeedream {
+		width, height = 2048, 2048
+	} else {
+		width, height = 1024, 1024
+	}
+
+	switch aspectRatio {
+	case "16:9":
+		if isSeedream {
+			width, height = 2048, 1152
+		} else {
+			width, height = 1024, 576
+		}
+	case "9:16":
+		if isSeedream {
+			width, height = 1152, 2048
+		} else {
+			width, height = 576, 1024
+		}
+	case "4:5":
+		if isSeedream {
+			width, height = 1638, 2048
+		} else {
+			width, height = 819, 1024
+		}
+	}
+
+	// 요청 구성
+	reqBody := RunwareRequest{
+		TaskType:       "imageInference",
+		TaskUUID:       generateUUID(),
+		PositivePrompt: prompt,
+		Model:          modelID,
+		Width:          width,
+		Height:         height,
+		NumberResults:  1,
+		OutputFormat:   "JPEG",
+	}
+
+	// Seedream이 아닌 경우에만 steps, cfgScale 추가
+	if !isSeedream {
+		if steps > 0 {
+			reqBody.Steps = steps
+		}
+		if cfgScale > 0 {
+			reqBody.CFGScale = cfgScale
+		}
+		if negativePrompt != "" {
+			reqBody.NegativePrompt = negativePrompt
+		}
+	}
+
+	// 입력 이미지 처리
+	if inputImageBase64 != "" {
+		if isSeedream {
+			reqBody.ReferenceImages = []string{"data:image/png;base64," + inputImageBase64}
+		} else {
+			reqBody.InputImage = "data:image/png;base64," + inputImageBase64
+			reqBody.Strength = 0.7
+		}
+	}
+
+	log.Printf("🎨 [Landing] Runware URL request: model=%s, size=%dx%d", modelID, width, height)
+
+	// API 호출
+	jsonBody, err := json.Marshal([]RunwareRequest{reqBody})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.RunwareAPIURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.RunwareAPIKey)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Runware API error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Runware API error: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var runwareResp RunwareResponse
+	if err := json.NewDecoder(resp.Body).Decode(&runwareResp); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(runwareResp.Data) == 0 || runwareResp.Data[0].ImageURL == "" {
+		return "", fmt.Errorf("no image in Runware response")
+	}
+
+	imageURL := runwareResp.Data[0].ImageURL
+	log.Printf("✅ [Landing] Runware URL received: %s", imageURL[:50]+"...")
+	return imageURL, nil
+}
+
+// DownloadImageFromURL - URL에서 이미지 다운로드 (백그라운드 저장용)
+func (s *Service) DownloadImageFromURL(ctx context.Context, imageURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download image: status %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
 }
 
 // RefinePromptWithOpenAI - OpenAI GPT-4o로 프롬프트 정제

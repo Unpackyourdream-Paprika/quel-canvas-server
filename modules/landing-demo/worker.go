@@ -147,6 +147,7 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	type GenerationResult struct {
 		Index     int
 		ImageData []byte
+		ImageURL  string // Runware URL (빠른 응답용)
 		Error     error
 	}
 
@@ -170,21 +171,28 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 			var genErr error
 
 			if isSeedream {
-				// Seedream submodule 사용
+				// Seedream submodule 사용 - URL만 먼저 반환 (빠른 응답)
 				seedreamService := seedream.NewService()
 				if seedreamService != nil {
-					generatedImageData, genErr = seedreamService.GenerateWithBytes(
+					var imageURL string
+					imageURL, genErr = seedreamService.GenerateWithURL(
 						ctx,
 						refinedPrompt,
 						aspectRatio,
 						inputImageBase64,
 					)
+					if genErr == nil && imageURL != "" {
+						log.Printf("✅ [Landing] [Parallel] Image %d URL received: %s", idx+1, truncateString(imageURL, 50))
+						resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
+						return
+					}
 				} else {
 					genErr = fmt.Errorf("Seedream service not initialized")
 				}
 			} else if isRunware {
-				// Runware API 사용
-				generatedImageData, genErr = service.GenerateImageWithRunware(
+				// Runware API 사용 - URL만 먼저 반환 (빠른 응답)
+				var imageURL string
+				imageURL, genErr = service.GenerateImageWithRunwareURL(
 					ctx,
 					refinedPrompt,
 					modelID,
@@ -194,6 +202,11 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 					negativePrompt,
 					inputImageBase64,
 				)
+				if genErr == nil && imageURL != "" {
+					log.Printf("✅ [Landing] [Parallel] Image %d URL received (Runware): %s", idx+1, truncateString(imageURL, 50))
+					resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
+					return
+				}
 			} else if isMultiview {
 				// Multiview는 일단 Gemini로 fallback (추후 구현)
 				log.Printf("⚠️ [Landing] Multiview not implemented yet, using Gemini")
@@ -240,6 +253,7 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 	// 결과 수집 및 처리
 	generatedAttachIds := []int{}
+	generatedImageURLs := []string{} // 빠른 응답용 URL 저장
 	completedCount := 0
 	var apiError error
 
@@ -255,6 +269,63 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 			continue
 		}
 
+		// URL이 있는 경우 (Seedream) - 즉시 완료 처리 후 백그라운드에서 Storage 업로드
+		if result.ImageURL != "" {
+			generatedImageURLs = append(generatedImageURLs, result.ImageURL)
+			completedCount++
+			log.Printf("✅ [Landing] Image %d/%d URL ready (will upload in background)", result.Index+1, quantity)
+
+			// 즉시 Progress 업데이트 (프론트에서 URL로 이미지 표시)
+			if err := service.UpdateJobProgressWithURLs(ctx, job.JobID, completedCount, generatedImageURLs); err != nil {
+				log.Printf("⚠️ [Landing] Failed to update progress with URLs: %v", err)
+			}
+
+			// 백그라운드에서 다운로드 + 업로드 + Attach 생성
+			go func(imageURL string, idx int) {
+				bgCtx := context.Background()
+
+				// 이미지 다운로드
+				imageData, err := service.DownloadImageFromURL(bgCtx, imageURL)
+				if err != nil {
+					log.Printf("❌ [Landing] [Background] Failed to download image %d: %v", idx+1, err)
+					return
+				}
+
+				// Storage 업로드
+				filePath, webpSize, err := service.UploadImageToStorage(bgCtx, imageData, userID)
+				if err != nil {
+					log.Printf("❌ [Landing] [Background] Failed to upload image %d: %v", idx+1, err)
+					return
+				}
+
+				// Attach 레코드 생성
+				attachID, err := service.CreateAttachRecord(bgCtx, filePath, webpSize)
+				if err != nil {
+					log.Printf("❌ [Landing] [Background] Failed to create attach record %d: %v", idx+1, err)
+					return
+				}
+
+				log.Printf("✅ [Landing] [Background] Image %d archived: AttachID=%d", idx+1, attachID)
+
+				// 크레딧 차감
+				if job.ProductionID != nil && userID != "" {
+					if err := service.DeductCredits(bgCtx, userID, job.OrgID, *job.ProductionID, []int{attachID}); err != nil {
+						log.Printf("⚠️ [Landing] [Background] Failed to deduct credits for attach %d: %v", attachID, err)
+					}
+				}
+
+				// Production에 attach_id 추가 (기존 것에 append)
+				if job.ProductionID != nil {
+					if err := service.AppendProductionAttachId(bgCtx, *job.ProductionID, attachID); err != nil {
+						log.Printf("⚠️ [Landing] [Background] Failed to append attach_id: %v", err)
+					}
+				}
+			}(result.ImageURL, result.Index)
+
+			continue
+		}
+
+		// ImageData가 있는 경우 (Gemini, Runware 등) - 기존 로직
 		// Storage 업로드
 		filePath, webpSize, err := service.UploadImageToStorage(ctx, result.ImageData, userID)
 		if err != nil {

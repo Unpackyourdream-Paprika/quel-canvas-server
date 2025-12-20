@@ -214,6 +214,135 @@ func (s *Service) downloadImageAsBase64(ctx context.Context, imageURL string) (s
 	return base64.StdEncoding.EncodeToString(imageData), nil
 }
 
+// GenerateWithURL - URL만 반환 (빠른 응답용, 다운로드 없음)
+func (s *Service) GenerateWithURL(ctx context.Context, req *GenerateRequest) (string, error) {
+	cfg := config.GetConfig()
+
+	if cfg.RunwareAPIKey == "" {
+		return "", fmt.Errorf("RUNWARE_API_KEY not configured")
+	}
+
+	// 기본값 설정
+	width := req.Width
+	if width <= 0 {
+		width = 1024
+	}
+	height := req.Height
+	if height <= 0 {
+		height = 1024
+	}
+	steps := req.Steps
+	if steps <= 0 {
+		steps = 4
+	}
+	cfgScale := req.CFGScale
+	if cfgScale <= 0 {
+		cfgScale = 1.0
+	}
+
+	log.Printf("🎨 [FluxSchnell] URL request - size: %dx%d, steps: %d, prompt: %s",
+		width, height, steps, truncateString(req.Prompt, 50))
+
+	// Runware 요청 구성
+	runwareReq := RunwareRequest{
+		TaskType:       "imageInference",
+		TaskUUID:       generateUUID(),
+		PositivePrompt: req.Prompt,
+		Model:          FluxSchnellModelID,
+		Width:          width,
+		Height:         height,
+		NumberResults:  1,
+		OutputFormat:   "PNG",
+		Steps:          steps,
+		CFGScale:       cfgScale,
+	}
+
+	if req.NegativePrompt != "" {
+		runwareReq.NegativePrompt = req.NegativePrompt
+	}
+
+	if len(req.Images) > 0 && req.Images[0].Data != "" {
+		runwareReq.InputImage = "data:" + req.Images[0].MimeType + ";base64," + req.Images[0].Data
+		strength := req.Strength
+		if strength <= 0 {
+			strength = 0.7
+		}
+		runwareReq.Strength = strength
+	}
+
+	jsonBody, err := json.Marshal([]RunwareRequest{runwareReq})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", cfg.RunwareAPIURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.RunwareAPIKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("Runware API error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Runware API error: status=%d, body=%s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var runwareResp RunwareResponse
+	if err := json.Unmarshal(bodyBytes, &runwareResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	if runwareResp.Error != "" {
+		return "", fmt.Errorf(runwareResp.Error)
+	}
+
+	if len(runwareResp.Data) > 0 && runwareResp.Data[0].ImageURL != "" {
+		imageURL := runwareResp.Data[0].ImageURL
+		log.Printf("✅ [FluxSchnell] URL received: %s", truncateString(imageURL, 50))
+		return imageURL, nil
+	}
+
+	return "", fmt.Errorf("no image URL in response")
+}
+
+// DownloadImageFromURL - URL에서 이미지 다운로드 (외부에서 호출 가능)
+func (s *Service) DownloadImageFromURL(ctx context.Context, imageURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download image: status %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
+}
+
+// IsFluxSchnellModel - Flux Schnell 모델 여부 확인
+func IsFluxSchnellModel(modelID string) bool {
+	return modelID == FluxSchnellModelID ||
+		modelID == "flux-schnell" ||
+		modelID == "runware:100@1"
+}
+
 // Helper functions
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {

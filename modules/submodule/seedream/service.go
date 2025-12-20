@@ -201,6 +201,41 @@ func (s *Service) GenerateWithBytes(ctx context.Context, prompt string, aspectRa
 	return nil, fmt.Errorf("no image data available")
 }
 
+// GenerateWithURL - URL만 반환 (빠른 응답용, 다운로드 없음)
+func (s *Service) GenerateWithURL(ctx context.Context, prompt string, aspectRatio string, inputImageBase64 string) (string, error) {
+	req := &GenerateRequest{
+		Prompt:      prompt,
+		AspectRatio: aspectRatio,
+	}
+
+	if inputImageBase64 != "" {
+		req.Images = []InputImage{{
+			Data:     inputImageBase64,
+			MimeType: "image/png",
+		}}
+	}
+
+	resp, err := s.Generate(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	if !resp.Success {
+		return "", fmt.Errorf(resp.ErrorMessage)
+	}
+
+	if resp.ImageURL != "" {
+		return resp.ImageURL, nil
+	}
+
+	return "", fmt.Errorf("no image URL available")
+}
+
+// DownloadImageFromURL - URL에서 이미지 다운로드 (외부에서 호출 가능)
+func (s *Service) DownloadImageFromURL(ctx context.Context, imageURL string) ([]byte, error) {
+	return s.downloadImage(ctx, imageURL)
+}
+
 // calculateDimensions - 해상도 계산 (Seedream은 2048 기준)
 func (s *Service) calculateDimensions(aspectRatio string, reqWidth, reqHeight int) (int, int) {
 	// 요청에 명시적인 값이 있으면 사용
