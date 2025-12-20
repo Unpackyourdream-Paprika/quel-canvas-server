@@ -133,8 +133,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
 
-	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
-		len(individualImageAttachIds), basePrompt, len(combinations), userID)
+	// isPreEdited 읽기 (eats 카테고리 전용, 기본값 false)
+	isPreEdited := false
+	if val, ok := job.JobInputData["isPreEdited"].(bool); ok {
+		isPreEdited = val
+	}
+
+	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s, isPreEdited=%v",
+		len(individualImageAttachIds), basePrompt, len(combinations), userID, isPreEdited)
 
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -298,7 +304,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 					idx+1, i+1, quantity, angle, shot)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio, isPreEdited)
 				if err != nil {
 					log.Printf("❌ Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
 					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
@@ -543,7 +549,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			// aspect-ratio 추출 (기본값: "16:9")
 			aspectRatio := fallback.SafeAspectRatio(stage["aspect-ratio"])
 
-			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s (parallel)", stageIndex+1, len(stages), quantity, aspectRatio)
+			// isPreEdited 읽기 (stage별로 설정 가능, 기본값 false)
+			isPreEdited := false
+			if val, ok := stage["isPreEdited"].(bool); ok {
+				isPreEdited = val
+			}
+
+			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s, isPreEdited=%v (parallel)", stageIndex+1, len(stages), quantity, aspectRatio, isPreEdited)
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{
@@ -668,7 +680,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio, isPreEdited)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
 					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
@@ -888,7 +900,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			log.Printf("🔄 Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
 			// Gemini API 호출 (카테고리별 이미지 전달)
-			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio)
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio, isPreEdited)
 			if err != nil {
 				log.Printf("❌ Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
 				if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
