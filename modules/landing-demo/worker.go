@@ -137,114 +137,135 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 		log.Printf("🎨 [Landing] Using Gemini API (default)")
 	}
 
-	// 이미지 생성 루프
-	generatedAttachIds := []int{}
-	completedCount := 0
+	// 입력 이미지 base64 준비 (Runware용)
+	var inputImageBase64 string
+	if len(inputImages) > 0 {
+		inputImageBase64 = base64.StdEncoding.EncodeToString(inputImages[0])
+	}
 
+	// 🚀 병렬 이미지 생성을 위한 결과 구조체
+	type GenerationResult struct {
+		Index     int
+		ImageData []byte
+		Error     error
+	}
+
+	// 결과 채널
+	resultChan := make(chan GenerationResult, quantity)
+
+	log.Printf("🚀 [Landing] Starting PARALLEL image generation: %d images", quantity)
+
+	// 병렬로 이미지 생성 시작
 	for i := 0; i < quantity; i++ {
-		// 취소 체크
-		if service.IsJobCancelled(job.JobID) {
-			log.Printf("🛑 [Landing] Job %s cancelled", job.JobID)
-			service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
-			if job.ProductionID != nil {
-				service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+		go func(idx int) {
+			// 취소 체크
+			if service.IsJobCancelled(job.JobID) {
+				resultChan <- GenerationResult{Index: idx, Error: fmt.Errorf("job cancelled")}
+				return
 			}
-			return
-		}
 
-		log.Printf("🎨 [Landing] Generating image %d/%d...", i+1, quantity)
+			log.Printf("🎨 [Landing] [Parallel] Starting image %d/%d...", idx+1, quantity)
 
-		var generatedImageData []byte
-		var genErr error
+			var generatedImageData []byte
+			var genErr error
 
-		// 입력 이미지 base64 준비 (Runware용)
-		var inputImageBase64 string
-		if len(inputImages) > 0 {
-			inputImageBase64 = base64.StdEncoding.EncodeToString(inputImages[0])
-		}
-
-		if isSeedream {
-			// Seedream submodule 사용
-			seedreamService := seedream.NewService()
-			if seedreamService != nil {
-				generatedImageData, genErr = seedreamService.GenerateWithBytes(
+			if isSeedream {
+				// Seedream submodule 사용
+				seedreamService := seedream.NewService()
+				if seedreamService != nil {
+					generatedImageData, genErr = seedreamService.GenerateWithBytes(
+						ctx,
+						refinedPrompt,
+						aspectRatio,
+						inputImageBase64,
+					)
+				} else {
+					genErr = fmt.Errorf("Seedream service not initialized")
+				}
+			} else if isRunware {
+				// Runware API 사용
+				generatedImageData, genErr = service.GenerateImageWithRunware(
 					ctx,
 					refinedPrompt,
+					modelID,
 					aspectRatio,
+					modelSteps,
+					modelCfgScale,
+					negativePrompt,
 					inputImageBase64,
 				)
-			} else {
-				genErr = fmt.Errorf("Seedream service not initialized")
-			}
-		} else if isRunware {
-			// Runware API 사용
-			generatedImageData, genErr = service.GenerateImageWithRunware(
-				ctx,
-				refinedPrompt,
-				modelID,
-				aspectRatio,
-				modelSteps,
-				modelCfgScale,
-				negativePrompt,
-				inputImageBase64,
-			)
-		} else if isMultiview {
-			// Multiview는 일단 Gemini로 fallback (추후 구현)
-			log.Printf("⚠️ [Landing] Multiview not implemented yet, using Gemini")
-			var generatedBase64 string
-			if len(inputImages) > 0 {
-				categories := &ImageCategories{
-					Clothing:    inputImages,
-					Accessories: [][]byte{},
+			} else if isMultiview {
+				// Multiview는 일단 Gemini로 fallback (추후 구현)
+				log.Printf("⚠️ [Landing] Multiview not implemented yet, using Gemini")
+				var generatedBase64 string
+				if len(inputImages) > 0 {
+					categories := &ImageCategories{
+						Clothing:    inputImages,
+						Accessories: [][]byte{},
+					}
+					generatedBase64, genErr = service.GenerateImageWithGeminiMultiple(ctx, categories, refinedPrompt, aspectRatio)
+				} else {
+					generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
 				}
-				generatedBase64, genErr = service.GenerateImageWithGeminiMultiple(ctx, categories, refinedPrompt, aspectRatio)
-			} else {
-				generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
-			}
-			if genErr == nil {
-				generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
-			}
-		} else {
-			// Gemini API 사용 (기본)
-			var generatedBase64 string
-			if len(inputImages) > 0 {
-				categories := &ImageCategories{
-					Clothing:    inputImages,
-					Accessories: [][]byte{},
+				if genErr == nil {
+					generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
 				}
-				generatedBase64, genErr = service.GenerateImageWithGeminiMultiple(ctx, categories, refinedPrompt, aspectRatio)
 			} else {
-				generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
+				// Gemini API 사용 (기본)
+				var generatedBase64 string
+				if len(inputImages) > 0 {
+					categories := &ImageCategories{
+						Clothing:    inputImages,
+						Accessories: [][]byte{},
+					}
+					generatedBase64, genErr = service.GenerateImageWithGeminiMultiple(ctx, categories, refinedPrompt, aspectRatio)
+				} else {
+					generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
+				}
+				if genErr == nil {
+					generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+				}
 			}
-			if genErr == nil {
-				generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
-			}
-		}
 
-		if genErr != nil {
-			log.Printf("❌ [Landing] Image generation failed for image %d: %v", i+1, genErr)
-			if strings.Contains(genErr.Error(), "403") || strings.Contains(genErr.Error(), "429") {
-				log.Printf("🚨 [Landing] API error detected - stopping job")
-				service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
-				if job.ProductionID != nil {
-					service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed)
-				}
+			if genErr != nil {
+				log.Printf("❌ [Landing] [Parallel] Image %d generation failed: %v", idx+1, genErr)
+				resultChan <- GenerationResult{Index: idx, Error: genErr}
 				return
+			}
+
+			log.Printf("✅ [Landing] [Parallel] Image %d generated successfully", idx+1)
+			resultChan <- GenerationResult{Index: idx, ImageData: generatedImageData}
+		}(i)
+	}
+
+	// 결과 수집 및 처리
+	generatedAttachIds := []int{}
+	completedCount := 0
+	var apiError error
+
+	for i := 0; i < quantity; i++ {
+		result := <-resultChan
+
+		if result.Error != nil {
+			log.Printf("❌ [Landing] Image %d failed: %v", result.Index+1, result.Error)
+			// API 에러 체크 (403, 429)
+			if strings.Contains(result.Error.Error(), "403") || strings.Contains(result.Error.Error(), "429") {
+				apiError = result.Error
 			}
 			continue
 		}
 
 		// Storage 업로드
-		filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		filePath, webpSize, err := service.UploadImageToStorage(ctx, result.ImageData, userID)
 		if err != nil {
-			log.Printf("❌ [Landing] Failed to upload image %d: %v", i+1, err)
+			log.Printf("❌ [Landing] Failed to upload image %d: %v", result.Index+1, err)
 			continue
 		}
 
 		// Attach 레코드 생성
 		attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
 		if err != nil {
-			log.Printf("❌ [Landing] Failed to create attach record %d: %v", i+1, err)
+			log.Printf("❌ [Landing] Failed to create attach record %d: %v", result.Index+1, err)
 			continue
 		}
 
@@ -260,12 +281,22 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 		generatedAttachIds = append(generatedAttachIds, attachID)
 		completedCount++
 
-		log.Printf("✅ [Landing] Image %d/%d completed: AttachID=%d", i+1, quantity, attachID)
+		log.Printf("✅ [Landing] Image %d/%d completed: AttachID=%d", result.Index+1, quantity, attachID)
 
-		// 진행 상황 업데이트
+		// 진행 상황 업데이트 (병렬이라 완료될 때마다)
 		if err := service.UpdateJobProgress(ctx, job.JobID, completedCount, generatedAttachIds); err != nil {
 			log.Printf("⚠️ [Landing] Failed to update progress: %v", err)
 		}
+	}
+
+	// API 에러로 인한 실패 처리
+	if apiError != nil && completedCount == 0 {
+		log.Printf("🚨 [Landing] All images failed due to API error")
+		service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed)
+		if job.ProductionID != nil {
+			service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed)
+		}
+		return
 	}
 
 	// 최종 완료 처리
