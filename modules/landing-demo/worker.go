@@ -173,26 +173,35 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 			if isSeedream {
 				// Seedream submodule 사용 - URL만 먼저 반환 (빠른 응답)
 				seedreamService := seedream.NewService()
-				if seedreamService != nil {
-					var imageURL string
-					imageURL, genErr = seedreamService.GenerateWithURL(
-						ctx,
-						refinedPrompt,
-						aspectRatio,
-						inputImageBase64,
-					)
-					if genErr == nil && imageURL != "" {
-						log.Printf("✅ [Landing] [Parallel] Image %d URL received: %s", idx+1, truncateString(imageURL, 50))
-						resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
-						return
-					}
-				} else {
+				if seedreamService == nil {
 					genErr = fmt.Errorf("Seedream service not initialized")
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
 				}
+
+				imageURL, err := seedreamService.GenerateWithURL(
+					ctx,
+					refinedPrompt,
+					aspectRatio,
+					inputImageBase64,
+				)
+				if err != nil {
+					log.Printf("❌ [Landing] [Parallel] Seedream image %d failed: %v", idx+1, err)
+					resultChan <- GenerationResult{Index: idx, Error: err}
+					return
+				}
+				if imageURL == "" {
+					log.Printf("❌ [Landing] [Parallel] Seedream image %d: empty URL", idx+1)
+					resultChan <- GenerationResult{Index: idx, Error: fmt.Errorf("empty image URL")}
+					return
+				}
+				log.Printf("✅ [Landing] [Parallel] Image %d URL received: %s", idx+1, truncateString(imageURL, 50))
+				resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
+				return
+
 			} else if isRunware {
 				// Runware API 사용 - URL만 먼저 반환 (빠른 응답)
-				var imageURL string
-				imageURL, genErr = service.GenerateImageWithRunwareURL(
+				imageURL, err := service.GenerateImageWithRunwareURL(
 					ctx,
 					refinedPrompt,
 					modelID,
@@ -202,11 +211,20 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 					negativePrompt,
 					inputImageBase64,
 				)
-				if genErr == nil && imageURL != "" {
-					log.Printf("✅ [Landing] [Parallel] Image %d URL received (Runware): %s", idx+1, truncateString(imageURL, 50))
-					resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
+				if err != nil {
+					log.Printf("❌ [Landing] [Parallel] Runware image %d failed: %v", idx+1, err)
+					resultChan <- GenerationResult{Index: idx, Error: err}
 					return
 				}
+				if imageURL == "" {
+					log.Printf("❌ [Landing] [Parallel] Runware image %d: empty URL", idx+1)
+					resultChan <- GenerationResult{Index: idx, Error: fmt.Errorf("empty image URL")}
+					return
+				}
+				log.Printf("✅ [Landing] [Parallel] Image %d URL received (Runware): %s", idx+1, truncateString(imageURL, 50))
+				resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
+				return
+
 			} else if isMultiview {
 				// Multiview는 일단 Gemini로 fallback (추후 구현)
 				log.Printf("⚠️ [Landing] Multiview not implemented yet, using Gemini")
@@ -220,9 +238,23 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 				} else {
 					generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
 				}
-				if genErr == nil {
-					generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+				if genErr != nil {
+					log.Printf("❌ [Landing] [Parallel] Multiview image %d failed: %v", idx+1, genErr)
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
 				}
+				if generatedBase64 == "" {
+					log.Printf("❌ [Landing] [Parallel] Multiview image %d: empty base64", idx+1)
+					resultChan <- GenerationResult{Index: idx, Error: fmt.Errorf("empty image data")}
+					return
+				}
+				generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+				if genErr != nil {
+					log.Printf("❌ [Landing] [Parallel] Multiview image %d decode failed: %v", idx+1, genErr)
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
+				}
+
 			} else {
 				// Gemini API 사용 (기본)
 				var generatedBase64 string
@@ -235,15 +267,22 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 				} else {
 					generatedBase64, genErr = service.GenerateImageWithGeminiTextOnly(ctx, refinedPrompt, aspectRatio)
 				}
-				if genErr == nil {
-					generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+				if genErr != nil {
+					log.Printf("❌ [Landing] [Parallel] Gemini image %d failed: %v", idx+1, genErr)
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
 				}
-			}
-
-			if genErr != nil {
-				log.Printf("❌ [Landing] [Parallel] Image %d generation failed: %v", idx+1, genErr)
-				resultChan <- GenerationResult{Index: idx, Error: genErr}
-				return
+				if generatedBase64 == "" {
+					log.Printf("❌ [Landing] [Parallel] Gemini image %d: empty base64", idx+1)
+					resultChan <- GenerationResult{Index: idx, Error: fmt.Errorf("empty image data")}
+					return
+				}
+				generatedImageData, genErr = base64.StdEncoding.DecodeString(generatedBase64)
+				if genErr != nil {
+					log.Printf("❌ [Landing] [Parallel] Gemini image %d decode failed: %v", idx+1, genErr)
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
+				}
 			}
 
 			log.Printf("✅ [Landing] [Parallel] Image %d generated successfully", idx+1)

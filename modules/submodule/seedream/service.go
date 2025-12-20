@@ -203,32 +203,84 @@ func (s *Service) GenerateWithBytes(ctx context.Context, prompt string, aspectRa
 
 // GenerateWithURL - URL만 반환 (빠른 응답용, 다운로드 없음)
 func (s *Service) GenerateWithURL(ctx context.Context, prompt string, aspectRatio string, inputImageBase64 string) (string, error) {
-	req := &GenerateRequest{
-		Prompt:      prompt,
-		AspectRatio: aspectRatio,
+	cfg := config.GetConfig()
+
+	if cfg.RunwareAPIKey == "" {
+		return "", fmt.Errorf("RUNWARE_API_KEY not configured")
 	}
 
+	// Seedream은 고해상도 지원 (2048x2048)
+	width, height := s.calculateDimensions(aspectRatio, 0, 0)
+
+	log.Printf("🎨 [Seedream] URL request - size: %dx%d, aspectRatio: %s, prompt: %s",
+		width, height, aspectRatio, truncateString(prompt, 50))
+
+	// Runware 요청 구성 (Seedream 전용)
+	runwareReq := RunwareRequest{
+		TaskType:       "imageInference",
+		TaskUUID:       generateUUID(),
+		PositivePrompt: prompt,
+		Model:          SeedreamModelID,
+		Width:          width,
+		Height:         height,
+		NumberResults:  1,
+		OutputFormat:   "PNG",
+	}
+
+	// 참조 이미지가 있으면 referenceImages로 추가
 	if inputImageBase64 != "" {
-		req.Images = []InputImage{{
-			Data:     inputImageBase64,
-			MimeType: "image/png",
-		}}
+		dataURL := "data:image/png;base64," + inputImageBase64
+		runwareReq.ReferenceImages = []string{dataURL}
+		log.Printf("📷 [Seedream] Adding reference image")
 	}
 
-	resp, err := s.Generate(ctx, req)
+	// API 호출
+	jsonBody, err := json.Marshal([]RunwareRequest{runwareReq})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	if !resp.Success {
-		return "", fmt.Errorf(resp.ErrorMessage)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", cfg.RunwareAPIURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
 	}
 
-	if resp.ImageURL != "" {
-		return resp.ImageURL, nil
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.RunwareAPIKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("Runware API error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %v", err)
 	}
 
-	return "", fmt.Errorf("no image URL available")
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("❌ [Seedream] Runware API error: status=%d, body=%s", resp.StatusCode, string(bodyBytes))
+		return "", fmt.Errorf("Runware API error: %s", string(bodyBytes))
+	}
+
+	var runwareResp RunwareResponse
+	if err := json.Unmarshal(bodyBytes, &runwareResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	if runwareResp.Error != "" {
+		return "", fmt.Errorf(runwareResp.Error)
+	}
+
+	// 이미지 URL 추출 (다운로드 없이 바로 반환)
+	if len(runwareResp.Data) > 0 && runwareResp.Data[0].ImageURL != "" {
+		imageURL := runwareResp.Data[0].ImageURL
+		log.Printf("✅ [Seedream] URL received (no download): %s", truncateString(imageURL, 50))
+		return imageURL, nil
+	}
+
+	return "", fmt.Errorf("no image URL in response")
 }
 
 // DownloadImageFromURL - URL에서 이미지 다운로드 (외부에서 호출 가능)
