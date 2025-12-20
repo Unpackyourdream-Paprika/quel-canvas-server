@@ -508,7 +508,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
-	log.Printf("📦 Pipeline has %d stages, UserID=%s", len(stages), userID)
+
+	// isPreEdited 읽기 (eats 카테고리 전용, 기본값 false)
+	isPreEdited := false
+	if val, ok := job.JobInputData["isPreEdited"].(bool); ok {
+		isPreEdited = val
+	}
+
+	log.Printf("📦 Pipeline has %d stages, UserID=%s, isPreEdited=%v", len(stages), userID, isPreEdited)
 
 	// Phase 2: Job 상태 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
