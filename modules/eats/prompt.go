@@ -5,6 +5,116 @@ import (
 	"strings"
 )
 
+// generateSimplifiedPrompt - isPreEdited: false일 때 사용하는 심플 버전 (다양성 최우선)
+func generateSimplifiedPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
+	// 이미지 설명만 간단히
+	var instructions []string
+	imageIndex := 1
+
+	// Food 이미지 설명
+	foodCount := len(categories.Food)
+	if foodCount > 0 {
+		if foodCount == 1 {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d: Food item", imageIndex))
+		} else {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Images %d-%d: %d food items", imageIndex, imageIndex+foodCount-1, foodCount))
+		}
+		imageIndex += foodCount
+	}
+
+	// Ingredient 이미지 설명
+	ingredientCount := len(categories.Ingredient)
+	if ingredientCount > 0 {
+		if ingredientCount == 1 {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d: Ingredient", imageIndex))
+		} else {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Images %d-%d: %d ingredients", imageIndex, imageIndex+ingredientCount-1, ingredientCount))
+		}
+		imageIndex += ingredientCount
+	}
+
+	// Prop 이미지 설명
+	propCount := len(categories.Prop)
+	if propCount > 0 {
+		if propCount == 1 {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Image %d: Prop/garnish", imageIndex))
+		} else {
+			instructions = append(instructions,
+				fmt.Sprintf("Reference Images %d-%d: %d props/garnishes", imageIndex, imageIndex+propCount-1, propCount))
+		}
+		imageIndex += propCount
+	}
+
+	// Background 이미지 설명
+	if categories.Background != nil {
+		instructions = append(instructions,
+			fmt.Sprintf("Reference Image %d: Background environment", imageIndex))
+	}
+
+	// 기본 금지사항 + 과장된 품질 요구
+	basicProhibitions := "🔥🔥🔥 EXTREME PREMIUM QUALITY REQUIREMENTS 🔥🔥🔥\n\n" +
+		"⚠️ ABSOLUTELY CRITICAL - NO SPLIT COMPOSITION:\n" +
+		"❌ NO vertical dividing lines or center splits\n" +
+		"❌ NO left-right duplicate layouts or comparison views\n" +
+		"❌ NO grid, collage, or side-by-side arrangements\n" +
+		"❌ NO white/gray borders or letterboxing\n\n" +
+		"✅ MANDATORY ULTRA-PREMIUM EXECUTION:\n" +
+		"✓ ONE BREATHTAKINGLY STUNNING unified photograph\n" +
+		"✓ ONE FLAWLESSLY COMPOSED continuous scene from ONE camera shot\n" +
+		"✓ PERFECTLY fill entire frame edge-to-edge with ZERO wasted space\n" +
+		"✓ ULTRA-REALISTIC, MIND-BLOWINGLY photorealistic food photography\n" +
+		"✓ EXCEPTIONAL artistic quality that COMMANDS attention\n" +
+		"✓ PREMIUM editorial-grade execution - REFUSE mediocrity\n\n" +
+		"💎 QUALITY MANDATE:\n" +
+		"This must be EXTRAORDINARY. This must be UNFORGETTABLE. This must be MAGNIFICENT.\n" +
+		"Push EVERY element to MAXIMUM creative excellence. NO compromises. NO shortcuts.\n" +
+		"Create something that makes viewers STOP and STARE in AWE.\n\n"
+
+	// 창의성 극대화 지시
+	creativityBoost := "🎨 UNLEASH BOUNDLESS CREATIVITY 🎨\n\n" +
+		"BREAK FREE from conventional food photography constraints!\n" +
+		"EXPERIMENT FEARLESSLY with radical new perspectives!\n" +
+		"INNOVATE with unexpected color palettes and lighting setups!\n" +
+		"SURPRISE with unconventional compositions that challenge norms!\n" +
+		"EXPLORE the absolute LIMITS of creative food photography!\n\n" +
+		"💡 CREATIVE FREEDOM MANDATE:\n" +
+		"You are NOT bound by traditional rules. You are an ARTIST with INFINITE creative license.\n" +
+		"Take BOLD risks. Make DARING choices. Create something NEVER SEEN BEFORE.\n" +
+		"Each frame should be a WORK OF ART - a creative MASTERPIECE that pushes boundaries.\n" +
+		"Be WILDLY imaginative. Be OUTRAGEOUSLY creative. Be MAGNIFICENTLY original.\n\n"
+
+	// Aspect ratio 정보 간단히
+	var formatInfo string
+	switch aspectRatio {
+	case "1:1":
+		formatInfo = "[FORMAT: 1:1 Square - Use this square canvas for BOLD, ARTISTIC compositions]\n"
+	case "16:9":
+		formatInfo = "[FORMAT: 16:9 Wide Horizontal - Use this cinematic format for DRAMATIC, EXPANSIVE storytelling]\n"
+	case "9:16":
+		formatInfo = "[FORMAT: 9:16 Tall Vertical - Use this portrait format for STRIKING, DYNAMIC vertical compositions]\n"
+	default:
+		formatInfo = "[FORMAT: " + aspectRatio + " - Use this unique format CREATIVELY]\n"
+	}
+
+	// 최종 조합 - 창의성 극대화 버전
+	finalPrompt := basicProhibitions +
+		creativityBoost +
+		formatInfo +
+		"\n[REFERENCE IMAGES]\n" +
+		strings.Join(instructions, "\n") +
+		"\n\n[USER CREATIVE DIRECTION]\n" +
+		userPrompt +
+		"\n\n" +
+		"🚀 FINAL REMINDER: This is your chance to create something LEGENDARY. Make it COUNT!\n"
+
+	return finalPrompt
+}
+
 // PromptCategories - 카테고리별 이미지 분류 구조체 (Eats 전용)
 // 프론트 type: food, ingredient, prop, background
 type PromptCategories struct {
@@ -15,7 +125,13 @@ type PromptCategories struct {
 }
 
 // GenerateDynamicPrompt - Eats 모듈 전용 프롬프트 생성 (음식 사진)
-func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
+func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string, isPreEdited bool) string {
+	// isPreEdited: false일 때는 간결한 버전 사용 (다양성 중시)
+	if !isPreEdited {
+		return generateSimplifiedPrompt(categories, userPrompt, aspectRatio)
+	}
+
+	// isPreEdited: true일 때는 기존 상세 버전 사용 (정확성 중시)
 	// 케이스 분석을 위한 변수 정의 (프론트 type 기준)
 	hasFood := len(categories.Food) > 0             // type: food
 	hasIngredient := len(categories.Ingredient) > 0 // type: ingredient

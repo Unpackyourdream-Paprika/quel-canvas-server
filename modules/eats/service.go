@@ -523,13 +523,15 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 
 
 // GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
-func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string, isPreEdited bool) (string, error) {
 	cfg := config.GetConfig()
 
 	// aspect-ratio 기본값 처리
 	if aspectRatio == "" {
 		aspectRatio = "16:9"
 	}
+
+	log.Printf("🎨 [Eats] isPreEdited: %v", isPreEdited)
 
 	// 이미지 개수 제한 (Gemini API 20MB 제한 고려)
 	const maxFoodImages = 6
@@ -621,8 +623,120 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		propCount, len(categories.Prop),
 		categories.Background != nil)
 
-	// 동적 프롬프트 생성
-	dynamicPrompt := GenerateDynamicPrompt(categories, userPrompt, aspectRatio)
+	// isPreEdited에 따른 프롬프트 증폭 및 변형
+	var enhancedUserPrompt string
+	if !isPreEdited {
+		// 원본 이미지 (false): 유저 프롬프트를 극도로 증폭 - 훨씬 더 많이!
+		enhancedUserPrompt = "ABSOLUTELY STUNNING, award-winning, premium magazine-cover quality, " +
+			"breathtakingly beautiful, visually mesmerizing, artistically exceptional, " +
+			"gallery-worthy " + userPrompt + " " +
+			"with EXPLOSIVE creative flair, DRAMATIC lighting and shadows, " +
+			"vibrant color grading, cinematic composition, " +
+			"masterful professional food photography that stops people in their tracks. " +
+			"Ultra high-end, Instagram-viral worthy, editorial masterpiece quality. " +
+			"Luxurious, captivating, irresistibly beautiful presentation. " +
+			"Each element perfectly crafted for maximum visual wow-factor and emotional impact."
+		log.Printf("🎨 [Eats Service] MASSIVELY ENHANCED user prompt (isPreEdited: false)")
+		log.Printf("   Original: %s", userPrompt)
+		log.Printf("   Enhanced: %s", enhancedUserPrompt)
+	} else {
+		// 보정된 이미지 (true): 유저 프롬프트 그대로
+		enhancedUserPrompt = userPrompt
+		log.Printf("🎨 [Eats Service] Using original prompt (isPreEdited: true)")
+	}
+
+	// 동적 프롬프트 생성 (증폭된 프롬프트 사용, isPreEdited 전달)
+	dynamicPrompt := GenerateDynamicPrompt(categories, enhancedUserPrompt, aspectRatio, isPreEdited)
+
+	// isPreEdited: false일 때 추가 다양성 지시
+	if !isPreEdited {
+		diversityPrompt := "[⚡ EXTREME MAXIMUM DIVERSITY MODE ACTIVATED ⚡]\n\n" +
+			"🎯 PRIMARY DIRECTIVE: GENERATE WILDLY DIFFERENT CREATIVE VARIATIONS EVERY SINGLE TIME!\n" +
+			"Each generation MUST look like it was created by a completely different artist with a different vision.\n" +
+			"NEVER repeat similar visual patterns, color schemes, or compositional layouts from previous generations.\n" +
+			"Push creative boundaries to the ABSOLUTE MAXIMUM. Be bold, be daring, be dramatically different!\n\n" +
+
+			"🔥 MANDATORY CREATIVE VARIATIONS (ALL must change drastically):\n\n" +
+
+			"1️⃣ COLOR PALETTE & GRADING:\n" +
+			"   - Rotate between COMPLETELY DIFFERENT color stories each time\n" +
+			"   - Options: Vibrant saturated colors / Desaturated muted tones / Warm golden hues / Cool blue-teal spectrum / " +
+			"     High-contrast dramatic / Pastel soft dreamy / Monochromatic artistic / Split-tone cinematic / " +
+			"     Neon-bright pop art / Earth-tone natural / Sunset orange-pink / Deep moody shadows\n" +
+			"   - Change color temperature radically: warm→cool→neutral→warm (rotate continuously)\n\n" +
+
+			"2️⃣ LIGHTING SETUP & DIRECTION:\n" +
+			"   - NEVER use the same lighting twice in a row\n" +
+			"   - Rotate through: Soft diffused natural light / Hard dramatic side lighting / Bright overhead studio light / " +
+			"     Golden hour warm glow / Backlit rim lighting / Moody low-key shadows / High-key bright clean / " +
+			"     Dappled filtered sunlight / Neon artificial glow / Candlelight warm intimate / Morning fresh bright / " +
+			"     Evening dim atmospheric / Flash photography sharp / Continuous soft box\n\n" +
+
+			"3️⃣ CAMERA ANGLE & PERSPECTIVE:\n" +
+			"   - Alternate between radically different viewpoints\n" +
+			"   - Options: Extreme overhead 90° flat lay / 45° classic three-quarter view / Ultra close-up macro detail / " +
+			"     Wide environmental context / Worm's eye low angle / Bird's eye aerial view / Straight-on eye-level / " +
+			"     Dutch angle tilted dynamic / Side profile silhouette / Corner diagonal perspective\n\n" +
+
+			"4️⃣ ARTISTIC STYLE & MOOD:\n" +
+			"   - Each generation should feel like a different genre of photography\n" +
+			"   - Styles: Ultra-minimal clean luxury / Maximalist abundant rich / Rustic natural organic / " +
+			"     Modern sleek geometric / Bohemian artistic wild / Editorial fashion-forward / Vintage film nostalgic / " +
+			"     Contemporary Instagram trendy / Classic timeless elegant / Experimental avant-garde / " +
+			"     Moody dark atmospheric / Bright cheerful playful / Romantic soft dreamy\n\n" +
+
+			"5️⃣ COMPOSITION & ARRANGEMENT:\n" +
+			"   - NEVER place elements in the same positions\n" +
+			"   - Layouts: Perfectly centered symmetrical / Off-center rule-of-thirds / Diagonal dynamic movement / " +
+			"     Scattered casual organic / Tightly grouped clustered / Layered depth stacking / " +
+			"     Minimalist negative space / Dense maximalist filling / Circular radial pattern / " +
+			"     Linear row arrangement / Asymmetric balanced chaos\n\n" +
+
+			"6️⃣ TEXTURES & SURFACES:\n" +
+			"   - Vary surface treatments dramatically\n" +
+			"   - Options: Glossy wet shiny / Matte dry flat / Rough textured organic / Smooth polished refined / " +
+			"     Dewy fresh moisture / Crispy golden crunchy / Soft fluffy delicate / Hard geometric sharp\n\n" +
+
+			"7️⃣ GARNISH & STYLING DETAILS:\n" +
+			"   - Rotate decorative elements constantly\n" +
+			"   - Choices: Fresh herb sprinkles (basil, cilantro, mint, parsley, dill) / Colorful spice dusts / " +
+			"     Artistic sauce drizzles / Edible flower petals / Citrus zest / Sesame seeds / Microgreens / " +
+			"     Chili flakes / Sea salt crystals / Edible gold leaf / Berry accents / Nut crumbles / Nothing (minimal clean)\n\n" +
+
+			"8️⃣ DEPTH OF FIELD:\n" +
+			"   - Vary focus dramatically\n" +
+			"   - Shallow DOF with beautiful bokeh background blur\n" +
+			"   - Deep focus with everything sharp\n" +
+			"   - Selective focus on specific elements\n\n" +
+
+			"9️⃣ ATMOSPHERIC EFFECTS:\n" +
+			"   - Add variety through environmental elements\n" +
+			"   - Steam rising / Dust particles in light / Condensation droplets / Smoke wisps / " +
+			"     Bokeh light spots / Lens flare / Shadow patterns / None (clean crisp)\n\n" +
+
+			"🔟 EMOTIONAL TONE:\n" +
+			"   - Rotate the feeling/vibe completely\n" +
+			"   - Energetic vibrant exciting / Calm peaceful serene / Luxurious premium exclusive / " +
+			"     Cozy warm comforting / Fresh bright invigorating / Mysterious moody intriguing / " +
+			"     Playful fun whimsical / Sophisticated elegant refined / Raw authentic natural\n\n" +
+
+			"❌ ABSOLUTE PROHIBITIONS:\n" +
+			"   • NO plates, bowls, dishes, or any tableware\n" +
+			"   • NO cutlery, utensils, chopsticks, or serving tools\n" +
+			"   • NO napkins, placemats, or table linens\n" +
+			"   • NO dining tables, restaurant settings, or table setups\n" +
+			"   • ONLY use: Food items + Background (as provided in reference images)\n\n" +
+
+			"🎯 CREATIVE DIVERSITY GOAL:\n" +
+			"If you generated 10 images in a row, each one should look like it came from 10 completely different photographers,\n" +
+			"each with their own unique artistic vision, style, and creative direction.\n" +
+			"MAXIMUM VARIATION IS THE #1 PRIORITY!\n\n" +
+
+			"=".repeat(100) + "\n\n"
+
+		dynamicPrompt = diversityPrompt + dynamicPrompt
+		log.Printf("🎨 [Eats Service] Added EXTREME MAXIMUM diversity instructions (%d chars)", len(diversityPrompt))
+	}
 
 	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가
 	if imageCount >= 2 {
