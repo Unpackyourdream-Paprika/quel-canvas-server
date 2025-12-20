@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -29,6 +30,32 @@ import (
 	"quel-canvas-server/modules/common/model"
 	redisutil "quel-canvas-server/modules/common/redis"
 )
+
+// attach_ids 업데이트용 뮤텍스 (production별)
+var productionMutexes = make(map[string]*sync.Mutex)
+var productionMutexLock sync.Mutex
+
+func getProductionMutex(productionID string) *sync.Mutex {
+	productionMutexLock.Lock()
+	defer productionMutexLock.Unlock()
+	if productionMutexes[productionID] == nil {
+		productionMutexes[productionID] = &sync.Mutex{}
+	}
+	return productionMutexes[productionID]
+}
+
+// job attach_ids 업데이트용 뮤텍스 (job별)
+var jobMutexes = make(map[string]*sync.Mutex)
+var jobMutexLock sync.Mutex
+
+func getJobMutex(jobID string) *sync.Mutex {
+	jobMutexLock.Lock()
+	defer jobMutexLock.Unlock()
+	if jobMutexes[jobID] == nil {
+		jobMutexes[jobID] = &sync.Mutex{}
+	}
+	return jobMutexes[jobID]
+}
 
 type Service struct {
 	genaiClient *genai.Client
@@ -802,6 +829,11 @@ func (s *Service) UpdateJobProgressWithURLs(ctx context.Context, jobID string, c
 
 // UpdateProductionAttachIds - Production attach_ids 업데이트
 func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID string, newAttachIds []int) error {
+	// Race condition 방지를 위한 뮤텍스
+	mutex := getProductionMutex(productionID)
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	log.Printf("📎 [Landing] Updating production %s attach_ids: %d IDs", productionID, len(newAttachIds))
 
 	// 기존 attach_ids 조회
@@ -855,6 +887,62 @@ func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID st
 // AppendProductionAttachId - 단일 attach_id를 production에 추가 (백그라운드용)
 func (s *Service) AppendProductionAttachId(ctx context.Context, productionID string, attachID int) error {
 	return s.UpdateProductionAttachIds(ctx, productionID, []int{attachID})
+}
+
+// AppendJobAttachId - 단일 attach_id를 Job에 추가 (백그라운드용)
+func (s *Service) AppendJobAttachId(ctx context.Context, jobID string, attachID int) error {
+	// Race condition 방지를 위한 뮤텍스
+	mutex := getJobMutex(jobID)
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	log.Printf("📎 [Landing] Appending attach_id %d to job %s", attachID, jobID)
+
+	// 기존 generated_attach_ids 조회
+	var jobs []struct {
+		GeneratedAttachIds []interface{} `json:"generated_attach_ids"`
+	}
+
+	data, _, err := s.supabase.From("quel_production_jobs").
+		Select("generated_attach_ids", "", false).
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("fetch failed: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &jobs); err != nil {
+		return fmt.Errorf("parse failed: %w", err)
+	}
+
+	// 병합
+	var existingIds []int
+	if len(jobs) > 0 && jobs[0].GeneratedAttachIds != nil {
+		for _, id := range jobs[0].GeneratedAttachIds {
+			if floatID, ok := id.(float64); ok {
+				existingIds = append(existingIds, int(floatID))
+			}
+		}
+	}
+
+	mergedIds := append(existingIds, attachID)
+
+	// 업데이트
+	_, _, err = s.supabase.From("quel_production_jobs").
+		Update(map[string]interface{}{
+			"generated_attach_ids": mergedIds,
+			"updated_at":           "now()",
+		}, "", "").
+		Eq("job_id", jobID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	log.Printf("✅ [Landing] Job attach_ids updated: %v", mergedIds)
+	return nil
 }
 
 // DeductCredits - 크레딧 차감
@@ -1429,9 +1517,26 @@ func IsRunwareModel(modelID string) bool {
 	if modelID == "" {
 		return false
 	}
-	return strings.HasPrefix(modelID, "runware:") ||
+	// 접두사 기반 체크
+	if strings.HasPrefix(modelID, "runware:") ||
 		strings.HasPrefix(modelID, "civitai:") ||
-		strings.HasPrefix(modelID, "bytedance:")
+		strings.HasPrefix(modelID, "bytedance:") {
+		return true
+	}
+	// 접두사 없는 Runware 모델명 직접 체크 (템플릿 호환성)
+	runwareModels := []string{
+		"flux-schnell",
+		"flux-dev",
+		"flux-pro",
+		"sdxl",
+		"sd-turbo",
+	}
+	for _, model := range runwareModels {
+		if modelID == model {
+			return true
+		}
+	}
+	return false
 }
 
 // IsGeminiModel - Gemini 모델 여부 확인

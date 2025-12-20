@@ -346,6 +346,11 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 				log.Printf("✅ [Landing] [Background] Image %d archived: AttachID=%d", idx+1, attachID)
 
+				// Job에 attach_id 추가 (프론트엔드 폴링용)
+				if err := service.AppendJobAttachId(bgCtx, job.JobID, attachID); err != nil {
+					log.Printf("⚠️ [Landing] [Background] Failed to append attach_id to job: %v", err)
+				}
+
 				// 크레딧 차감
 				if job.ProductionID != nil && userID != "" {
 					if err := service.DeductCredits(bgCtx, userID, job.OrgID, *job.ProductionID, []int{attachID}); err != nil {
