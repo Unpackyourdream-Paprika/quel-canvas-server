@@ -1554,3 +1554,18 @@ func IsMultiviewModel(modelID string) bool {
 	}
 	return strings.HasPrefix(modelID, "multiview:")
 }
+
+// IsNanobananaModel - Nanobanana (Gemini 2.5 Flash) 모델 여부 확인
+func IsNanobananaModel(modelID string) bool {
+	if modelID == "" {
+		return false
+	}
+	// gemini:gemini-2.5-flash-image 형식 또는 gemini-2.0-flash, gemini-2.5-flash 포함
+	if strings.HasPrefix(modelID, "gemini:") {
+		return true
+	}
+	if strings.Contains(modelID, "gemini-2.0-flash") || strings.Contains(modelID, "gemini-2.5-flash") {
+		return true
+	}
+	return false
+}

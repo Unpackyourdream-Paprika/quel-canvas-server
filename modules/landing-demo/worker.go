@@ -12,6 +12,7 @@ import (
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
 	"quel-canvas-server/modules/common/model"
+	"quel-canvas-server/modules/submodule/nanobanana"
 	"quel-canvas-server/modules/submodule/seedream"
 )
 
@@ -124,11 +125,14 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 	// 모델 타입 판별
 	isSeedream := seedream.IsSeedreamModel(modelID)
-	isRunware := IsRunwareModel(modelID) && !isSeedream // Seedream은 별도 처리
+	isNanobanana := IsNanobananaModel(modelID)
+	isRunware := IsRunwareModel(modelID) && !isSeedream && !isNanobanana // Seedream, Nanobanana 별도 처리
 	isMultiview := IsMultiviewModel(modelID)
 
 	if isSeedream {
 		log.Printf("🎨 [Landing] Using Seedream API (submodule): %s", modelID)
+	} else if isNanobanana {
+		log.Printf("🍌 [Landing] Using Nanobanana API (Gemini 2.5 Flash): %s", modelID)
 	} else if isRunware {
 		log.Printf("🎨 [Landing] Using Runware API: %s", modelID)
 	} else if isMultiview {
@@ -197,6 +201,60 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 				}
 				log.Printf("✅ [Landing] [Parallel] Image %d URL received: %s", idx+1, truncateString(imageURL, 50))
 				resultChan <- GenerationResult{Index: idx, ImageURL: imageURL}
+				return
+
+			} else if isNanobanana {
+				// Nanobanana submodule 사용 (Gemini 2.5 Flash)
+				nanobananaService := nanobanana.NewService()
+				if nanobananaService == nil {
+					genErr = fmt.Errorf("Nanobanana service not initialized")
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
+				}
+
+				// 입력 이미지 준비
+				var images []nanobanana.InputImage
+				for _, imgData := range inputImages {
+					images = append(images, nanobanana.InputImage{
+						Data:     base64.StdEncoding.EncodeToString(imgData),
+						MimeType: "image/jpeg",
+					})
+				}
+
+				req := &nanobanana.GenerateRequest{
+					Prompt: refinedPrompt,
+					Model:  "gemini-2.0-flash-preview-image-generation", // Gemini 2.5 Flash
+					Width:  1024,
+					Height: 1024,
+					Images: images,
+				}
+
+				resp, err := nanobananaService.Generate(ctx, req)
+				if err != nil {
+					log.Printf("❌ [Landing] [Parallel] Nanobanana image %d failed: %v", idx+1, err)
+					resultChan <- GenerationResult{Index: idx, Error: err}
+					return
+				}
+				if !resp.Success || resp.ImageBase64 == "" {
+					errMsg := "empty image"
+					if resp.ErrorMessage != "" {
+						errMsg = resp.ErrorMessage
+					}
+					log.Printf("❌ [Landing] [Parallel] Nanobanana image %d: %s", idx+1, errMsg)
+					resultChan <- GenerationResult{Index: idx, Error: fmt.Errorf(errMsg)}
+					return
+				}
+
+				// Base64 디코딩
+				generatedImageData, genErr = base64.StdEncoding.DecodeString(resp.ImageBase64)
+				if genErr != nil {
+					log.Printf("❌ [Landing] [Parallel] Nanobanana image %d decode failed: %v", idx+1, genErr)
+					resultChan <- GenerationResult{Index: idx, Error: genErr}
+					return
+				}
+
+				log.Printf("✅ [Landing] [Parallel] Nanobanana image %d generated: %d bytes", idx+1, len(generatedImageData))
+				resultChan <- GenerationResult{Index: idx, ImageData: generatedImageData}
 				return
 
 			} else if isRunware {
