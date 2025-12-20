@@ -732,7 +732,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 			"each with their own unique artistic vision, style, and creative direction.\n" +
 			"MAXIMUM VARIATION IS THE #1 PRIORITY!\n\n" +
 
-			"=".repeat(100) + "\n\n"
+			strings.Repeat("=", 100) + "\n\n"
 
 		dynamicPrompt = diversityPrompt + dynamicPrompt
 		log.Printf("🎨 [Eats Service] Added EXTREME MAXIMUM diversity instructions (%d chars)", len(diversityPrompt))
