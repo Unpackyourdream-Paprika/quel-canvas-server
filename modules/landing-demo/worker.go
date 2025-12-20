@@ -54,7 +54,7 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	log.Printf("🚀 [Landing] Starting Simple General processing for job: %s", job.JobID)
 
 	// Input Data 추출
-	prompt := fallback.SafeString(job.JobInputData["prompt"], "best quality, masterpiece")
+	prompt := fallback.SafeString(job.JobInputData["prompt"], "")
 	aspectRatio := fallback.SafeAspectRatio(job.JobInputData["aspect-ratio"])
 	quantity := job.TotalImages
 	if quantity <= 0 || quantity > 4 {
@@ -85,11 +85,28 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 		}
 	}
 
+	// 이미지가 있고 프롬프트가 비어있으면 이미지 기반 생성용 기본 프롬프트 사용
+	hasInputImages := false
+	if uploadedIds, ok := job.JobInputData["uploadedAttachIds"].([]interface{}); ok && len(uploadedIds) > 0 {
+		hasInputImages = true
+	}
+
+	// 프롬프트가 비어있을 때 기본값 설정
+	if prompt == "" {
+		if templatePrompt != "" {
+			prompt = templatePrompt
+		} else if hasInputImages {
+			prompt = "Create a high quality product photo based on this image, professional studio lighting, clean background"
+		} else {
+			prompt = "best quality, masterpiece"
+		}
+	}
+
 	// OpenAI로 프롬프트 정제
 	refinedPrompt, err := service.RefinePromptWithOpenAI(ctx, prompt, templatePrompt)
 	if err != nil {
 		log.Printf("⚠️ [Landing] Prompt refinement failed: %v, using original", err)
-		if templatePrompt != "" {
+		if templatePrompt != "" && prompt != templatePrompt {
 			refinedPrompt = templatePrompt + ", " + prompt
 		} else {
 			refinedPrompt = prompt
@@ -223,7 +240,7 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 				req := &nanobanana.GenerateRequest{
 					Prompt: refinedPrompt,
-					Model:  "gemini-2.0-flash-preview-image-generation", // Gemini 2.5 Flash
+					Model:  "", // config.GeminiModel 사용 (gemini-2.5-flash-image)
 					Width:  1024,
 					Height: 1024,
 					Images: images,
