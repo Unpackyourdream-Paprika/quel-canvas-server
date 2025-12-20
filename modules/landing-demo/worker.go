@@ -12,6 +12,7 @@ import (
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
 	"quel-canvas-server/modules/common/model"
+	"quel-canvas-server/modules/submodule/seedream"
 )
 
 // ProcessJob - Landing Job 처리 함수 (Worker에서 호출)
@@ -122,10 +123,13 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	log.Printf("✅ [Landing] %d input images prepared", len(inputImages))
 
 	// 모델 타입 판별
-	isRunware := IsRunwareModel(modelID)
+	isSeedream := seedream.IsSeedreamModel(modelID)
+	isRunware := IsRunwareModel(modelID) && !isSeedream // Seedream은 별도 처리
 	isMultiview := IsMultiviewModel(modelID)
 
-	if isRunware {
+	if isSeedream {
+		log.Printf("🎨 [Landing] Using Seedream API (submodule): %s", modelID)
+	} else if isRunware {
 		log.Printf("🎨 [Landing] Using Runware API: %s", modelID)
 	} else if isMultiview {
 		log.Printf("🌐 [Landing] Using Multiview API: %s", modelID)
@@ -159,7 +163,20 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 			inputImageBase64 = base64.StdEncoding.EncodeToString(inputImages[0])
 		}
 
-		if isRunware {
+		if isSeedream {
+			// Seedream submodule 사용
+			seedreamService := seedream.NewService()
+			if seedreamService != nil {
+				generatedImageData, genErr = seedreamService.GenerateWithBytes(
+					ctx,
+					refinedPrompt,
+					aspectRatio,
+					inputImageBase64,
+				)
+			} else {
+				genErr = fmt.Errorf("Seedream service not initialized")
+			}
+		} else if isRunware {
 			// Runware API 사용
 			generatedImageData, genErr = service.GenerateImageWithRunware(
 				ctx,

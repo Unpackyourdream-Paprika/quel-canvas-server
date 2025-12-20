@@ -17,6 +17,8 @@ import (
 	"quel-canvas-server/modules/unified-prompt/landing"
 	"quel-canvas-server/modules/unified-prompt/studio"
 	"quel-canvas-server/modules/worker"
+	fluxschnell "quel-canvas-server/modules/submodule/flux-schnell"
+	"quel-canvas-server/modules/submodule/seedream"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -679,13 +681,32 @@ func main() {
 		log.Println("⚠️ Failed to initialize Multiview handler")
 	}
 
-	// Nanobanana (Gemini) 라우트 등록 - 랜딩 템플릿용
+	// Nanobanana (Gemini) 라우트 등록 - 랜딩 템플릿용 + 이미지 분석
 	nanobananaHandler := nanobanana.NewHandler()
 	if nanobananaHandler != nil {
 		r.HandleFunc("/api/nanobanana/generate", nanobananaHandler.HandleGenerate).Methods("POST", "OPTIONS")
-		log.Println("✅ Nanobanana routes registered")
+		r.HandleFunc("/api/nanobanana/analyze", nanobananaHandler.HandleAnalyze).Methods("POST", "OPTIONS")
+		log.Println("✅ Nanobanana routes registered (generate + analyze)")
 	} else {
 		log.Println("⚠️ Failed to initialize Nanobanana handler")
+	}
+
+	// Flux Schnell 라우트 등록 - Dream 모드용 빠른 이미지 생성
+	fluxSchnellHandler := fluxschnell.NewHandler()
+	if fluxSchnellHandler != nil {
+		r.HandleFunc("/api/flux-schnell/generate", fluxSchnellHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		log.Println("✅ Flux Schnell routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Flux Schnell handler - check RUNWARE_API_KEY")
+	}
+
+	// Seedream 라우트 등록 - 랜딩 페이지용 고품질 이미지 생성 (Seedream 3.0)
+	seedreamHandler := seedream.NewHandler()
+	if seedreamHandler != nil {
+		r.HandleFunc("/api/seedream/generate", seedreamHandler.HandleGenerate).Methods("POST", "OPTIONS")
+		log.Println("✅ Seedream routes registered")
+	} else {
+		log.Println("⚠️ Failed to initialize Seedream handler - check RUNWARE_API_KEY")
 	}
 
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
@@ -707,6 +728,7 @@ func main() {
 	log.Printf("Landing Demo: http://localhost:%s/api/landing-demo/generate", port)
 	log.Printf("Multiview 360: http://localhost:%s/api/multiview/generate", port)
 	log.Printf("Nanobanana: http://localhost:%s/api/nanobanana/generate", port)
+	log.Printf("Nanobanana Analyze: http://localhost:%s/api/nanobanana/analyze", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
