@@ -12,7 +12,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"quel-canvas-server/modules/common/cancel"
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
 	"quel-canvas-server/modules/common/model"
@@ -221,19 +220,19 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	completedCount := 0
 	cancelled := false // 취소 플래그
 
-	// Camera Angle 매핑
+	// Camera Angle 매핑 (시네마틱 톤)
 	cameraAngleTextMap := map[string]string{
-		"front":   "Front-facing angle, direct eye contact with camera",
-		"side":    "Side profile angle, 90-degree perspective",
-		"profile": "Professional portrait, formal front-facing composition with confident posture",
-		"back":    "Rear angle, back view composition",
+		"front":   "Cinematic front-facing angle, direct eye contact with camera, film photography composition",
+		"side":    "Cinematic side profile angle, 90-degree perspective, film photography composition",
+		"profile": "Professional cinematic portrait, formal front-facing composition with confident posture, clean elegant background, polished film aesthetic",
+		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
 	}
 
-	// Shot Type 매핑
+	// Shot Type 매핑 (시네마틱 톤)
 	shotTypeTextMap := map[string]string{
-		"tight":  "Tight shot, close-up framing from shoulders up",
-		"middle": "Medium shot, framing from waist up, showing upper body and outfit details",
-		"full":   "Full body shot, head to toe, complete outfit visible",
+		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
+		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
+		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
 	}
 
 	log.Printf("Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
@@ -269,10 +268,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				shotTypeText = "full body shot" // 기본값
 			}
 
-			// 카메라 앵글만 enhancedPrompt에 포함 (shotType은 generateDynamicPrompt에서 처리)
 			enhancedPrompt := fmt.Sprintf(
-				"%s. %s. Create a single unified photorealistic photograph. Use the EXACT background from the reference image. No split screens or collage.",
+				"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
 				cameraAngleText,
+				shotTypeText,
 				basePrompt,
 			)
 
@@ -292,32 +291,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				log.Printf("Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
-				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio, shotType 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio, shot)
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
 				if err != nil {
 					log.Printf("Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
-					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
-						log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
-							log.Printf("❌ Failed to update job status to error: %v", err)
-						}
-						if job.ProductionID != nil {
-							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
-								log.Printf("❌ Failed to update production status to error: %v", err)
-							}
-						}
-						return
-					}
 					continue
-				}
-
-				// 🛑 Gemini 응답 후 취소 체크 - 취소됐으면 저장/차감 안 함
-				if service.IsJobCancelled(job.JobID) {
-					log.Printf("🛑 Combination %d: Job %s cancelled after generation, discarding image %d", idx+1, job.JobID, i+1)
-					progressMutex.Lock()
-					cancelled = true
-					progressMutex.Unlock()
-					return
 				}
 
 				// Base64 → []byte 변환
@@ -379,21 +357,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("All combinations completed in parallel")
 
 	// Phase 5: 최종 완료 처리
-	// 🛑 취소된 Job은 user_cancelled 상태 유지 (completed로 덮어쓰지 않음)
-	if cancelled || service.IsJobCancelled(job.JobID) {
-		log.Printf("🛑 Job %s was cancelled, keeping user_cancelled status", job.JobID)
-		// attach_ids만 업데이트 (이미 생성된 이미지들)
-		if job.ProductionID != nil && len(generatedAttachIds) > 0 {
-			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, generatedAttachIds); err != nil {
-				log.Printf("Failed to update production attach_ids: %v", err)
-			}
-		}
-		log.Printf("Single Batch processing completed for job: %s (cancelled with %d images)", job.JobID, len(generatedAttachIds))
-		return
-	}
-
 	finalStatus := model.StatusCompleted
-	if completedCount == 0 {
+	if cancelled {
+		finalStatus = model.StatusUserCancelled
+		log.Printf("🛑 Job %s was user_cancelled: %d/%d images completed (keeping generated images)", job.JobID, completedCount, job.TotalImages)
+	} else if completedCount == 0 {
 		log.Printf("⚠️ No images generated; marking job %s as completed with fallbacks", job.JobID)
 	}
 
@@ -544,7 +512,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// Phase 3: 모든 Stage 병렬 처리 (최종 배열은 순서 보장)
-	results := make([]cancel.StageResult, len(stages))
+	type StageResult struct {
+		StageIndex int
+		AttachIDs  []int
+		Success    int
+	}
+
+	results := make([]StageResult, len(stages))
 	var wg sync.WaitGroup
 	var progressMutex sync.Mutex
 	totalCompleted := 0
@@ -612,7 +586,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					case "model":
 						stageCategories.Model = imageData
 						log.Printf("Stage %d: Model image added", stageIndex)
-					case "bg", "background":
+					case "background", "bg":
 						stageCategories.Background = imageData
 						log.Printf("Stage %d: Background image added", stageIndex)
 					default:
@@ -662,57 +636,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			stagePrompt := ensureProductOnlyPrompt(prompt, stageCategories)
 
 			for i := 0; i < quantity; i++ {
-				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
-				if service.IsJobCancelled(job.JobID) {
-					log.Printf("🛑 Stage %d: Job %s cancelled, stopping generation", stageIndex, job.JobID)
-					// 지금까지 생성된 이미지는 results에 저장
-					results[stageIndex] = cancel.StageResult{
-						StageIndex: stageIndex,
-						AttachIDs:  stageGeneratedIds,
-						Success:    len(stageGeneratedIds),
-					}
-					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
-					if job.ProductionID != nil {
-						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
-					}
-					return
-				}
-
 				log.Printf("Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
-				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함, full shot 기본)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, stagePrompt, aspectRatio, "full")
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, stagePrompt, aspectRatio)
 				if err != nil {
 					log.Printf("Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
-					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
-						log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
-							log.Printf("❌ Failed to update job status to error: %v", err)
-						}
-						if job.ProductionID != nil {
-							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
-								log.Printf("❌ Failed to update production status to error: %v", err)
-							}
-						}
-						return
-					}
 					continue
-				}
-
-				// 🛑 Gemini 응답 후 취소 체크 - 취소됐으면 저장/차감 안 함
-				if service.IsJobCancelled(job.JobID) {
-					log.Printf("🛑 Stage %d: Job %s cancelled after generation, discarding image %d", stageIndex, job.JobID, i+1)
-					// 지금까지 생성된 이미지는 results에 저장
-					results[stageIndex] = cancel.StageResult{
-						StageIndex: stageIndex,
-						AttachIDs:  stageGeneratedIds,
-						Success:    len(stageGeneratedIds),
-					}
-					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
-					if job.ProductionID != nil {
-						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
-					}
-					return
 				}
 
 				// Base64 → []byte 변환
@@ -772,7 +702,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			}
 
 			// Stage 결과 저장 (stage_index 기반으로 올바른 위치에 저장)
-			results[stageIndex] = cancel.StageResult{
+			results[stageIndex] = StageResult{
 				StageIndex: stageIndex,
 				AttachIDs:  stageGeneratedIds,
 				Success:    len(stageGeneratedIds),
@@ -808,12 +738,6 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 	// Step 2: 부족한 Stage만 재시도
 	for stageIdx, stageData := range stages {
-		// 🛑 재시도 전에 취소 체크
-		if service.IsJobCancelled(job.JobID) {
-			log.Printf("🛑 Job %s cancelled, skipping retry phase", job.JobID)
-			break
-		}
-
 		stage := stageData.(map[string]interface{})
 		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
@@ -854,7 +778,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				switch attachType {
 				case "model":
 					retryCategories.Model = imageData
-				case "bg", "background":
+				case "background", "bg":
 					retryCategories.Background = imageData
 				default:
 					if clothingTypes[attachType] {
@@ -886,31 +810,13 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		// 재시도 루프
 		retrySuccess := 0
 		for i := 0; i < missing; i++ {
-			// 🛑 재시도 중 취소 체크
-			if service.IsJobCancelled(job.JobID) {
-				log.Printf("🛑 Stage %d: Job %s cancelled, stopping retry", stageIdx, job.JobID)
-				break
-			}
-
 			log.Printf("Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
-			// Gemini API 호출 (카테고리별 이미지 전달, full shot 기본)
+			// Gemini API 호출 (카테고리별 이미지 전달)
 			retryPrompt := ensureProductOnlyPrompt(prompt, retryCategories)
-			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, retryPrompt, aspectRatio, "full")
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, retryPrompt, aspectRatio)
 			if err != nil {
 				log.Printf("Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
-				if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
-					log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping retry.")
-					if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
-						log.Printf("❌ Failed to update job status to error: %v", err)
-					}
-					if job.ProductionID != nil {
-						if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
-							log.Printf("❌ Failed to update production status to error: %v", err)
-						}
-					}
-					return
-				}
 				continue
 			}
 
@@ -1003,19 +909,6 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// Phase 4: 최종 완료 처리
-	// 🛑 Cancel된 job은 상태를 덮어쓰지 않음
-	if service.IsJobCancelled(job.JobID) {
-		log.Printf("🛑 Job %s was cancelled, keeping user_cancelled status", job.JobID)
-		// attach_ids만 업데이트 (이미 생성된 이미지들)
-		if job.ProductionID != nil && len(allGeneratedAttachIds) > 0 {
-			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, allGeneratedAttachIds); err != nil {
-				log.Printf("Failed to update production attach_ids: %v", err)
-			}
-		}
-		log.Printf("Pipeline Stage processing completed for job: %s (cancelled with %d images)", job.JobID, len(allGeneratedAttachIds))
-		return
-	}
-
 	finalStatus := model.StatusCompleted
 	if len(allGeneratedAttachIds) == 0 {
 		log.Printf("⚠️ No images generated in pipeline; marking job as completed with fallbacks")
@@ -1180,16 +1073,6 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 	completedCount := 0
 
 	for i := 0; i < quantity; i++ {
-		// 🛑 취소 체크 - 새 이미지 생성 전에 확인
-		if service.IsJobCancelled(job.JobID) {
-			log.Printf("🛑 Job %s cancelled, stopping generation", job.JobID)
-			service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
-			if job.ProductionID != nil {
-				service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
-			}
-			return
-		}
-
 		log.Printf("Generating image %d/%d...", i+1, quantity)
 
 		// 4.1: Gemini API 호출 (단일 이미지 전달, aspect-ratio 포함)
@@ -1201,18 +1084,6 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Images[0], prompt, aspectRatio)
 		if err != nil {
 			log.Printf("Gemini API failed for image %d: %v", i+1, err)
-			if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
-				log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
-					log.Printf("❌ Failed to update job status to error: %v", err)
-				}
-				if job.ProductionID != nil {
-					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
-						log.Printf("❌ Failed to update production status to error: %v", err)
-					}
-				}
-				return
-			}
 			continue
 		}
 
@@ -1325,16 +1196,6 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 	completedCount := 0
 
 	for i, mergedImageObj := range mergedImages {
-		// 🛑 취소 체크 - 새 이미지 생성 전에 확인
-		if service.IsJobCancelled(job.JobID) {
-			log.Printf("🛑 Job %s cancelled, stopping generation", job.JobID)
-			service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
-			if job.ProductionID != nil {
-				service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
-			}
-			return
-		}
-
 		mergedImageMap, ok := mergedImageObj.(map[string]interface{})
 		if !ok {
 			log.Printf("⚠️ Invalid mergedImage object at index %d - using placeholder", i)
@@ -1371,18 +1232,6 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, wrappingPrompt, aspectRatio)
 		if err != nil {
 			log.Printf("Gemini API failed for image %d: %v", i+1, err)
-			if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
-				log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
-					log.Printf("❌ Failed to update job status to error: %v", err)
-				}
-				if job.ProductionID != nil {
-					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
-						log.Printf("❌ Failed to update production status to error: %v", err)
-					}
-				}
-				return
-			}
 			continue
 		}
 

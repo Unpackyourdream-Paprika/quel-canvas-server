@@ -49,7 +49,7 @@ func NewService() *Service {
 	// Supabase 클라이언트 초기화
 	supabaseClient, err := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceKey, &supabase.ClientOptions{})
 	if err != nil {
-		log.Printf("❌ Failed to create Supabase client: %v", err)
+		log.Printf("- Failed to create Supabase client: %v", err)
 		return nil
 	}
 
@@ -60,14 +60,14 @@ func NewService() *Service {
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
-		log.Printf("❌ Failed to create Genai client: %v", err)
+		log.Printf("- Failed to create Genai client: %v", err)
 		return nil
 	}
 
 	// Redis 클라이언트 초기화
 	redisClient := redisutil.Connect(cfg)
 	if redisClient == nil {
-		log.Printf("⚠️ Failed to connect to Redis - cancel feature will be disabled")
+		log.Printf("Failed to connect to Redis - cancel feature will be disabled")
 	}
 
 	log.Println("✅ Supabase and Genai clients initialized")
@@ -207,7 +207,7 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 		filePath = *attach.AttachDirectory
 		log.Printf("🔍 Using attach_directory: %s", filePath)
 	} else {
-		log.Printf("❌ DB values - FilePath: %v, Directory: %v", attach.AttachFilePath, attach.AttachDirectory)
+		log.Printf("- DB values - FilePath: %v, Directory: %v", attach.AttachFilePath, attach.AttachDirectory)
 		return nil, fmt.Errorf("no file path found for attach_id: %d", attachID)
 	}
 
@@ -224,21 +224,18 @@ func (s *Service) DownloadImageFromStorage(attachID int) ([]byte, error) {
 	log.Printf("   🔗 Base URL: %s", cfg.SupabaseStorageBaseURL)
 	log.Printf("   📁 File Path: %s", filePath)
 
-	// 4. HTTP GET으로 직접 다운로드 (30초 타임아웃)
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	httpResp, err := client.Get(fullURL)
+	// 4. HTTP GET으로 직접 다운로드
+	httpResp, err := http.Get(fullURL)
 	if err != nil {
-		log.Printf("❌ HTTP GET failed: %v", err)
+		log.Printf("- HTTP GET failed: %v", err)
 		return nil, fmt.Errorf("failed to download image: %w", err)
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		log.Printf("❌ Download failed - Status: %d, URL: %s", httpResp.StatusCode, fullURL)
-		log.Printf("❌ Response body: %s", string(body))
+		log.Printf("- Download failed - Status: %d, URL: %s", httpResp.StatusCode, fullURL)
+		log.Printf("- Response body: %s", string(body))
 		return nil, fmt.Errorf("failed to download image: status %d, body: %s", httpResp.StatusCode, string(body))
 	}
 
@@ -343,8 +340,7 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	}
 
 	// API 호출 (새 google.golang.org/genai 패키지 사용)
-	seed := rand.Int31()
-	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s, seed: %d", aspectRatio, seed)
+	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -353,7 +349,6 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
 			},
-			Seed: &seed,
 		},
 	)
 	if err != nil {
@@ -400,7 +395,7 @@ func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 	for i, imgData := range images {
 		img, format, err := image.Decode(bytes.NewReader(imgData))
 		if err != nil {
-			log.Printf("⚠️  Failed to decode image %d: %v", i, err)
+			log.Printf(" Failed to decode image %d: %v", i, err)
 			continue
 		}
 		log.Printf("🔍 Decoded image %d format: %s", i, format)
@@ -524,8 +519,7 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 }
 
 // generateDynamicPrompt - 상황별 동적 프롬프트 생성
-// shotType: "tight", "middle", "full" (기본값: "full")
-func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string, shotType string) string {
+func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
 	hasClothing := len(categories.Clothing) > 0
@@ -533,401 +527,126 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	hasProducts := hasClothing || hasAccessories
 	hasBackground := categories.Background != nil
 
-	// shotType 기본값
-	if shotType == "" {
-		shotType = "full"
+	// 배경이 있는 경우 - 배경 재해석 + 시네마틱 프롬프트
+	if hasBackground {
+		var prompt string
+		if hasModel {
+			prompt = fmt.Sprintf(`ARRI ALEXA 35 CINEMATIC FASHION EDITORIAL
+
+IMAGE 1 = LOCATION REFERENCE (analyze and reinterpret this environment)
+IMAGE 2 = MODEL (the person to photograph)
+%s%s
+BACKGROUND REINTERPRETATION - CRITICAL:
+• Analyze IMAGE 1: identify the mood, colors, architecture, lighting, atmosphere
+• DO NOT copy the background exactly - REINTERPRET and RECREATE it
+• Generate a NEW scene inspired by the reference - same vibe, different composition
+• The AI must creatively reimagine the location while keeping its essence
+• Similar environment type but freshly generated - like a different angle or nearby spot
+
+FILM LOOK:
+• ARRI LogC to Rec709 with film print emulation
+• Rich shadows, smooth highlights, organic skin tones
+• Cinematic depth of field, subtle film grain
+• Cohesive color grade throughout
+
+SEAMLESS INTEGRATION:
+• Model naturally exists in this newly generated environment
+• Consistent lighting direction and color temperature
+• Natural ground contact and shadows
+• One unified photograph, not a composite
+
+OUTPUT:
+• ONE photograph, full body head to toe
+• Serious editorial expression
+• No collage, no split, no distortion`,
+				func() string {
+					if hasClothing {
+						return "IMAGE 3 = CLOTHING\n"
+					}
+					return ""
+				}(),
+				func() string {
+					if hasAccessories {
+						idx := 3
+						if hasClothing {
+							idx = 4
+						}
+						return fmt.Sprintf("IMAGE %d = ACCESSORIES\n", idx)
+					}
+					return ""
+				}())
+		} else if hasProducts {
+			prompt = `TASK: Product photography at this location.
+
+IMAGE 1 (BACKGROUND): This is the setting. Use this exact environment.
+IMAGE 2+ (PRODUCTS): Display these items in this location.
+
+REQUIREMENT:
+- Show the background scene from Image 1
+- Place products naturally in this environment
+- NO people
+- One cohesive photo`
+		} else {
+			prompt = `TASK: Environmental photography.
+
+IMAGE 1: Recreate this exact scene - same buildings, streets, atmosphere.
+
+REQUIREMENT:
+- Reproduce the location faithfully
+- NO people
+- One cohesive photo`
+		}
+
+		if userPrompt != "" {
+			prompt += "\n\nSTYLE: " + userPrompt
+		}
+		return prompt
 	}
 
-	// 케이스별 메인 지시사항
+	// 배경 없는 경우 - 기존 로직 유지
 	var mainInstruction string
 	if hasModel {
-		// 모델 있음 → 패션 에디토리얼 (샷 타입별 분기)
-		switch shotType {
-		case "tight":
-			mainInstruction = "[FASHION EDITORIAL - TIGHT SHOT / CLOSE-UP]\n" +
-				"You are a fashion photographer shooting a CLOSE-UP portrait.\n" +
-				"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n\n" +
-				"⚠️ CRITICAL FRAMING - TIGHT SHOT:\n" +
-				"🚨 FRAME FROM SHOULDERS UP ONLY\n" +
-				"🚨 CROP BELOW THE SHOULDERS - do NOT show chest/torso\n" +
-				"🚨 Focus on FACE and SHOULDERS only\n" +
-				"🚨 DO NOT show waist, arms below shoulders, or any lower body\n\n" +
-				"Create ONE photorealistic photograph:\n" +
-				"• ONLY ONE MODEL - solo fashion shoot\n" +
-				"• TIGHT CLOSE-UP - shoulders and head only\n" +
-				"• Face is the main focus\n" +
-				"• Use the EXACT background from the reference image\n\n"
-		case "middle":
-			mainInstruction = "[FASHION EDITORIAL - MEDIUM SHOT / WAIST-UP]\n" +
-				"You are a fashion photographer shooting a MEDIUM portrait.\n" +
-				"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n\n" +
-				"⚠️ CRITICAL FRAMING - MEDIUM SHOT:\n" +
-				"🚨 FRAME FROM WAIST UP ONLY\n" +
-				"🚨 CROP AT THE WAIST - do NOT show hips, legs, or feet\n" +
-				"🚨 Show upper body, arms, and head\n" +
-				"🚨 DO NOT show anything below the waist\n\n" +
-				"Create ONE photorealistic photograph:\n" +
-				"• ONLY ONE MODEL - solo fashion shoot\n" +
-				"• MEDIUM SHOT - waist up only, showing upper body outfit\n" +
-				"• Show clothing details on upper body\n" +
-				"• Use the EXACT background from the reference image\n\n"
-		default: // "full"
-			mainInstruction = "[FASHION EDITORIAL - FULL BODY SHOT]\n" +
-				"You are a fashion photographer shooting an editorial campaign.\n" +
-				"This is SOLO FASHION MODEL photography - ONLY ONE PERSON in the frame.\n" +
-				"The PERSON is the HERO - their natural proportions are SACRED.\n\n" +
-				"⚠️ CRITICAL FRAMING - FULL BODY:\n" +
-				"🚨 ENTIRE BODY from HEAD to TOE must be visible\n" +
-				"🚨 FEET MUST BE VISIBLE - both feet completely in frame\n" +
-				"🚨 DO NOT crop at ankles, calves, or knees\n\n" +
-				"Create ONE photorealistic photograph:\n" +
-				"• ONLY ONE MODEL - solo fashion shoot\n" +
-				"• FULL BODY SHOT - model's ENTIRE body from head to TOE visible\n" +
-				"• FEET MUST BE VISIBLE - both feet and shoes completely in frame\n" +
-				"• STRONG POSTURE - elongated body lines, poised stance\n" +
-				"• The model wears ALL clothing and accessories\n" +
-				"• Use the EXACT background from the reference image\n\n"
-		}
+		mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
 	} else if hasProducts {
-		// 프로덕트만 → 프로덕트 포토그래피
-		mainInstruction = "[PRODUCT PHOTOGRAPHER]\n" +
-			"You are a product photographer creating still life.\n" +
-			"The PRODUCTS are the STARS.\n" +
-			"⚠️ CRITICAL: NO people or models in this shot - products only.\n" +
-			"⚠️ CRITICAL: Do NOT invent new items or props. Show ONLY the items provided in the reference images. The count and types must match exactly.\n" +
-			"⚠️ IF ONLY ONE PRODUCT is provided: show exactly that single item by itself on a clean surface/background. Do NOT add shoes, hats, sunglasses, jewelry, watches, wallets, chains, papers, books, boxes, or any extra objects.\n\n" +
-			"Create ONE photorealistic photograph:\n" +
-			"• Artistic arrangement of all items\n" +
-			"• Good lighting that highlights textures\n" +
-			"• Use the EXACT background from the reference if provided\n\n"
+		mainInstruction = "Create ONE product photo: show ONLY the referenced items, NO people.\n"
 	} else {
-		// 배경만 → 환경 포토그래피
-		mainInstruction = "[ENVIRONMENTAL PHOTOGRAPHER]\n" +
-			"You are a photographer capturing atmosphere.\n" +
-			"⚠️ CRITICAL: NO people, models, or products in this shot - environment only.\n\n" +
-			"Create ONE photorealistic photograph of the referenced environment.\n\n"
+		mainInstruction = "Create ONE photo based on the references.\n"
 	}
 
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명
 	if categories.Model != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (MODEL - FACE/BODY ONLY): ⚠️ CRITICAL: You MUST use this EXACT person's FACE and BODY only. Copy this person's face EXACTLY - same ethnicity, same facial structure, same skin tone, same bone structure, same eyes, same nose, same lips, same hair color, same hair style. DO NOT change or replace with a different person. DO NOT change the face to look more Western or more Asian. The model's identity must be 100%% preserved.\n\n⚠️ IGNORE FROM THIS MODEL IMAGE:\n❌ IGNORE the background in this model photo - use ONLY the separate BACKGROUND reference image\n❌ IGNORE the clothing/outfit in this model photo - use ONLY the separate CLOTHING reference images\n❌ This model image is ONLY for face and body reference - NOTHING else", imageIndex))
+			fmt.Sprintf("Image %d = MODEL: Use this person's appearance exactly.", imageIndex))
 		imageIndex++
 	}
 
 	if len(categories.Clothing) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (CLOTHING): ALL visible garments - tops, bottoms, dresses, outerwear, layers. The person MUST wear EVERY piece shown here", imageIndex))
+			fmt.Sprintf("Image %d = CLOTHING: Model wears ALL these items.", imageIndex))
 		imageIndex++
 	}
 
 	if len(categories.Accessories) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (ACCESSORIES): ALL items - shoes, bags, hats, glasses, jewelry, watches. Use ONLY the items actually visible in the reference; DO NOT invent or add any extra items. If only one item is visible, show exactly that single item alone.", imageIndex))
+			fmt.Sprintf("Image %d = ACCESSORIES: Include all visible items only.", imageIndex))
 		imageIndex++
 	}
 
-	if categories.Background != nil {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BACKGROUND - MUST USE EXACTLY): ⚠️ CRITICAL: You MUST use this EXACT background. If it is a white/gray studio, use a WHITE/GRAY STUDIO. If it is an outdoor location, use that EXACT outdoor location. DO NOT invent a different background. The background must match the reference image 100%%.", imageIndex))
-		imageIndex++
-	}
+	criticalRules := "\nRules: Natural body proportions. No distortion. One cohesive photo.\n"
 
-	// 구성 지시사항
-	var compositionInstruction string
-
-	// 케이스 1: 모델 이미지가 있는 경우
-	if hasModel {
-		compositionInstruction = "\n[FASHION EDITORIAL COMPOSITION]\n" +
-			"Generate ONE photorealistic photograph showing the referenced model wearing the complete outfit."
-	} else if hasProducts {
-		// 케이스 2: 모델 없이 의상/액세서리만 → 프로덕트 샷
-		compositionInstruction = "\n[PRODUCT PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic product photograph showcasing the clothing and accessories as OBJECTS.\n" +
-			"⚠️ DO NOT add any people, models, or human figures.\n" +
-			"⚠️ DO NOT add any extra products, props, or accessories that are not in the references.\n" +
-			"⚠️ The number of products in the shot must match the references exactly. If only one product is referenced, show exactly that single item by itself on a clean surface.\n"
-
-		if hasBackground {
-			compositionInstruction += "The products are placed naturally within the referenced environment."
-		} else {
-			compositionInstruction += "Create a studio product shot with professional lighting."
-		}
-	} else if hasBackground {
-		// 케이스 3: 배경만 → 환경 사진
-		compositionInstruction = "\n[ENVIRONMENTAL PHOTOGRAPHY]\n" +
-			"Generate ONE photorealistic photograph of the referenced environment.\n" +
-			"⚠️ DO NOT add any people, models, or products to this scene."
-	} else {
-		// 케이스 4: 아무것도 없는 경우
-		compositionInstruction = "\n[COMPOSITION]\n" +
-			"Generate a high-quality photorealistic image based on the references provided."
-	}
-
-	// 배경 관련 지시사항 - 모델이 있을 때만 추가
-	if hasModel && hasBackground {
-		// 모델 + 배경 케이스 → 배경 레퍼런스에 집중
-		compositionInstruction += " in the EXACT background from the reference image.\n\n" +
-			"[BACKGROUND - MUST MATCH REFERENCE]\n" +
-			"⚠️ CRITICAL: The background MUST match the reference image EXACTLY.\n" +
-			"⚠️ If the reference shows a WHITE STUDIO, use a WHITE STUDIO.\n" +
-			"⚠️ If the reference shows a GRAY STUDIO, use a GRAY STUDIO.\n" +
-			"⚠️ If the reference shows an outdoor location, use that EXACT location.\n" +
-			"⚠️ DO NOT invent backgrounds. DO NOT add locations not in the reference.\n\n" +
-			"[SUBJECT INTEGRATION]\n" +
-			"✓ Place the subject naturally in the referenced background\n" +
-			"✓ Lighting must match the background reference\n" +
-			"✓ Natural shadows consistent with the background\n" +
-			"✓ The subject and background must look like ONE unified photograph"
-	} else if hasModel && !hasBackground {
-		// 모델만 있고 배경 없음 → 기본 스튜디오
-		compositionInstruction += " in a clean studio setting with professional lighting."
-	}
-
-	// 공통 금지사항
-	commonForbidden := "\n\n[CRITICAL: FORBIDDEN]\n\n" +
-		"⚠️ NO SPLIT/DUAL COMPOSITION:\n" +
-		"❌ NO vertical dividing lines\n" +
-		"❌ NO left-right split layouts\n" +
-		"❌ NO duplicate subject on both sides\n" +
-		"❌ NO grid or collage\n" +
-		"❌ ONE continuous scene only\n\n" +
-		"⚠️ ONLY ONE PERSON:\n" +
-		"❌ NO multiple models\n" +
-		"❌ NO background people\n" +
-		"❌ This is SOLO photography\n\n" +
-		"[REQUIRED]:\n" +
-		"✓ ONE single photograph\n" +
-		"✓ ONE unified moment\n" +
-		"✓ Fill entire frame - NO empty margins\n" +
-		"✓ Natural asymmetric composition\n"
-
-	// 핵심 요구사항 - 케이스별로 다르게
-	var criticalRules string
-	if hasModel {
-		// 모델 있는 케이스 - 샷 타입별 분기
-		switch shotType {
-		case "tight":
-			criticalRules = commonForbidden + "\n[TIGHT SHOT REQUIREMENTS]\n" +
-				"🎯 ONLY ONE MODEL in the photograph\n" +
-				"🎯 SHOULDERS UP ONLY - close-up framing\n" +
-				"🎯 Use EXACT background from reference\n\n" +
-				"[FORBIDDEN]\n" +
-				"❌ SHOWING BODY BELOW SHOULDERS\n" +
-				"❌ WRONG BACKGROUND - must match reference exactly\n" +
-				"❌ Multiple people"
-		case "middle":
-			criticalRules = commonForbidden + "\n[MEDIUM SHOT REQUIREMENTS]\n" +
-				"🎯 ONLY ONE MODEL in the photograph\n" +
-				"🎯 WAIST UP ONLY - medium framing\n" +
-				"🎯 Show upper body outfit details\n" +
-				"🎯 Use EXACT background from reference\n\n" +
-				"[FORBIDDEN]\n" +
-				"❌ SHOWING LEGS OR FEET\n" +
-				"❌ WRONG BACKGROUND - must match reference exactly\n" +
-				"❌ Multiple people"
-		default: // "full"
-			criticalRules = commonForbidden + "\n[FULL BODY REQUIREMENTS]\n" +
-				"🎯 ONLY ONE MODEL in the photograph\n" +
-				"🎯 FULL BODY SHOT - head to TOE visible\n" +
-				"🎯 FEET MUST BE VISIBLE - both feet in frame\n" +
-				"🎯 ALL clothing and accessories worn\n" +
-				"🎯 Use EXACT background from reference\n\n" +
-				"[FORBIDDEN]\n" +
-				"❌ CROPPED FEET - feet must be visible\n" +
-				"❌ WRONG BACKGROUND - must match reference exactly\n" +
-				"❌ Multiple people\n" +
-				"❌ Distorted proportions"
-		}
-	} else if hasProducts {
-		// 프로덕트 샷 케이스
-		criticalRules = commonForbidden + "\n[PRODUCT REQUIREMENTS]\n" +
-			"🎯 Showcase products beautifully\n" +
-			"🎯 Good lighting\n" +
-			"🎯 ALL items displayed clearly\n" +
-			"🎯 Use EXACT background from reference\n\n" +
-			"[FORBIDDEN]\n" +
-			"❌ ANY people or models\n" +
-			"❌ Products looking pasted\n" +
-			"❌ Adding ANY extra items not present in the reference. If only one product reference is provided, show EXACTLY that single item alone."
-	} else {
-		// 배경만 있는 케이스
-		criticalRules = commonForbidden + "\n[ENVIRONMENT REQUIREMENTS]\n" +
-			"🎯 Capture the atmosphere of the location\n\n" +
-			"[FORBIDDEN]\n" +
-			"❌ DO NOT add people or products"
-	}
-
-	// aspect ratio별 추가 지시사항 (샷 타입 고려)
-	var aspectRatioInstruction string
-	if aspectRatio == "9:16" {
-		if hasModel {
-			switch shotType {
-			case "tight":
-				aspectRatioInstruction = "\n\n[9:16 VERTICAL - TIGHT SHOT]\n" +
-					"✓ Close-up portrait framing\n" +
-					"✓ SHOULDERS UP ONLY\n" +
-					"✓ Use EXACT background from reference"
-			case "middle":
-				aspectRatioInstruction = "\n\n[9:16 VERTICAL - MEDIUM SHOT]\n" +
-					"✓ WAIST UP framing\n" +
-					"✓ Show upper body outfit\n" +
-					"✓ Use EXACT background from reference"
-			default:
-				aspectRatioInstruction = "\n\n[9:16 VERTICAL - FULL BODY]\n" +
-					"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
-					"✓ FEET MUST BE VISIBLE at bottom\n" +
-					"✓ Leave space below feet\n" +
-					"✓ Use EXACT background from reference"
-			}
-		} else if hasProducts {
-			aspectRatioInstruction = "\n\n[9:16 VERTICAL PRODUCT SHOT]\n" +
-				"✓ Products arranged vertically\n" +
-				"✓ Use EXACT background from reference"
-		} else {
-			aspectRatioInstruction = "\n\n[9:16 VERTICAL SHOT]\n" +
-				"✓ Use the HEIGHT to capture vertical elements"
-		}
-	} else if aspectRatio == "16:9" {
-		if hasModel {
-			switch shotType {
-			case "tight":
-				aspectRatioInstruction = "\n\n[16:9 WIDE - TIGHT SHOT]\n" +
-					"✓ Close-up portrait in wide frame\n" +
-					"✓ SHOULDERS UP ONLY - face centered\n" +
-					"✓ Use EXACT background from reference"
-			case "middle":
-				aspectRatioInstruction = "\n\n[16:9 WIDE - MEDIUM SHOT]\n" +
-					"✓ WAIST UP framing in wide format\n" +
-					"✓ Subject positioned using rule of thirds\n" +
-					"✓ Use EXACT background from reference"
-			default:
-				aspectRatioInstruction = "\n\n[16:9 WIDE - FULL BODY]\n" +
-					"✓ Model's ENTIRE BODY from head to TOE must be visible\n" +
-					"✓ FEET MUST BE VISIBLE at bottom\n" +
-					"✓ Subject positioned using rule of thirds\n" +
-					"✓ Use EXACT background from reference\n\n" +
-					"⚠️ BACKGROUND RULE:\n" +
-					"⚠️ If reference shows WHITE/GRAY STUDIO, use WHITE/GRAY STUDIO\n" +
-					"⚠️ If reference shows outdoor location, use that EXACT location\n" +
-					"⚠️ DO NOT invent locations not in reference"
-			}
-		} else if hasProducts {
-			aspectRatioInstruction = "\n\n[16:9 WIDE PRODUCT SHOT]\n" +
-				"✓ Products positioned using the full width\n" +
-				"✓ Use EXACT background from reference"
-		} else {
-			aspectRatioInstruction = "\n\n[16:9 WIDE SHOT]\n" +
-				"✓ Use the full WIDTH to capture the environment"
-		}
-	} else {
-		// 1:1 및 기타 비율
-		if hasModel {
-			switch shotType {
-			case "tight":
-				aspectRatioInstruction = "\n\n[SQUARE - TIGHT SHOT]\n" +
-					"✓ Close-up portrait framing\n" +
-					"✓ SHOULDERS UP ONLY\n" +
-					"✓ Use EXACT background from reference"
-			case "middle":
-				aspectRatioInstruction = "\n\n[SQUARE - MEDIUM SHOT]\n" +
-					"✓ WAIST UP framing\n" +
-					"✓ Balanced composition\n" +
-					"✓ Use EXACT background from reference"
-			default:
-				aspectRatioInstruction = "\n\n[SQUARE - FULL BODY]\n" +
-					"✓ Model's ENTIRE BODY from head to TOE must fit\n" +
-					"✓ FEET MUST BE VISIBLE at bottom\n" +
-					"✓ Balanced composition\n" +
-					"✓ Use EXACT background from reference"
-			}
-		} else if hasProducts {
-			aspectRatioInstruction = "\n\n[SQUARE PRODUCT SHOT]\n" +
-				"✓ Balanced product arrangement\n" +
-				"✓ Use EXACT background from reference"
-		} else {
-			aspectRatioInstruction = "\n\n[SQUARE SHOT]\n" +
-				"✓ Balanced composition"
-		}
-	}
-
-	// ⚠️ 최우선 지시사항 (샷 타입별 분기)
-	var criticalHeader string
-	switch shotType {
-	case "tight":
-		criticalHeader = "⚠️ CRITICAL REQUIREMENTS - TIGHT SHOT ⚠️\n\n" +
-			"[MANDATORY - FRAMING]:\n" +
-			"🚨 TIGHT SHOT = SHOULDERS UP ONLY\n" +
-			"🚨 CROP BELOW SHOULDERS - NO chest, NO torso\n" +
-			"🚨 FACE is the main subject\n\n" +
-			"[MANDATORY - BACKGROUND]:\n" +
-			"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
-			"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
-			"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
-			"[FORBIDDEN]:\n" +
-			"❌ NO full body - this is a CLOSE-UP\n" +
-			"❌ NO waist or below showing\n" +
-			"❌ NO split layouts, NO grid, NO collage\n" +
-			"❌ NO multiple people\n\n"
-	case "middle":
-		criticalHeader = "⚠️ CRITICAL REQUIREMENTS - MEDIUM SHOT ⚠️\n\n" +
-			"[MANDATORY - FRAMING]:\n" +
-			"🚨 MEDIUM SHOT = WAIST UP ONLY\n" +
-			"🚨 CROP AT WAIST - NO hips, NO legs, NO feet\n" +
-			"🚨 Show upper body and outfit details\n\n" +
-			"[MANDATORY - BACKGROUND]:\n" +
-			"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
-			"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
-			"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
-			"[FORBIDDEN]:\n" +
-			"❌ NO full body - this is WAIST-UP only\n" +
-			"❌ NO legs or feet showing\n" +
-			"❌ NO split layouts, NO grid, NO collage\n" +
-			"❌ NO multiple people\n\n"
-	default: // "full"
-		criticalHeader = "⚠️ CRITICAL REQUIREMENTS - FULL BODY ⚠️\n\n" +
-			"[MANDATORY - FEET VISIBLE]:\n" +
-			"🚨 BOTH FEET MUST APPEAR IN FRAME\n" +
-			"🚨 DO NOT CROP AT ANKLES OR CALVES\n" +
-			"🚨 FULL BODY means HEAD TO TOE\n\n" +
-			"[MANDATORY - BACKGROUND]:\n" +
-			"🚨 USE EXACT BACKGROUND FROM REFERENCE\n" +
-			"🚨 If reference is WHITE STUDIO, use WHITE STUDIO\n" +
-			"🚨 If reference is GRAY STUDIO, use GRAY STUDIO\n" +
-			"🚨 DO NOT invent outdoor/urban/nature locations\n\n" +
-			"[FORBIDDEN]:\n" +
-			"❌ NO split layouts, NO grid, NO collage\n" +
-			"❌ NO multiple people\n" +
-			"❌ NO cropped feet\n" +
-			"❌ NO wrong background\n\n"
-	}
-
-	// 최종 조합
-	var finalPrompt string
+	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + criticalRules
 
 	if userPrompt != "" {
-		finalPrompt = criticalHeader + "[USER REQUEST]\n" + userPrompt + "\n\n"
-	} else {
-		finalPrompt = criticalHeader
+		finalPrompt += "\n\nSTYLE: " + userPrompt
 	}
-
-	// 카테고리별 스타일 가이드
-	categoryStyleGuide := "\n\n[STYLE GUIDE]\n" +
-		"Fashion photography style. Professional lighting. High-end editorial composition.\n\n" +
-		"[TECHNICAL]\n" +
-		"Fill entire frame. NO empty margins. NO letterboxing.\n"
-
-	finalPrompt += mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + categoryStyleGuide + criticalRules + aspectRatioInstruction
 
 	return finalPrompt
 }
 
 // GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
-// shotType: "tight", "middle", "full" (기본값: "full")
-func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string, shotType string) (string, error) {
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
 	cfg := config.GetConfig()
 
 	// aspect-ratio 기본값 처리
@@ -960,9 +679,25 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	// Gemini Part 배열 구성
 	var parts []*genai.Part
 
-	// 순서: Model → Clothing → Accessories → Background
+	// 순서 변경: Background (첫 번째) → Model → Clothing → Accessories
+	// 배경을 첫 번째로 보내서 Gemini가 배경을 더 잘 인식하도록 함
+	if categories.Background != nil {
+		// Background 이미지를 첫 번째로 추가 (가장 중요한 참조)
+		resizedBG, err := mergeImages([][]byte{categories.Background}, aspectRatio)
+		if err != nil {
+			return "", fmt.Errorf("failed to resize background image: %w", err)
+		}
+		parts = append(parts, &genai.Part{
+			InlineData: &genai.Blob{
+				MIMEType: "image/png",
+				Data:     resizedBG,
+			},
+		})
+		log.Printf("📎 [1st] Added Background image (resized) - FIRST for priority")
+	}
+
 	if categories.Model != nil {
-		// Model 이미지도 resize
+		// Model 이미지 resize
 		resizedModel, err := mergeImages([][]byte{categories.Model}, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to resize model image: %w", err)
@@ -996,36 +731,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Accessories))
 	}
 
-	if categories.Background != nil {
-		// Background 이미지도 resize
-		resizedBG, err := mergeImages([][]byte{categories.Background}, aspectRatio)
-		if err != nil {
-			return "", fmt.Errorf("failed to resize background image: %w", err)
-		}
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     resizedBG,
-			},
-		})
-		log.Printf("📎 Added Background image (resized)")
-	}
-
-	// 동적 프롬프트 생성 (shotType 전달)
-	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio, shotType)
-
-	// 이미지 갯수 계산 (parts에서 이미지만 카운트, 텍스트 제외)
-	imageCount := len(parts)
-
-	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가
-	if imageCount >= 2 {
-		fusionPrompt := "\n\n[MULTI-IMAGE FUSION INSTRUCTION]\n" +
-			"Seamlessly blend the background and objects into one unified photorealistic scene.\n" +
-			"Maintain natural lighting, shadows, and atmosphere throughout the entire composition.\n"
-		dynamicPrompt = fusionPrompt + dynamicPrompt
-		log.Printf("📎 [Fashion Service] Added multi-image fusion prompt (%d images)", imageCount)
-	}
-
+	// 동적 프롬프트 생성
+	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
@@ -1036,8 +743,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	// API 호출
-	seed := rand.Int31()
-	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d", len(parts), seed)
+	log.Printf("📤 Sending request to Gemini API with %d parts...", len(parts))
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -1047,7 +753,6 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				AspectRatio: aspectRatio,
 			},
 			Temperature: floatPtr(0.45),
-			Seed:        &seed,
 		},
 	)
 	if err != nil {
@@ -1196,7 +901,7 @@ func (s *Service) UpdateJobProgress(ctx context.Context, jobID string, completed
 	}
 
 	if len(uniqueIds) != len(generatedAttachIds) {
-		log.Printf("⚠️  Removed %d duplicate attach IDs (before: %d, after: %d)",
+		log.Printf(" Removed %d duplicate attach IDs (before: %d, after: %d)",
 			len(generatedAttachIds)-len(uniqueIds), len(generatedAttachIds), len(uniqueIds))
 	}
 
@@ -1351,7 +1056,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 				Execute()
 
 			if err != nil {
-				log.Printf("⚠️  Failed to record organization transaction for attach_id %d: %v", attachID, err)
+				log.Printf(" Failed to record organization transaction for attach_id %d: %v", attachID, err)
 			}
 		}
 
@@ -1413,7 +1118,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 				Execute()
 
 			if err != nil {
-				log.Printf("⚠️  Failed to record transaction for attach_id %d: %v", attachID, err)
+				log.Printf(" Failed to record transaction for attach_id %d: %v", attachID, err)
 			}
 		}
 
