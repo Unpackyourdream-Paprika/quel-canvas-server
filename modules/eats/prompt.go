@@ -131,155 +131,319 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		return generateSimplifiedPrompt(categories, userPrompt, aspectRatio)
 	}
 
-	// isPreEdited: true일 때는 기존 상세 버전 사용 (정확성 중시)
-	// 케이스 분석을 위한 변수 정의 (프론트 type 기준)
-	hasFood := len(categories.Food) > 0             // type: food
-	hasIngredient := len(categories.Ingredient) > 0 // type: ingredient
-	hasProp := len(categories.Prop) > 0             // type: prop
-	hasFoodItems := hasIngredient || hasProp
-	hasBackground := categories.Background != nil // type: background
+	// isPreEdited: true일 때는 프리미엄 푸드 포토그래피 (자연스러운 고퀄리티)
+	hasFood := len(categories.Food) > 0
+	hasIngredient := len(categories.Ingredient) > 0
+	hasProp := len(categories.Prop) > 0
+	hasFoodItems := hasFood || hasIngredient || hasProp
+	hasBackground := categories.Background != nil
 
-	// 배경 설정에 따른 환경 지시
-	var backgroundInstruction string
-	if hasBackground {
-		backgroundInstruction = "Use the provided background image as the environment.\n" +
-			"STRONG studio lighting creating intense specular highlights and glossy reflections on food.\n"
-	} else {
-		backgroundInstruction = "White background with HIGH-INTENSITY professional food photography lighting.\n" +
-			"CRITICAL: Lighting MUST create very strong bright highlights and wet glossy appearance on all food surfaces.\n"
-	}
-
-	// 간결한 메인 지시사항
+	// 메인 지시사항 - 자연스럽고 맛있어 보이는 음식 사진
 	var mainInstruction string
-	if hasFood || hasFoodItems {
-		mainInstruction = backgroundInstruction +
-			"\nPREMIUM FOOD PHOTOGRAPHY - ULTRA GLOSSY:\n" +
-			"• Every food element must have individual shine and light reflection\n" +
-			"• Food surface appears freshly oiled or moistened - extremely glossy and wet-looking\n" +
-			"• Strong directional lighting creates bright specular highlights on all food surfaces\n" +
-			"• Deep shadows and high-contrast lighting enhance three-dimensional form\n" +
-			"• Professional studio lighting setup specifically for maximum gloss and shine\n\n"
+	if hasFoodItems {
+		if hasBackground {
+			mainInstruction = "[PREMIUM EDITORIAL FOOD PHOTOGRAPHY - NATURAL STYLE]\n" +
+				"Create a stunning food photograph that looks naturally delicious.\n" +
+				"The food should look FRESH and APPETIZING - like it was just prepared.\n\n" +
+				"PHOTOGRAPHY STYLE:\n" +
+				"• 45-DEGREE ANGLE - the most appetizing angle for food\n" +
+				"• SHALLOW DEPTH OF FIELD - food sharp, background beautifully blurred (bokeh)\n" +
+				"• WARM NATURAL LIGHTING - soft, diffused, like window light\n" +
+				"• NATURAL GLOSS - food looks fresh and moist, not artificially oiled\n" +
+				"• VIBRANT COLORS - saturated but realistic, appetite-triggering\n" +
+				"• SHARP TEXTURE DETAIL - every grain, seed, and surface visible\n" +
+				"• DIMENSIONAL LIGHTING - creates depth with soft shadows\n\n"
+		} else {
+			mainInstruction = "[PREMIUM STUDIO FOOD PHOTOGRAPHY - CLEAN STYLE]\n" +
+				"Create a stunning food photograph with clean, professional look.\n" +
+				"The food should look FRESH and APPETIZING - magazine cover quality.\n\n" +
+				"PHOTOGRAPHY STYLE:\n" +
+				"• 45-DEGREE ANGLE - the most appetizing angle for food\n" +
+				"• CLEAN LIGHT BACKGROUND - white or soft neutral, not distracting\n" +
+				"• SOFT DIFFUSED LIGHTING - creates gentle highlights and soft shadows\n" +
+				"• NATURAL GLOSS - food looks fresh and moist from its own juices\n" +
+				"• VIBRANT COLORS - saturated but realistic, true-to-life\n" +
+				"• CRISP TEXTURE DETAIL - every grain, seed, crumb visible in sharp focus\n" +
+				"• THREE-DIMENSIONAL - lighting creates depth and form\n\n"
+		}
+	} else if hasBackground {
+		mainInstruction = "[ENVIRONMENTAL PHOTOGRAPHY]\n" +
+			"Capture the atmosphere of this location.\n" +
+			"NO food in this shot - environment only.\n\n"
 	} else {
-		mainInstruction = "Environment photography.\n"
+		mainInstruction = "[FOOD PHOTOGRAPHY]\n" +
+			"Create a delicious-looking food photograph.\n\n"
 	}
 
 	var instructions []string
 	imageIndex := 1
 
-	// 각 카테고리별 명확한 설명 (음식 용어로)
+	// 카테고리별 설명 - 간결하게
 	if len(categories.Food) > 0 {
 		if len(categories.Food) == 1 {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (MAIN FOOD): Recreate this SAME FOOD TYPE with the SAME INGREDIENTS.\n"+
-					"KEEP: Same food identity, same core ingredients, same basic structure\n"+
-					"ENHANCE: Make it look fresher, glossier, more appetizing with better lighting and presentation\n"+
-					"Goal: Same food, elevated to professional food photography quality", imageIndex))
+				fmt.Sprintf("Reference Image %d (MAIN FOOD):\n"+
+					"Recreate this EXACT food - same ingredients, same form.\n"+
+					"Make it look FRESH: natural gloss, vibrant colors, sharp textures.\n"+
+					"Every detail visible: grains, seeds, surfaces, layers.", imageIndex))
 		} else {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (MAIN FOOD - MULTIPLE ITEMS): These are %d FOOD items shown in a GRID LAYOUT for reference only.\n"+
-					"⚠️ CRITICAL: DO NOT recreate this grid layout in the final image!\n"+
-					"KEEP: Same food types, same ingredients from all items\n"+
-					"CHANGE: CLUSTER all foods together naturally - NOT in a grid pattern\n"+
-					"ENHANCE: Make them look fresher, glossier, more appetizing with professional lighting\n"+
-					"Goal: Same foods, better composition and presentation quality", imageIndex, len(categories.Food)))
+				fmt.Sprintf("Reference Image %d (FOOD - %d items in grid):\n"+
+					"⚠️ Grid is for reference only - DO NOT recreate grid layout!\n"+
+					"Arrange all %d items NATURALLY - clustered, overlapping, appetizing.\n"+
+					"Each item: fresh gloss, vibrant color, sharp texture detail.", imageIndex, len(categories.Food), len(categories.Food)))
 		}
 		imageIndex++
 	}
 
 	if len(categories.Ingredient) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (INGREDIENTS/SIDES): Include these SAME ingredients/components.\n"+
-				"ENHANCE with better freshness and visual appeal.", imageIndex))
+			fmt.Sprintf("Reference Image %d (INGREDIENTS):\n"+
+				"Include these exact ingredients.\n"+
+				"Fresh appearance: vibrant colors, natural moisture.", imageIndex))
 		imageIndex++
 	}
 
 	if len(categories.Prop) > 0 {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (TOPPINGS/GARNISH): Include these SAME toppings/garnishes.\n"+
-				"ENHANCE with better color vibrancy and appetizing look.", imageIndex))
+			fmt.Sprintf("Reference Image %d (GARNISHES/PROPS):\n"+
+				"Include these garnishes/props.\n"+
+				"Fresh herbs vibrant green, sauces glossy.", imageIndex))
 		imageIndex++
 	}
 
 	if categories.Background != nil {
 		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BACKGROUND): Use this as the environment/setting for the scene.", imageIndex))
+			fmt.Sprintf("Reference Image %d (BACKGROUND):\n"+
+				"Use this environment. Match lighting direction.\n"+
+				"Food sharp, background with beautiful bokeh blur.", imageIndex))
 		imageIndex++
 	}
 
-	// 간결한 구성 지시 - 불필요한 내용 제거
-	compositionInstruction := ""
+	// 텍스처 디테일 - 모든 음식에 적용되는 범용 기준
+	textureDetail := "\n[UNIVERSAL TEXTURE STANDARD - ALL FOOD TYPES]\n" +
+		"⚠️ These texture rules apply to ANY food, regardless of type:\n\n" +
+		"📸 PHOTOREALISTIC TEXTURE REQUIREMENTS:\n" +
+		"Every food item MUST show these qualities:\n\n" +
+		"1. SURFACE DETAIL:\n" +
+		"• Every surface shows MICRO-TEXTURE visible to the eye\n" +
+		"• Grains, fibers, pores, seeds - all INDIVIDUALLY DISTINCT\n" +
+		"• NO smooth, blended, or mushy appearances\n" +
+		"• Think: 'I can see every tiny detail up close'\n\n" +
+		"2. NATURAL SHEEN & MOISTURE:\n" +
+		"• Fresh food has NATURAL GLOSSY SHEEN from its own moisture\n" +
+		"• Light reflects off moist surfaces naturally\n" +
+		"• Sauce/marinade coats ingredients with GLISTENING WET SHINE\n" +
+		"• Oil and sauce create REFLECTIVE HIGHLIGHTS on surfaces\n" +
+		"• NOT artificial glycerin - REAL food moisture from cooking\n" +
+		"• Looks like it was JUST PREPARED moments ago, still HOT\n\n" +
+		"3. COLOR VIBRANCY:\n" +
+		"• Colors are INTENSELY SATURATED but REALISTIC\n" +
+		"• GREEN onions/scallions: VIVID bright green, freshly cut\n" +
+		"• ORANGE carrots: BRILLIANT saturated orange\n" +
+		"• RED chili/sauce: DEEP rich red with glossy sheen\n" +
+		"• WHITE sesame seeds: CREAM colored, each seed distinct\n" +
+		"• CABBAGE: Fresh pale green with crisp appearance\n" +
+		"• MEAT: Rich brown with caramelized edges, sauce coating\n" +
+		"• NOT washed out, dull, or faded - PUNCHY vibrant colors\n\n" +
+		"4. DEPTH & DIMENSION:\n" +
+		"• Food has THREE-DIMENSIONAL presence with VOLUME\n" +
+		"• Ingredients OVERLAP and LAYER naturally\n" +
+		"• You can see DEPTH - items in front vs items behind\n" +
+		"• Shadows and highlights create SCULPTURAL form\n" +
+		"• Food looks PILED HIGH and ABUNDANT\n\n" +
+		"5. SHARP FOCUS:\n" +
+		"• Food is TACK SHARP - not soft or blurry\n" +
+		"• SHALLOW DEPTH OF FIELD - main food sharp, background soft bokeh\n" +
+		"• You can see every detail clearly on focused area\n" +
+		"• Professional camera quality focus\n\n" +
+		"6. GARNISH DETAILS:\n" +
+		"• SESAME SEEDS: Each seed INDIVIDUALLY VISIBLE, scattered naturally\n" +
+		"• GREEN ONIONS: Freshly sliced, bright green, placed on top\n" +
+		"• HERBS: Vibrant green, fresh-looking, not wilted\n" +
+		"• All garnishes look FRESHLY ADDED moments ago\n\n" +
+		"7. SAUCE & COATING:\n" +
+		"• Sauce GLISTENS and SHINES under light\n" +
+		"• You can see sauce POOLING in crevices\n" +
+		"• Sauce creates WET REFLECTIVE surface on ingredients\n" +
+		"• Caramelization visible on edges - slightly darker, glossy\n\n" +
+		"8. OIL COATING & CARAMELIZATION (COOKED FOOD):\n" +
+		"• Cooking oil creates GOLDEN/ORANGE TINT on surfaces\n" +
+		"• Oil coating makes surfaces GLISTEN with wet shine\n" +
+		"• CARAMELIZED edges where food touched hot pan - darker brown, crispy\n" +
+		"• CHAR MARKS on grilled/pan-fried surfaces - appetizing brown spots\n" +
+		"• CRISPY TEXTURE visible on fried surfaces - bubbly, crunchy appearance\n" +
+		"• MAILLARD REACTION visible - golden brown color from high heat\n" +
+		"• Overall WARM GOLDEN TONE from cooking oils and heat\n\n" +
+		"9. TOASTED/GRILLED SURFACE TEXTURE:\n" +
+		"• Toasted surfaces have MATTE-TO-SLIGHT-SHEEN finish\n" +
+		"• CHAR MARKS and BROWNING where it touched direct heat\n" +
+		"• Slightly CRINKLED or BUBBLED texture from toasting/grilling\n" +
+		"• Visible CRISPY EDGES that look crunchy and fragile\n" +
+		"• Not soft or soggy - looks DRY-CRISPY on surface\n\n" +
+		"❌ ABSOLUTE TEXTURE FAILURES:\n" +
+		"• Plastic, clay, or CGI appearance = REJECTED\n" +
+		"• Blended, mushy, or smeared textures = REJECTED\n" +
+		"• Flat, matte, lifeless surfaces = REJECTED\n" +
+		"• Soft focus or blurry food = REJECTED\n" +
+		"• Washed out or dull colors = REJECTED\n" +
+		"• Dry-looking food without natural moisture = REJECTED\n" +
+		"• Raw/uncooked appearance when food should look cooked = REJECTED\n\n" +
+		"✅ SUCCESS CRITERIA:\n" +
+		"Viewer reaction: 'This looks SO DELICIOUS I can almost smell it'\n" +
+		"Viewer reaction: 'I can see every grain/fiber/texture/seed'\n" +
+		"Viewer reaction: 'The sauce looks so glossy and appetizing'\n" +
+		"Viewer reaction: 'I can see the caramelization and char marks'\n" +
+		"Viewer reaction: 'This is definitely a professional food photo'\n\n"
 
-	// 간결한 핵심 규칙
-	criticalRules := "\n[FORBIDDEN]\n" +
-		"❌ NO collage or split screen layout\n" +
-		"❌ NO grid pattern from reference images\n\n"
+	// 라이팅 - 자연스러운 스타일
+	lightingInstruction := "\n[LIGHTING - NATURAL EDITORIAL STYLE]\n" +
+		"Soft, warm, dimensional lighting that makes food look delicious:\n\n" +
+		"MAIN LIGHT:\n" +
+		"• Soft diffused light from side/front (like window light)\n" +
+		"• Creates gentle highlights on glossy surfaces\n" +
+		"• Defines the three-dimensional form of the food\n\n" +
+		"FILL:\n" +
+		"• Subtle fill to open shadows\n" +
+		"• Maintains depth and dimension\n" +
+		"• Shadows are soft, not harsh black\n\n" +
+		"RESULT:\n" +
+		"• Food looks WARM and INVITING\n" +
+		"• Natural-looking highlights, not artificial\n" +
+		"• Depth and dimension, not flat\n" +
+		"• Colors are TRUE and VIBRANT\n\n"
 
-	// 간결한 aspect ratio 지시
-	aspectRatioInstruction := ""
+	// 금지사항 - 간결하게
+	criticalForbidden := "\n\n[FORBIDDEN]\n" +
+		"• NO split screen or grid layout\n" +
+		"• NO black backgrounds\n" +
+		"• NO borders or letterboxing\n\n"
 
-	// ⚠️ 최우선 지시사항 - 맨 앞에 배치
-	var criticalHeader string
-	if !hasBackground {
-		criticalHeader = "🚨 CRITICAL: ULTRA HIGH-GLOSS FOOD PHOTOGRAPHY 🚨\n\n" +
-			"SURFACE QUALITY (ABSOLUTE PRIORITY):\n" +
-			"• EVERY food element MUST sparkle with bright glossy highlights - like jewels\n" +
-			"• Food surface MUST appear SOAKING WET with visible oil coating - EXTREMELY glossy\n" +
-			"• INTENSE specular highlights creating bright white spots on ALL ingredients and surfaces\n" +
-			"• Water droplets, moisture beads, or condensation on food surface HIGHLY PREFERRED\n" +
-			"• MAXIMUM contrast - very bright highlights next to deep shadows\n" +
-			"• Food looks like it was JUST sprayed with water or brushed with oil - ULTRA SHINY\n" +
-			"• Every texture appears glistening and wet with individual light reflections\n\n" +
-			"FORBIDDEN:\n" +
-			"❌ ABSOLUTELY NO dry, matte, or dull appearance\n" +
-			"❌ NO subtle or weak lighting - must be STRONG and BRIGHT\n" +
-			"❌ NO flat cutout appearance\n\n"
-	} else {
-		criticalHeader = "🚨 CRITICAL: ULTRA HIGH-GLOSS FOOD PHOTOGRAPHY 🚨\n\n" +
-			"SURFACE QUALITY (ABSOLUTE PRIORITY):\n" +
-			"• EVERY food element MUST sparkle with bright glossy highlights - like jewels\n" +
-			"• Food surface MUST appear SOAKING WET with visible oil coating - EXTREMELY glossy\n" +
-			"• INTENSE specular highlights creating bright white spots on ALL food elements\n" +
-			"• MAXIMUM contrast - very bright highlights next to deep shadows\n" +
-			"• Food looks like it was JUST sprayed with water or brushed with oil\n\n" +
-			"FORBIDDEN:\n" +
-			"❌ ABSOLUTELY NO dry or matte appearance\n" +
-			"❌ NO weak lighting\n\n"
-	}
+	// 최우선 지시사항 - 전체 사진 퀄리티
+	criticalHeader := "[CRITICAL - SCENE SETUP]\n\n" +
+		"⚠️ BACKGROUND: Food directly on PLAIN WHITE/CREAM SURFACE - like a seamless paper backdrop.\n" +
+		"⚠️ NO PLATES: Food is NOT on a plate, bowl, or dish. Food sits directly on the background.\n" +
+		"⚠️ NO TABLEWARE: No plates, bowls, dishes, ceramics, or any container visible.\n\n" +
+		"If food is shown ON A PLATE = WRONG.\n" +
+		"If any dish/bowl/plate is visible = WRONG.\n\n" +
+		"[CRITICAL - TEXTURE AND COLOR TEMPERATURE]\n\n" +
+		"⚠️ COLOR TEMPERATURE: Must be WARM - golden/cream tones, NOT cold/gray/blue.\n" +
+		"⚠️ RICE COLOR: WARM WHITE or CREAM color - like freshly cooked rice with sesame oil.\n" +
+		"⚠️ RICE TEXTURE: Each grain INDIVIDUALLY VISIBLE and SEPARATED - you can count them.\n" +
+		"⚠️ OVERALL: WARM, APPETIZING, GOLDEN tones throughout the entire image.\n\n" +
+		"If rice looks GRAY or BLUE-TINTED = WRONG.\n" +
+		"If rice grains are FUSED together = WRONG.\n" +
+		"If image feels COLD or LIFELESS = WRONG.\n\n" +
+		"[SCENE]\n" +
+		"Clean product photo. Plain white/cream seamless backdrop. Food directly on surface. No plates.\n\n" +
+		"[PHOTO STYLE]\n" +
+		"Professional DSLR food photography. WARM color grading. Shallow depth of field.\n" +
+		"Like a real photograph from a food magazine - NOT CGI, NOT 3D render.\n\n" +
+		"⚠️⚠️⚠️ ABSOLUTE #1 PRIORITY - PROFESSIONAL FOOD PHOTOGRAPHY ⚠️⚠️⚠️\n\n" +
+		"THIS IMAGE MUST BE INDISTINGUISHABLE FROM A REAL PHOTOGRAPH.\n" +
+		"Shot by a professional food photographer with high-end equipment.\n" +
+		"NOT CGI. NOT 3D render. NOT AI-looking. REAL CAMERA PHOTO.\n\n" +
+		"🚨 CRITICAL TEXTURE REQUIREMENT 🚨\n\n" +
+		"[HYPER-REALISTIC TEXTURE - MOST IMPORTANT]\n\n" +
+		"RICE/GRAIN TEXTURE (CRITICAL):\n" +
+		"• Color: WARM WHITE or CREAM - NOT gray, NOT blue-tinted\n" +
+		"• Each grain INDIVIDUALLY VISIBLE - you can COUNT them\n" +
+		"• Grains are SEPARATE, not fused together\n" +
+		"• GLOSSY SHEEN from sesame oil - light reflects off surface\n" +
+		"• Slightly TRANSLUCENT edges on each grain\n" +
+		"• Looks FRESHLY COOKED and WARM\n\n" +
+		"SEAWEED/NORI TEXTURE:\n" +
+		"• Deep BLACK-GREEN color with natural sheen\n" +
+		"• FIBROUS texture visible - not smooth plastic\n" +
+		"• Natural WRINKLES and slight CRINKLES\n" +
+		"• Matte-to-slight-sheen finish, NOT glossy plastic\n\n" +
+		"PROTEIN/MEAT/FILLING TEXTURE:\n" +
+		"• Individual FIBERS visible in meat\n" +
+		"• NATURAL color variation - not uniform single color\n" +
+		"• WET/MOIST appearance with sauce coating\n" +
+		"• Visible SEASONING particles\n\n" +
+		"VEGETABLE TEXTURE:\n" +
+		"• CRISP cellular structure visible\n" +
+		"• VIBRANT saturated colors - orange carrots, green pickles\n" +
+		"• Fresh-cut appearance\n\n" +
+		"❌ TEXTURE FAILURES = INSTANT REJECTION:\n" +
+		"• Gray/blue/cold colored rice = REJECTED\n" +
+		"• Rice grains fused together as blob = REJECTED\n" +
+		"• Plastic/clay-like smooth surfaces = REJECTED\n" +
+		"• CGI/3D rendered appearance = REJECTED\n" +
+		"• Flat matte lifeless colors = REJECTED\n\n" +
+		"📷 OVERALL IMAGE CHARACTERISTICS:\n\n" +
+		"[FOOD STYLING & PRESENTATION]\n" +
+		"• Food is PROFESSIONALLY STYLED - neat, organized, intentional placement\n" +
+		"• Each component is CLEARLY SEPARATED and distinct in its own area\n" +
+		"• Ingredients are NEATLY ARRANGED - not messy or haphazard\n" +
+		"• Sauce drizzles are CLEAN and DELIBERATE - artistic zigzag patterns\n" +
+		"• Garnishes placed with INTENTION - not randomly scattered\n" +
+		"• Food presentation is CLEAN - no spills, smudges, or mess\n" +
+		"• Overall appearance: POLISHED, REFINED, COMMERCIAL-READY\n" +
+		"• Looks like a PROFESSIONAL FOOD STYLIST prepared this\n\n" +
+		"[CLEAN STUDIO ENVIRONMENT]\n" +
+		"• BRIGHT, CLEAN background - white, light gray, or soft neutral\n" +
+		"• EVEN, SOFT lighting - no harsh shadows or dark areas\n" +
+		"• Professional STUDIO QUALITY - not amateur phone photo\n" +
+		"• Background is SIMPLE and NON-DISTRACTING\n" +
+		"• Overall feeling: CLEAN, BRIGHT, APPETIZING\n\n" +
+		"[FOCUS & DEPTH OF FIELD]\n" +
+		"• SHALLOW DEPTH OF FIELD - background is SOFT BLURRED BOKEH\n" +
+		"• Main food subject is TACK SHARP with crisp detail\n" +
+		"• Smooth gradual transition from sharp foreground to blurry background\n" +
+		"• Background objects are visible but SOFTLY OUT OF FOCUS\n" +
+		"• Creates beautiful SEPARATION between subject and environment\n\n" +
+		"[LIGHTING QUALITY]\n" +
+		"• SOFT DIFFUSED STUDIO LIGHT - even and flattering\n" +
+		"• Soft shadows that define shape without being harsh\n" +
+		"• SPECULAR HIGHLIGHTS on glossy/wet surfaces - sauce, oil, moisture\n" +
+		"• Overall BRIGHT and WELL-LIT - no dark, underexposed areas\n" +
+		"• Light wraps around food creating THREE-DIMENSIONAL form\n\n" +
+		"[COLOR RENDERING]\n" +
+		"• Colors are RICH, SATURATED, and VIBRANT\n" +
+		"• CLEAN color reproduction - true to life\n" +
+		"• High color contrast - colors POP against each other\n" +
+		"• NOT flat or desaturated - PUNCHY and appetizing\n" +
+		"• Each ingredient's color is DISTINCT and recognizable\n\n" +
+		"[COMPOSITION & FRAMING]\n" +
+		"• Food fills frame ABUNDANTLY - generous portion visible\n" +
+		"• CENTERED or well-balanced composition\n" +
+		"• Clean negative space around the subject\n" +
+		"• Eye naturally drawn to the food as HERO of image\n\n" +
+		"[SENSE OF FRESHNESS]\n" +
+		"• Food looks FRESHLY PREPARED - vibrant and appetizing\n" +
+		"• Ingredients look VIBRANT and ALIVE, not old or wilted\n" +
+		"• Sauce and oil GLISTEN as if just poured\n" +
+		"• Overall feeling: 'This was just styled for a photoshoot'\n\n" +
+		"❌ INSTANT REJECTION CRITERIA:\n" +
+		"• Plastic/clay/CGI appearance\n" +
+		"• Smooth, blended, mushy textures\n" +
+		"• Flat, matte, lifeless surfaces\n" +
+		"• Dull, washed-out colors\n" +
+		"• Soft focus or blur ON FOOD (background blur is GOOD)\n" +
+		"• Harsh flash lighting or dark shadows\n" +
+		"• Messy, unorganized food presentation\n" +
+		"• Dirty or messy presentation with spills\n" +
+		"• Dark, dingy background\n\n"
+
+	// 스타일 가이드
+	styleGuide := "\n\n[STYLE GUIDE]\n" +
+		"Premium editorial food photography. Natural warm lighting. " +
+		"45-degree angle. Shallow depth of field with beautiful bokeh. " +
+		"Sharp texture detail on every surface. Vibrant natural colors. " +
+		"Fresh, appetizing appearance. Magazine cover quality.\n"
 
 	// 최종 조합
 	var finalPrompt string
 
-	// 🚨 ABSOLUTE PROHIBITIONS - 맨 앞에 배치하여 절대 금지 사항 명확히
-	absoluteProhibitions := "⛔ ABSOLUTE PROHIBITIONS (MUST NEVER HAPPEN):\n" +
-		"❌ NEVER create images with BLACK or DARK backgrounds\n" +
-		"❌ NEVER make food appear as floating PNG cutout on black/dark background\n" +
-		"❌ NEVER use transparent or isolated product shot style\n" +
-		"❌ NEVER create collage or split-screen layouts\n" +
-		"❌ Background MUST be WHITE or light-colored studio environment\n\n" +
-		"✅ MANDATORY: Clean white studio background with professional food photography lighting\n" +
-		"✅ MANDATORY: Food naturally placed on surface with proper shadows and depth\n" +
-		"✅ MANDATORY: Cohesive studio photograph - NOT a cutout or isolated element\n\n" +
-		"📐 COMPOSITION VARIETY (avoid rigid centering):\n" +
-		"• Use diverse professional food photography compositions\n" +
-		"• Consider rule of thirds, off-center placement, dynamic angles\n" +
-		"• Overhead shots, 45-degree angles, close-ups, cross-sections - vary naturally\n" +
-		"• Avoid always centering single food items - be creative with placement\n" +
-		"• Natural, editorial-style food photography composition\n\n"
-
-	// 🔥 CRITICAL: 항상 강력한 시스템 프롬프트 먼저 (food photography 기본 품질 보장)
-	finalPrompt = absoluteProhibitions + criticalHeader + mainInstruction + strings.Join(instructions, "\n") + compositionInstruction
-
-	// 간결한 스타일 가이드
-	categoryStyleGuide := ""
-
-	// 사용자 프롬프트가 있으면 추가 (시스템 프롬프트 뒤에 배치하여 보완 역할)
 	if userPrompt != "" {
-		finalPrompt += "\n\n[ADDITIONAL USER REQUIREMENTS]:\n" + userPrompt + "\n" +
-			"(Apply these additional requirements while maintaining the glossy professional food photography style above)\n\n"
+		finalPrompt = criticalHeader + "[ADDITIONAL REQUIREMENTS]\n" + userPrompt + "\n\n"
+	} else {
+		finalPrompt = criticalHeader
 	}
 
-	// 마지막 필수 규칙들
-	finalPrompt += categoryStyleGuide + criticalRules + aspectRatioInstruction
+	finalPrompt += textureDetail + mainInstruction + strings.Join(instructions, "\n") + lightingInstruction + styleGuide + criticalForbidden
 
 	return finalPrompt
 }

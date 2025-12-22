@@ -698,11 +698,11 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 			"   - Options: Glossy wet shiny / Matte dry flat / Rough textured organic / Smooth polished refined / " +
 			"     Dewy fresh moisture / Crispy golden crunchy / Soft fluffy delicate / Hard geometric sharp\n\n" +
 
-			"7️⃣ GARNISH & STYLING DETAILS:\n" +
-			"   - Rotate decorative elements constantly\n" +
-			"   - Choices: Fresh herb sprinkles (basil, cilantro, mint, parsley, dill) / Colorful spice dusts / " +
-			"     Artistic sauce drizzles / Edible flower petals / Citrus zest / Sesame seeds / Microgreens / " +
-			"     Chili flakes / Sea salt crystals / Edible gold leaf / Berry accents / Nut crumbles / Nothing (minimal clean)\n\n" +
+			"7️⃣ BACKGROUND SURFACE ONLY:\n" +
+			"   - Keep background COMPLETELY EMPTY and CLEAN\n" +
+			"   - Options: Plain white / Off-white / Light gray / Cream\n" +
+			"   - ABSOLUTELY NO garnishes, herbs, flowers, seeds, or any decoration around the food\n" +
+			"   - ONLY the food item itself on clean empty background\n\n" +
 
 			"8️⃣ DEPTH OF FIELD:\n" +
 			"   - Vary focus dramatically\n" +
@@ -710,10 +710,10 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 			"   - Deep focus with everything sharp\n" +
 			"   - Selective focus on specific elements\n\n" +
 
-			"9️⃣ ATMOSPHERIC EFFECTS:\n" +
-			"   - Add variety through environmental elements\n" +
-			"   - Steam rising / Dust particles in light / Condensation droplets / Smoke wisps / " +
-			"     Bokeh light spots / Lens flare / Shadow patterns / None (clean crisp)\n\n" +
+			"9️⃣ CLEAN PRESENTATION:\n" +
+			"   - NO atmospheric effects or particles\n" +
+			"   - Clean, crisp, professional product shot\n" +
+			"   - Focus only on the food texture and quality\n\n" +
 
 			"🔟 EMOTIONAL TONE:\n" +
 			"   - Rotate the feeling/vibe completely\n" +
@@ -726,7 +726,10 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 			"   • NO cutlery, utensils, chopsticks, or serving tools\n" +
 			"   • NO napkins, placemats, or table linens\n" +
 			"   • NO dining tables, restaurant settings, or table setups\n" +
-			"   • ONLY use: Food items + Background (as provided in reference images)\n\n" +
+			"   • NO flower petals, herbs, microgreens, sprouts around the food\n" +
+			"   • NO sesame seeds, salt, spices scattered on background surface\n" +
+			"   • NO ANY decorative elements outside the main food item\n" +
+			"   • ONLY: Food item on CLEAN EMPTY background - NOTHING ELSE\n\n" +
 
 			"🎯 CREATIVE DIVERSITY GOAL:\n" +
 			"If you generated 10 images in a row, each one should look like it came from 10 completely different photographers,\n" +
@@ -739,27 +742,30 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("🎨 [Eats Service] Added EXTREME MAXIMUM diversity instructions (%d chars)", len(diversityPrompt))
 	}
 
-	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가
+	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가 (맨 뒤에 배치)
 	if imageCount >= 2 {
 		fusionPrompt := "\n\n[MULTI-IMAGE FUSION INSTRUCTION]\n" +
 			"Seamlessly blend the background and objects into one unified photorealistic scene.\n" +
 			"Maintain natural lighting, shadows, and atmosphere throughout the entire composition.\n"
-		dynamicPrompt = fusionPrompt + dynamicPrompt
+		dynamicPrompt = dynamicPrompt + fusionPrompt
 		log.Printf("📎 [Eats Service] Added multi-image fusion prompt (%d images)", imageCount)
 	}
 
-	// Food 이미지가 여러 개일 때 겹침 방지 프롬프트 추가
+	// Food 이미지가 여러 개일 때 겹침 방지 프롬프트 추가 (맨 뒤에 배치)
 	if foodCount > 1 {
 		noOverlapPrompt := "\n\n[FOOD ARRANGEMENT INSTRUCTION]\n" +
 			"IMPORTANT: Arrange all food items WITHOUT OVERLAPPING each other.\n" +
 			"Each food item should be clearly visible and separated with natural spacing.\n" +
 			"Maintain proper depth and perspective while keeping items distinct and non-overlapping.\n"
-		dynamicPrompt = noOverlapPrompt + dynamicPrompt
+		dynamicPrompt = dynamicPrompt + noOverlapPrompt
 		log.Printf("📎 [Eats Service] Added no-overlap prompt for %d food items", foodCount)
 	}
 
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
+
+	// 디버그: 실제 프롬프트 내용 출력
+	log.Printf("📋 [DEBUG] Full prompt content:\n%s", dynamicPrompt)
 
 	// Content 생성
 	content := &genai.Content{
