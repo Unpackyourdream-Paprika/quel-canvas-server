@@ -14,110 +14,111 @@ type PromptCategories struct {
 	Background []byte   // 배경 이미지 (최대 1장)
 }
 
-// GenerateDynamicPrompt - Cinema 모듈 전용 프롬프트 생성 (간소화 및 명확화 버전)
+// GenerateDynamicPrompt - Cinema 모듈 전용 프롬프트 생성 (ARRI ALEXA 스타일)
 func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
 	// 케이스 분석 (프론트 type 기준)
-	hasActor := len(categories.Actor) > 0      // type: actor, face
+	hasActor := len(categories.Actor) > 0
 	actorCount := len(categories.Actor)
-	hasClothing := len(categories.Clothing) > 0 // type: top, pants, outer
-	hasProp := len(categories.Prop) > 0         // type: prop
+	hasClothing := len(categories.Clothing) > 0
+	hasProp := len(categories.Prop) > 0
 	hasProducts := hasClothing || hasProp
 	hasBackground := categories.Background != nil
 
 	var promptBuilder strings.Builder
 
-	// 1. [TASK DEFINITION] - 명확한 목표 설정
-	promptBuilder.WriteString("[TASK]\n")
+	// 최우선 규칙 - 통합된 씬
 	if hasActor {
-		promptBuilder.WriteString("Generate a photorealistic cinematic film still.\n")
-		promptBuilder.WriteString(fmt.Sprintf("The scene MUST contain EXACTLY %d person(s).\n", actorCount))
+		promptBuilder.WriteString("=== CREATE ONE UNIFIED SCENE ===\n\n")
+		promptBuilder.WriteString("[THE GOAL]\n")
+		promptBuilder.WriteString("Place the actor INTO the environment. They must look like they BELONG there.\n")
+		promptBuilder.WriteString("The environment's light must fall on the actor's face and body.\n")
+		promptBuilder.WriteString("The actor must cast shadows in the environment.\n\n")
+		promptBuilder.WriteString("[FACE - KEEP IDENTITY]\n")
+		promptBuilder.WriteString("Same face features (eyes, nose, lips, face shape).\n")
+		promptBuilder.WriteString("BUT the face must be LIT by the environment's lighting.\n")
+		promptBuilder.WriteString("If background has warm orange light, face has warm orange light.\n")
+		promptBuilder.WriteString("If background has blue neon, face reflects blue neon.\n\n")
+		promptBuilder.WriteString("[BODY - CORRECT PROPORTIONS]\n")
+		promptBuilder.WriteString("Natural human proportions. No stretched or distorted limbs.\n\n")
+		promptBuilder.WriteString("=================================\n\n")
+	}
+
+	// 메인 지시사항
+	promptBuilder.WriteString("[ARRI ALEXA 35 CINEMATIC FILM STILL]\n\n")
+	promptBuilder.WriteString("You are a cinematographer shooting a film scene with ARRI ALEXA 35.\n")
+	if hasActor {
+		promptBuilder.WriteString(fmt.Sprintf("Create ONE cinematic photograph with EXACTLY %d person(s).\n\n", actorCount))
 	} else if hasProducts {
-		promptBuilder.WriteString("Generate a photorealistic cinematic product shot.\n")
-		promptBuilder.WriteString("NO people allowed. Focus on the objects.\n")
+		promptBuilder.WriteString("Create ONE cinematic product shot. NO people.\n\n")
 	} else {
-		promptBuilder.WriteString("Generate a photorealistic cinematic environment shot.\n")
-		promptBuilder.WriteString("NO people or specific products allowed. Focus on the location.\n")
+		promptBuilder.WriteString("Create ONE cinematic environment shot. NO people, NO products.\n\n")
 	}
-	promptBuilder.WriteString("\n")
 
-	// 2. [SUBJECTS] - 인물/모델 상세 지시 (담백하게)
+	// 우선순위
 	if hasActor {
-		promptBuilder.WriteString("[SUBJECTS - CRITICAL]\n")
-		for i := range categories.Actor {
-			idx := i + 1
-			promptBuilder.WriteString(fmt.Sprintf("%d. Person %d: Use Reference Image %d.\n", idx, idx, idx))
-			promptBuilder.WriteString("   - FACE: Copy the face, age, gender, and ethnicity EXACTLY.\n")
-			promptBuilder.WriteString("   - BODY: Observe the full body structure/shape in the reference and maintain it.\n")
-			if actorCount > 1 {
-				promptBuilder.WriteString("   - INTERACTION: Natural interaction with other subjects in the scene.\n")
-			}
-		}
-		promptBuilder.WriteString("\n")
+		promptBuilder.WriteString("[PRIORITY 1 - FACE]: IDENTICAL to reference. No changes allowed.\n")
+		promptBuilder.WriteString("[PRIORITY 2 - BODY]: Natural human proportions. No distortion.\n")
 	}
-
-	// 3. [ATTIRE & PROPS] - 의상 및 소품
-	if hasClothing || hasProp {
-		promptBuilder.WriteString("[ATTIRE & PROPS]\n")
-		if hasClothing {
-			promptBuilder.WriteString("- Wear the clothing shown in the Clothing Reference Images.\n")
-		}
-		if hasProp {
-			promptBuilder.WriteString("- Include the accessories shown in the Accessory Reference Images.\n")
-		}
-		promptBuilder.WriteString("\n")
+	if hasProducts {
+		promptBuilder.WriteString("[PRIORITY 3 - CLOTHING/PROPS]: Keep design. Redraw with scene lighting.\n")
 	}
+	promptBuilder.WriteString("[PRIORITY LAST - BACKGROUND]: Do NOT copy. Create a completely NEW environment. Reference is only for mood.\n\n")
 
-	// 4. [ENVIRONMENT] - 배경 및 조명
-	promptBuilder.WriteString("[ENVIRONMENT & LIGHTING]\n")
+	// 통일된 조명
+	promptBuilder.WriteString("[UNIFIED LIGHTING]:\n")
+	promptBuilder.WriteString("One light source for entire scene. Actor, props, background - all same direction.\n")
+	promptBuilder.WriteString("Clothing/prop's original lighting must be replaced with scene lighting.\n\n")
+
+	// ARRI ALEXA 룩
+	promptBuilder.WriteString("[ARRI ALEXA LOOK]:\n")
+	promptBuilder.WriteString("Rich shadows, smooth highlights, organic skin tones, cinematic depth of field.\n")
+	promptBuilder.WriteString("Film-like color grade, subtle grain, premium cinema quality.\n\n")
+
+	// 레퍼런스 이미지 설명
+	promptBuilder.WriteString("[REFERENCE IMAGES]:\n")
+	imageIndex := 1
+	if hasActor {
+		for i := 0; i < actorCount; i++ {
+			promptBuilder.WriteString(fmt.Sprintf("Image %d (ACTOR %d): FACE is sacred - keep EXACTLY. Body proportions must be correct.\n", imageIndex, i+1))
+			imageIndex++
+		}
+	}
+	if hasClothing {
+		promptBuilder.WriteString(fmt.Sprintf("Image %d (CLOTHING): Design reference. Redraw with scene lighting.\n", imageIndex))
+		imageIndex++
+	}
+	if hasProp {
+		promptBuilder.WriteString(fmt.Sprintf("Image %d (PROP): Shape reference. Redraw with scene lighting.\n", imageIndex))
+		imageIndex++
+	}
 	if hasBackground {
-		promptBuilder.WriteString("- LOCATION: Use the Background Reference Image as the location.\n")
-		promptBuilder.WriteString("- LIGHTING: Match the lighting direction and mood of the background.\n")
-		promptBuilder.WriteString("- INTEGRATION: Subjects must cast realistic shadows and interact with the environment.\n")
-	} else {
-		promptBuilder.WriteString("- LOCATION: Cinematic setting appropriate for the subject.\n")
-		promptBuilder.WriteString("- LIGHTING: Professional cinematic lighting (rim light, key light, atmospheric).\n")
+		promptBuilder.WriteString(fmt.Sprintf("Image %d (BACKGROUND): DO NOT COPY THIS. Create a NEW environment. Only use for mood/feeling.\n", imageIndex))
 	}
 	promptBuilder.WriteString("\n")
 
-	// 5. [STYLE & COMPOSITION] - 스타일 (간결하게)
-	promptBuilder.WriteString("[STYLE]\n")
-	promptBuilder.WriteString("- 100% Photorealistic, 8k resolution, highly detailed.\n")
-	promptBuilder.WriteString("- Film photography aesthetic (fine grain, natural colors).\n")
+	// 출력 요구사항
+	promptBuilder.WriteString("[OUTPUT - FILL ENTIRE FRAME]:\n")
+	promptBuilder.WriteString("Image must touch all 4 edges. NO empty space.\n")
+	promptBuilder.WriteString("NO black bars on left/right. NO letterbox on top/bottom.\n")
+	promptBuilder.WriteString("Content fills 100% of the canvas.\n\n")
+
+	// 금지사항 (간결하게)
+	promptBuilder.WriteString("[FORBIDDEN - INSTANT REJECTION]:\n")
+	promptBuilder.WriteString("- ANY face modification (different eyes, nose, lips, face shape)\n")
+	promptBuilder.WriteString("- ANY body distortion (stretched legs, wrong head size, unnatural proportions)\n")
+	promptBuilder.WriteString("- Split screens, collages, borders, multiple panels\n")
+	promptBuilder.WriteString("- Cartoon, illustration, 3D render style\n")
+	promptBuilder.WriteString("- Floating objects, physics violations\n\n")
+
+	// 16:9 비율
 	if aspectRatio == "16:9" {
-		promptBuilder.WriteString("- Wide cinematic aspect ratio. Use the width for atmospheric depth.\n")
+		promptBuilder.WriteString("[16:9 WIDE FORMAT]:\n")
+		promptBuilder.WriteString("Use horizontal space for cinematic composition.\n\n")
 	}
-	promptBuilder.WriteString("\n")
 
-	// 카테고리별 고정 스타일 가이드
-	promptBuilder.WriteString("[CINEMATIC PHOTOGRAPHY STYLE GUIDE]\n")
-	promptBuilder.WriteString("Cinematic scene. Natural lighting. Emotional depth. Film grain. Anamorphic lens. Professional composition.\n\n")
-	promptBuilder.WriteString("[TECHNICAL CONSTRAINTS]\n")
-	promptBuilder.WriteString("ABSOLUTELY NO VERTICAL COMPOSITION. ABSOLUTELY NO SIDE MARGINS. ABSOLUTELY NO WHITE/GRAY BARS ON LEFT OR RIGHT. Fill entire width from left edge to right edge. NO letterboxing. NO pillarboxing. NO empty sides.\n\n")
-
-	// 6. [NEGATIVE CONSTRAINTS] - 절대 금지 사항 (핵심만)
-	promptBuilder.WriteString("[STRICT NEGATIVE CONSTRAINTS]\n")
-	promptBuilder.WriteString("- NO distorted faces or bodies.\n")
-	promptBuilder.WriteString("- NO missing people (Must have exactly the number specified).\n")
-	promptBuilder.WriteString("- NO extra people (Do not add random crowds).\n")
-	promptBuilder.WriteString("- NO split screens, borders, or collage layouts.\n")
-	promptBuilder.WriteString("- NO cartoon, illustration, or 3D render style. Must be PHOTO-REAL.\n\n")
-	promptBuilder.WriteString("[ABSOLUTELY FORBIDDEN - IMAGE WILL BE REJECTED]:\n")
-	promptBuilder.WriteString("- NO left-right split, NO side-by-side layout, NO duplicate subject on both sides\n")
-	promptBuilder.WriteString("- NO grid, NO collage, NO comparison view, NO before/after layout\n")
-	promptBuilder.WriteString("- NO vertical dividing line, NO center split, NO symmetrical duplication\n")
-	promptBuilder.WriteString("- NO white/gray borders, NO letterboxing, NO empty margins on any side\n")
-	promptBuilder.WriteString("- NO multiple identical poses, NO mirrored images, NO panel divisions\n")
-	promptBuilder.WriteString("- NO vertical portrait orientation with side margins\n\n")
-	promptBuilder.WriteString("[REQUIRED - MUST GENERATE THIS WAY]:\n")
-	promptBuilder.WriteString("- ONE single continuous photograph taken with ONE camera shutter\n")
-	promptBuilder.WriteString("- ONE unified moment in time - NOT two or more moments combined\n")
-	promptBuilder.WriteString("- FILL entire frame edge-to-edge with NO empty space\n")
-	promptBuilder.WriteString("- Natural asymmetric composition - left side MUST be different from right side\n")
-	promptBuilder.WriteString("- Professional editorial style - real single-shot photography only\n")
-
-	// 7. [USER INSTRUCTION] - 사용자 입력 (최우선 적용)
+	// 사용자 프롬프트
 	if userPrompt != "" {
-		promptBuilder.WriteString("\n[ADDITIONAL INSTRUCTION]\n")
+		promptBuilder.WriteString("[STYLING]:\n")
 		promptBuilder.WriteString(userPrompt)
 	}
 

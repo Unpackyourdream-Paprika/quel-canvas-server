@@ -15,7 +15,6 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -527,96 +526,7 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 	return dst
 }
 
-// generateDynamicPrompt - 상황별 동적 프롬프트 생성 (간소화 및 명확화 버전)
-func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
-	// 케이스 분석
-	hasModels := len(categories.Actor) > 0
-	modelCount := len(categories.Actor)
-	hasClothing := len(categories.Clothing) > 0
-	hasAccessories := len(categories.Prop) > 0
-	hasProducts := hasClothing || hasAccessories
-	hasBackground := categories.Background != nil
-
-	var promptBuilder strings.Builder
-
-	// 1. [TASK DEFINITION] - 명확한 목표 설정
-	promptBuilder.WriteString("[TASK]\n")
-	if hasModels {
-		promptBuilder.WriteString("Generate a photorealistic cinematic film still.\n")
-		promptBuilder.WriteString(fmt.Sprintf("The scene MUST contain EXACTLY %d person(s).\n", modelCount))
-	} else if hasProducts {
-		promptBuilder.WriteString("Generate a photorealistic cinematic product shot.\n")
-		promptBuilder.WriteString("NO people allowed. Focus on the objects.\n")
-	} else {
-		promptBuilder.WriteString("Generate a photorealistic cinematic environment shot.\n")
-		promptBuilder.WriteString("NO people or specific products allowed. Focus on the location.\n")
-	}
-	promptBuilder.WriteString("\n")
-
-	// 2. [SUBJECTS] - 인물/모델 상세 지시 (담백하게)
-	if hasModels {
-		promptBuilder.WriteString("[SUBJECTS - CRITICAL]\n")
-		for i := range categories.Actor {
-			idx := i + 1
-			promptBuilder.WriteString(fmt.Sprintf("%d. Person %d: Use Reference Image %d.\n", idx, idx, idx))
-			promptBuilder.WriteString("   - FACE: Copy the face, age, gender, and ethnicity EXACTLY.\n")
-			promptBuilder.WriteString("   - BODY: Observe the full body structure/shape in the reference and maintain it.\n")
-			if modelCount > 1 {
-				promptBuilder.WriteString("   - INTERACTION: Natural interaction with other subjects in the scene.\n")
-			}
-		}
-		promptBuilder.WriteString("\n")
-	}
-
-	// 3. [ATTIRE & PROPS] - 의상 및 소품
-	if hasClothing || hasAccessories {
-		promptBuilder.WriteString("[ATTIRE & PROPS]\n")
-		if hasClothing {
-			promptBuilder.WriteString("- Wear the clothing shown in the Clothing Reference Images.\n")
-		}
-		if hasAccessories {
-			promptBuilder.WriteString("- Include the accessories shown in the Accessory Reference Images.\n")
-		}
-		promptBuilder.WriteString("\n")
-	}
-
-	// 4. [ENVIRONMENT] - 배경 및 조명
-	promptBuilder.WriteString("[ENVIRONMENT & LIGHTING]\n")
-	if hasBackground {
-		promptBuilder.WriteString("- LOCATION: Use the Background Reference Image as the location.\n")
-		promptBuilder.WriteString("- LIGHTING: Match the lighting direction and mood of the background.\n")
-		promptBuilder.WriteString("- INTEGRATION: Subjects must cast realistic shadows and interact with the environment.\n")
-	} else {
-		promptBuilder.WriteString("- LOCATION: Cinematic setting appropriate for the subject.\n")
-		promptBuilder.WriteString("- LIGHTING: Professional cinematic lighting (rim light, key light, atmospheric).\n")
-	}
-	promptBuilder.WriteString("\n")
-
-	// 5. [STYLE & COMPOSITION] - 스타일 (간결하게)
-	promptBuilder.WriteString("[STYLE]\n")
-	promptBuilder.WriteString("- 100% Photorealistic, 8k resolution, highly detailed.\n")
-	promptBuilder.WriteString("- Film photography aesthetic (fine grain, natural colors).\n")
-	if aspectRatio == "16:9" {
-		promptBuilder.WriteString("- Wide cinematic aspect ratio. Use the width for atmospheric depth.\n")
-	}
-	promptBuilder.WriteString("\n")
-
-	// 6. [NEGATIVE CONSTRAINTS] - 절대 금지 사항 (핵심만)
-	promptBuilder.WriteString("[STRICT NEGATIVE CONSTRAINTS]\n")
-	promptBuilder.WriteString("- NO distorted faces or bodies.\n")
-	promptBuilder.WriteString("- NO missing people (Must have exactly the number specified).\n")
-	promptBuilder.WriteString("- NO extra people (Do not add random crowds).\n")
-	promptBuilder.WriteString("- NO split screens, borders, or collage layouts.\n")
-	promptBuilder.WriteString("- NO cartoon, illustration, or 3D render style. Must be PHOTO-REAL.\n")
-
-	// 7. [USER INSTRUCTION] - 사용자 입력 (최우선 적용)
-	if userPrompt != "" {
-		promptBuilder.WriteString("\n[ADDITIONAL INSTRUCTION]\n")
-		promptBuilder.WriteString(userPrompt)
-	}
-
-	return promptBuilder.String()
-}
+// generateDynamicPrompt - 삭제됨, prompt.go의 GenerateDynamicPrompt 사용
 
 // GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
 func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
@@ -708,8 +618,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 Added Background image (resized)")
 	}
 
-	// 동적 프롬프트 생성
-	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
+	// 동적 프롬프트 생성 (prompt.go의 GenerateDynamicPrompt 사용)
+	dynamicPrompt := GenerateDynamicPrompt(categories, userPrompt, aspectRatio)
 
 	// 이미지 갯수 계산 (parts에서 이미지만 카운트, 텍스트 제외)
 	imageCount := len(parts)
