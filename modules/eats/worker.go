@@ -226,7 +226,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
 
 		// Eats 전용 앵글
-		"overhead":  "Overhead flat lay angle, camera directly above subject looking straight down, top-down food photography composition, shows complete plate arrangement",
+		"overhead":  "Overhead flat lay angle, camera directly above subject looking straight down, top-down food photography composition, shows complete food arrangement",
 		"45-degree": "45-degree angle, camera tilted at diagonal viewpoint between overhead and eye-level, classic food photography perspective, shows depth and layers",
 		"macro":     "Macro close-up angle, extreme detail shot focusing on textures and ingredients, intimate food photography, fills frame with specific details",
 	}
@@ -239,8 +239,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
 
 		// Eats 전용 샷 타입
-		"full-plate": "Full plate shot, complete dish visible from edge to edge, shows entire meal composition, classic food photography framing",
-		"hero-shot":  "Hero shot, dramatic main dish photography with artistic composition, highlights the star ingredient or dish, editorial food styling",
+		"full-plate": "Full shot, complete food visible from edge to edge, shows entire meal composition, classic food photography framing",
+		"hero-shot":  "Hero shot, dramatic food photography with artistic composition, highlights the star ingredient, editorial food styling",
 		"detail":     "Detail shot, tight focus on specific ingredient or texture, artistic close-up food photography, emphasizes craftsmanship and quality",
 		"context":    "Context shot, food shown with environmental elements (table setting, restaurant atmosphere), lifestyle food photography, tells a story",
 	}
@@ -457,7 +457,7 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		}
 
 		if prompt != nil {
-			*prompt = strings.TrimSpace(*prompt + "\nIf no main dish is supplied, still present a complete plated dish.")
+			*prompt = strings.TrimSpace(*prompt + "\nIf no main food is supplied, still present the complete food item.")
 		}
 	}
 

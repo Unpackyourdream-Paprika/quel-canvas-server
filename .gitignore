@@ -38,3 +38,4 @@ tmp/
 # Claude settings
 .claude/settings.local.json
 app
+public/vertexai-credentials.json
