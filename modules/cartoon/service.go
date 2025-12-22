@@ -15,7 +15,6 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -526,93 +525,7 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 	return dst
 }
 
-// generateDynamicPrompt - 상황별 동적 프롬프트 생성
-func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
-	// 케이스 분석을 위한 변수 정의
-	hasCharacter := len(categories.Character) > 0
-	characterCount := len(categories.Character)
-	hasProp := len(categories.Prop) > 0
-	hasBackground := categories.Background != nil
-
-	// 케이스별 메인 지시사항 - 간소화
-	var mainInstruction string
-	if hasCharacter {
-		if characterCount == 1 {
-			mainInstruction = "[IMAGE GENERATION]\n" +
-				"Create ONE unified illustration with the character.\n" +
-				"Character and background rendered together as one piece.\n\n"
-		} else {
-			mainInstruction = fmt.Sprintf("[IMAGE GENERATION - %d CHARACTERS]\n"+
-				"Create ONE unified illustration with %d DISTINCT CHARACTERS.\n"+
-				"Each character MUST appear exactly as shown in their reference.\n\n", characterCount, characterCount)
-		}
-	} else if hasProp {
-		mainInstruction = "[PRODUCT IMAGE]\n" +
-			"Create ONE illustration showcasing the products.\n" +
-			"NO people - products only.\n\n"
-	} else {
-		mainInstruction = "[ENVIRONMENT IMAGE]\n" +
-			"Create ONE illustration of the environment.\n" +
-			"NO people or products.\n\n"
-	}
-
-	var instructions []string
-	imageIndex := 1
-
-	// 각 카테고리별 설명 - 간소화
-	for i := range categories.Character {
-		if len(categories.Character) == 1 {
-			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (CHARACTER): Use this character's appearance exactly.", imageIndex))
-		} else {
-			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d (CHARACTER %d): Use this character's appearance exactly.", imageIndex, i+1))
-		}
-		imageIndex++
-	}
-
-	if len(categories.Prop) > 0 {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (PROPS): Include all these items.", imageIndex))
-		imageIndex++
-	}
-
-	if categories.Background != nil {
-		instructions = append(instructions,
-			fmt.Sprintf("Reference Image %d (BACKGROUND): Use this exact background.", imageIndex))
-		imageIndex++
-	}
-
-	// 구성 지시사항 - 간소화
-	var compositionInstruction string
-
-	if hasCharacter {
-		compositionInstruction = "\n[COMPOSITION]\nGenerate ONE illustration with the character(s)."
-		if hasBackground {
-			compositionInstruction += " Use the exact background from reference."
-		}
-	} else if hasProp {
-		compositionInstruction = "\n[COMPOSITION]\nGenerate ONE product illustration. NO people."
-	} else if hasBackground {
-		compositionInstruction = "\n[COMPOSITION]\nGenerate ONE environment illustration. NO people or products."
-	}
-
-	// 핵심 요구사항 - 최소화
-	var criticalRules string
-	criticalRules = "\n\n[REQUIREMENTS]\n" +
-		"• ONE single unified image\n" +
-		"• NO split-screen or collage\n" +
-		"• Character integrated naturally (not pasted)\n"
-
-	// 최종 조합 - 간소화
-	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + compositionInstruction + criticalRules
-
-	if userPrompt != "" {
-		finalPrompt += "\n\n[USER REQUEST]\n" + userPrompt
-	}
-
-	return finalPrompt
-}
+// generateDynamicPrompt - 삭제됨, prompt.go의 GenerateDynamicPrompt 사용
 
 // GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
 func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
@@ -686,8 +599,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 Added Background image (resized)")
 	}
 
-	// 동적 프롬프트 생성
-	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
+	// 동적 프롬프트 생성 (prompt.go의 GenerateDynamicPrompt 사용)
+	dynamicPrompt := GenerateDynamicPrompt(categories, userPrompt, aspectRatio)
 
 	// 이미지 갯수 계산 (parts에서 이미지만 카운트, 텍스트 제외)
 	imageCount := len(parts)

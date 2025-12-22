@@ -245,13 +245,24 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 			angle := fallback.SafeString(combo["angle"], "front")
 			shot := fallback.SafeString(combo["shot"], "full")
+			fx := fallback.SafeString(combo["fx"], "none")
 			quantity := fallback.SafeInt(combo["quantity"], 1)
 
-			log.Printf("Combination %d/%d: angle=%s, shot=%s, quantity=%d (parallel)",
-				idx+1, len(combinations), angle, shot, quantity)
+			log.Printf("Combination %d/%d: angle=%s, shot=%s, fx=%s, quantity=%d (parallel)",
+				idx+1, len(combinations), angle, shot, fx, quantity)
 
-			// 앵글/샷 정보만 간단히 추가
-			enhancedPrompt := fmt.Sprintf("%s view, %s. %s", angle, shot, basePrompt)
+			// 앵글/샷/FX에 대한 상세 설명 추가
+			angleDesc := GetAngleDescription(angle)
+			shotDesc := GetShotDescription(shot)
+			fxDesc := GetFXDescription(fx)
+
+			// 앵글을 프롬프트 맨 앞과 맨 뒤에 2번 강조
+			var enhancedPrompt string
+			if fxDesc != "" {
+				enhancedPrompt = fmt.Sprintf("⚠️ MANDATORY CAMERA ANGLE: %s\n\n[FRAMING]: %s\n[VISUAL FX]: %s\n\n%s\n\n⚠️ REMINDER - CAMERA ANGLE: %s", angleDesc, shotDesc, fxDesc, basePrompt, angleDesc)
+			} else {
+				enhancedPrompt = fmt.Sprintf("⚠️ MANDATORY CAMERA ANGLE: %s\n\n[FRAMING]: %s\n\n%s\n\n⚠️ REMINDER - CAMERA ANGLE: %s", angleDesc, shotDesc, basePrompt, angleDesc)
+			}
 
 			log.Printf("📝 Combination %d Enhanced Prompt: %s", idx+1, enhancedPrompt[:minInt(100, len(enhancedPrompt))])
 
