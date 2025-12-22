@@ -764,9 +764,6 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
 
-	// 디버그: 실제 프롬프트 내용 출력
-	log.Printf("📋 [DEBUG] Full prompt content:\n%s", dynamicPrompt)
-
 	// Content 생성
 	content := &genai.Content{
 		Parts: parts,
