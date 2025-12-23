@@ -534,77 +534,57 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	log.Printf("🎨 [Eats] isPreEdited: %v", isPreEdited)
 
-	// 이미지 개수 제한 (Gemini API 20MB 제한 고려)
-	const maxFoodImages = 6
-	const maxIngredientImages = 6
-	const maxPropImages = 6
-
 	log.Printf("🎨 [Eats] Calling Gemini API with categories - Food:%d, Ingredient:%d, Prop:%d, BG:%v",
 		len(categories.Food), len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
 
-	// Gemini Part 배열 구성 (이미지 병합 없이 개별 전달)
+	// Gemini Part 배열 구성
 	var parts []*genai.Part
 
-	// 순서: Food → Ingredient → Prop → Background
-
-	// 1. Food 이미지 추가 (최대 6장, 머지 없이 개별 전달)
-	foodCount := len(categories.Food)
-	if foodCount > maxFoodImages {
-		log.Printf("⚠️ Food images exceed limit: %d > %d, using first %d images",
-			foodCount, maxFoodImages, maxFoodImages)
-		foodCount = maxFoodImages
-	}
-	for i := 0; i < foodCount; i++ {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     categories.Food[i],
-			},
-		})
-	}
-	if foodCount > 0 {
-		log.Printf("📎 [Eats] Added %d Food images (original, no merge)", foodCount)
-	}
-
-	// 2. Ingredient 이미지 추가 (최대 6장)
-	ingredientCount := len(categories.Ingredient)
-	if ingredientCount > maxIngredientImages {
-		log.Printf("⚠️ Ingredient images exceed limit: %d > %d, using first %d images",
-			ingredientCount, maxIngredientImages, maxIngredientImages)
-		ingredientCount = maxIngredientImages
-	}
-	for i := 0; i < ingredientCount; i++ {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     categories.Ingredient[i],
-			},
-		})
-	}
-	if ingredientCount > 0 {
-		log.Printf("📎 [Eats] Added %d Ingredient images (original, no merge)", ingredientCount)
-	}
-
-	// 3. Prop 이미지 추가 (최대 6장)
-	propCount := len(categories.Prop)
-	if propCount > maxPropImages {
-		log.Printf("⚠️ Prop images exceed limit: %d > %d, using first %d images",
-			propCount, maxPropImages, maxPropImages)
-		propCount = maxPropImages
-	}
-	for i := 0; i < propCount; i++ {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     categories.Prop[i],
-			},
-		})
-	}
-	if propCount > 0 {
-		log.Printf("📎 [Eats] Added %d Prop images (original, no merge)", propCount)
+	// 🔥 이미지 2개씩 병합 (Background 제외)
+	mergedImages, err := MergeFoodImagesPairwise(categories)
+	if err != nil {
+		log.Printf("⚠️ [Eats] Failed to merge images, falling back to individual: %v", err)
+		// 병합 실패 시 개별 이미지로 처리
+		for _, img := range categories.Food {
+			parts = append(parts, &genai.Part{
+				InlineData: &genai.Blob{
+					MIMEType: "image/png",
+					Data:     img,
+				},
+			})
+		}
+		for _, img := range categories.Ingredient {
+			parts = append(parts, &genai.Part{
+				InlineData: &genai.Blob{
+					MIMEType: "image/png",
+					Data:     img,
+				},
+			})
+		}
+		for _, img := range categories.Prop {
+			parts = append(parts, &genai.Part{
+				InlineData: &genai.Blob{
+					MIMEType: "image/png",
+					Data:     img,
+				},
+			})
+		}
+	} else {
+		// 병합된 이미지들 추가
+		for i, img := range mergedImages {
+			parts = append(parts, &genai.Part{
+				InlineData: &genai.Blob{
+					MIMEType: "image/png",
+					Data:     img,
+				},
+			})
+			log.Printf("📎 [Eats] Added merged image %d (%d bytes)", i, len(img))
+		}
+		log.Printf("✅ [Eats] Added %d merged images (from Food:%d, Ingredient:%d, Prop:%d)",
+			len(mergedImages), len(categories.Food), len(categories.Ingredient), len(categories.Prop))
 	}
 
-	// 4. Background 이미지 추가 (1장)
+	// Background 이미지 추가 (병합하지 않고 개별 전달)
 	if categories.Background != nil {
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{
@@ -612,42 +592,15 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				Data:     categories.Background,
 			},
 		})
-		log.Printf("📎 [Eats] Added Background image (original)")
+		log.Printf("📎 [Eats] Added Background image (original, not merged)")
 	}
 
 	// 이미지 개수 카운트
 	imageCount := len(parts)
-	log.Printf("🔍 [Eats DEBUG] Total images to send: %d (Food: %d/%d, Ingredient: %d/%d, Prop: %d/%d, BG: %v)",
-		imageCount,
-		foodCount, len(categories.Food),
-		ingredientCount, len(categories.Ingredient),
-		propCount, len(categories.Prop),
-		categories.Background != nil)
+	log.Printf("🔍 [Eats DEBUG] Total images to send: %d (merged + background)", imageCount)
 
-	// isPreEdited에 따른 프롬프트 증폭 및 변형
-	var enhancedUserPrompt string
-	if !isPreEdited {
-		// 원본 이미지 (false): 유저 프롬프트를 극도로 증폭 - 훨씬 더 많이!
-		enhancedUserPrompt = "ABSOLUTELY STUNNING, award-winning, premium magazine-cover quality, " +
-			"breathtakingly beautiful, visually mesmerizing, artistically exceptional, " +
-			"gallery-worthy " + userPrompt + " " +
-			"with EXPLOSIVE creative flair, DRAMATIC lighting and shadows, " +
-			"vibrant color grading, cinematic composition, " +
-			"masterful professional food photography that stops people in their tracks. " +
-			"Ultra high-end, Instagram-viral worthy, editorial masterpiece quality. " +
-			"Luxurious, captivating, irresistibly beautiful presentation. " +
-			"Each element perfectly crafted for maximum visual wow-factor and emotional impact."
-		log.Printf("🎨 [Eats Service] MASSIVELY ENHANCED user prompt (isPreEdited: false)")
-		log.Printf("   Original: %s", userPrompt)
-		log.Printf("   Enhanced: %s", enhancedUserPrompt)
-	} else {
-		// 보정된 이미지 (true): 유저 프롬프트 그대로
-		enhancedUserPrompt = userPrompt
-		log.Printf("🎨 [Eats Service] Using original prompt (isPreEdited: true)")
-	}
-
-	// 동적 프롬프트 생성 (증폭된 프롬프트 사용, isPreEdited 전달)
-	dynamicPrompt := GenerateDynamicPrompt(categories, enhancedUserPrompt, aspectRatio, isPreEdited)
+	// 프롬프트 생성 (prompt.go에서 처리)
+	dynamicPrompt := GenerateDynamicPrompt(categories, userPrompt, aspectRatio, isPreEdited)
 
 	// isPreEdited: false일 때 추가 다양성 지시
 	if !isPreEdited {
@@ -742,27 +695,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("🎨 [Eats Service] Added EXTREME MAXIMUM diversity instructions (%d chars)", len(diversityPrompt))
 	}
 
-	// 참조 이미지가 2개 이상이면 결합 프롬프트 추가 (맨 뒤에 배치)
-	if imageCount >= 2 {
-		fusionPrompt := "\n\n[MULTI-IMAGE FUSION INSTRUCTION]\n" +
-			"Seamlessly blend the background and objects into one unified photorealistic scene.\n" +
-			"Maintain natural lighting, shadows, and atmosphere throughout the entire composition.\n"
-		dynamicPrompt = dynamicPrompt + fusionPrompt
-		log.Printf("📎 [Eats Service] Added multi-image fusion prompt (%d images)", imageCount)
-	}
-
-	// Food 이미지가 여러 개일 때 겹침 방지 프롬프트 추가 (맨 뒤에 배치)
-	if foodCount > 1 {
-		noOverlapPrompt := "\n\n[FOOD ARRANGEMENT INSTRUCTION]\n" +
-			"IMPORTANT: Arrange all food items WITHOUT OVERLAPPING each other.\n" +
-			"Each food item should be clearly visible and separated with natural spacing.\n" +
-			"Maintain proper depth and perspective while keeping items distinct and non-overlapping.\n"
-		dynamicPrompt = dynamicPrompt + noOverlapPrompt
-		log.Printf("📎 [Eats Service] Added no-overlap prompt for %d food items", foodCount)
-	}
-
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
-	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
+	log.Printf("📝 Generated dynamic prompt (%d chars), isPreEdited: %v", len(dynamicPrompt), isPreEdited)
 
 	// Content 생성
 	content := &genai.Content{
@@ -771,7 +705,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	// API 호출
 	seed := rand.Int31()
-	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d", len(parts), seed)
+	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d, model: %s", len(parts), seed, cfg.GeminiModel)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -1009,7 +943,7 @@ func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID st
 }
 
 // DeductCredits - 크레딧 차감 및 트랜잭션 기록 (개인/조직 크레딧 지원)
-func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int) error {
+func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int, apiProvider string) error {
 	cfg := config.GetConfig()
 	creditsPerImage := cfg.ImagePerPrice
 	totalCredits := len(attachIds) * creditsPerImage
@@ -1078,6 +1012,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 				"description":        "Organization Generated With Image",
 				"attach_idx":         attachID,
 				"production_idx":     productionID,
+				"api_provider":       apiProvider,
 			}
 
 			_, _, err := s.supabase.From("quel_credits").
@@ -1140,6 +1075,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 				"description":      "Generated With Image",
 				"attach_idx":       attachID,
 				"production_idx":   productionID,
+				"api_provider":     apiProvider,
 			}
 
 			_, _, err := s.supabase.From("quel_credits").
@@ -1155,4 +1091,168 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 	}
 
 	return nil
+}
+
+// MergeTwoImages - 2개의 이미지를 좌우로 병합 (리사이즈 없이 원본 그대로)
+func MergeTwoImages(img1, img2 []byte) ([]byte, error) {
+	// 이미지 디코드
+	decoded1, format1, err := image.Decode(bytes.NewReader(img1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image 1: %w", err)
+	}
+	log.Printf("🔍 [Eats Merge] Image 1 format: %s, size: %dx%d", format1, decoded1.Bounds().Dx(), decoded1.Bounds().Dy())
+
+	decoded2, format2, err := image.Decode(bytes.NewReader(img2))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image 2: %w", err)
+	}
+	log.Printf("🔍 [Eats Merge] Image 2 format: %s, size: %dx%d", format2, decoded2.Bounds().Dx(), decoded2.Bounds().Dy())
+
+	// 두 이미지 크기
+	w1, h1 := decoded1.Bounds().Dx(), decoded1.Bounds().Dy()
+	w2, h2 := decoded2.Bounds().Dx(), decoded2.Bounds().Dy()
+
+	// 캔버스 크기: 너비는 합, 높이는 둘 중 큰 값
+	totalWidth := w1 + w2
+	totalHeight := h1
+	if h2 > totalHeight {
+		totalHeight = h2
+	}
+
+	// 캔버스 생성
+	merged := image.NewRGBA(image.Rect(0, 0, totalWidth, totalHeight))
+
+	// 이미지 1을 왼쪽에 배치 (수직 중앙 정렬)
+	y1Offset := (totalHeight - h1) / 2
+	draw.Draw(merged,
+		image.Rect(0, y1Offset, w1, y1Offset+h1),
+		decoded1, decoded1.Bounds().Min, draw.Src)
+
+	// 이미지 2를 오른쪽에 배치 (수직 중앙 정렬)
+	y2Offset := (totalHeight - h2) / 2
+	draw.Draw(merged,
+		image.Rect(w1, y2Offset, w1+w2, y2Offset+h2),
+		decoded2, decoded2.Bounds().Min, draw.Src)
+
+	// PNG 인코딩
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, merged); err != nil {
+		return nil, fmt.Errorf("failed to encode merged image: %w", err)
+	}
+
+	log.Printf("✅ [Eats Merge] Merged 2 images: %dx%d + %dx%d = %dx%d (no resize)",
+		w1, h1, w2, h2, totalWidth, totalHeight)
+
+	return buf.Bytes(), nil
+}
+
+// resizeToFit - 이미지를 지정된 영역에 맞게 리사이즈 (비율 유지, 중앙 정렬)
+func resizeToFit(src image.Image, targetWidth, targetHeight int) image.Image {
+	srcBounds := src.Bounds()
+	srcWidth := srcBounds.Dx()
+	srcHeight := srcBounds.Dy()
+
+	// 비율 계산
+	scaleX := float64(targetWidth) / float64(srcWidth)
+	scaleY := float64(targetHeight) / float64(srcHeight)
+	scale := math.Min(scaleX, scaleY)
+
+	// 스케일된 크기 계산
+	newWidth := int(float64(srcWidth) * scale)
+	newHeight := int(float64(srcHeight) * scale)
+
+	// 새 이미지 생성 (목표 크기)
+	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
+
+	// 중앙 정렬을 위한 오프셋 계산
+	xOffset := (targetWidth - newWidth) / 2
+	yOffset := (targetHeight - newHeight) / 2
+
+	// Nearest Neighbor 방식으로 리사이즈
+	for y := 0; y < newHeight; y++ {
+		for x := 0; x < newWidth; x++ {
+			srcX := int(float64(x) / scale)
+			srcY := int(float64(y) / scale)
+			if srcX >= srcWidth {
+				srcX = srcWidth - 1
+			}
+			if srcY >= srcHeight {
+				srcY = srcHeight - 1
+			}
+			dst.Set(x+xOffset, y+yOffset, src.At(srcX+srcBounds.Min.X, srcY+srcBounds.Min.Y))
+		}
+	}
+
+	return dst
+}
+
+// MergeFoodImagesPairwise - Food 이미지들을 2개씩 병합하여 반환
+// Background는 병합하지 않고 별도로 유지
+func MergeFoodImagesPairwise(categories *ImageCategories) ([][]byte, error) {
+	var mergedImages [][]byte
+
+	// Food 이미지 2개씩 병합
+	foodCount := len(categories.Food)
+	for i := 0; i < foodCount; i += 2 {
+		if i+1 < foodCount {
+			// 2개씩 병합
+			merged, err := MergeTwoImages(categories.Food[i], categories.Food[i+1])
+			if err != nil {
+				log.Printf("⚠️ [Eats Merge] Failed to merge food images %d and %d: %v", i, i+1, err)
+				// 실패하면 개별로 추가
+				mergedImages = append(mergedImages, categories.Food[i])
+				mergedImages = append(mergedImages, categories.Food[i+1])
+			} else {
+				mergedImages = append(mergedImages, merged)
+				log.Printf("✅ [Eats Merge] Merged food images %d and %d", i, i+1)
+			}
+		} else {
+			// 홀수 개일 때 마지막 이미지는 그대로 추가
+			mergedImages = append(mergedImages, categories.Food[i])
+			log.Printf("📎 [Eats Merge] Added single food image %d (no pair)", i)
+		}
+	}
+
+	// Ingredient 이미지 2개씩 병합
+	ingredientCount := len(categories.Ingredient)
+	for i := 0; i < ingredientCount; i += 2 {
+		if i+1 < ingredientCount {
+			merged, err := MergeTwoImages(categories.Ingredient[i], categories.Ingredient[i+1])
+			if err != nil {
+				log.Printf("⚠️ [Eats Merge] Failed to merge ingredient images %d and %d: %v", i, i+1, err)
+				mergedImages = append(mergedImages, categories.Ingredient[i])
+				mergedImages = append(mergedImages, categories.Ingredient[i+1])
+			} else {
+				mergedImages = append(mergedImages, merged)
+				log.Printf("✅ [Eats Merge] Merged ingredient images %d and %d", i, i+1)
+			}
+		} else {
+			mergedImages = append(mergedImages, categories.Ingredient[i])
+			log.Printf("📎 [Eats Merge] Added single ingredient image %d (no pair)", i)
+		}
+	}
+
+	// Prop 이미지 2개씩 병합
+	propCount := len(categories.Prop)
+	for i := 0; i < propCount; i += 2 {
+		if i+1 < propCount {
+			merged, err := MergeTwoImages(categories.Prop[i], categories.Prop[i+1])
+			if err != nil {
+				log.Printf("⚠️ [Eats Merge] Failed to merge prop images %d and %d: %v", i, i+1, err)
+				mergedImages = append(mergedImages, categories.Prop[i])
+				mergedImages = append(mergedImages, categories.Prop[i+1])
+			} else {
+				mergedImages = append(mergedImages, merged)
+				log.Printf("✅ [Eats Merge] Merged prop images %d and %d", i, i+1)
+			}
+		} else {
+			mergedImages = append(mergedImages, categories.Prop[i])
+			log.Printf("📎 [Eats Merge] Added single prop image %d (no pair)", i)
+		}
+	}
+
+	log.Printf("✅ [Eats Merge] Total merged images: %d (from Food:%d, Ingredient:%d, Prop:%d)",
+		len(mergedImages), foodCount, ingredientCount, propCount)
+
+	return mergedImages, nil
 }

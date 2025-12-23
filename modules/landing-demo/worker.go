@@ -146,15 +146,22 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	isRunware := IsRunwareModel(modelID) && !isSeedream && !isNanobanana // Seedream, Nanobanana 별도 처리
 	isMultiview := IsMultiviewModel(modelID)
 
+	// API Provider 결정 (크레딧 기록용)
+	var apiProvider string
 	if isSeedream {
+		apiProvider = "runware-seedream"
 		log.Printf("🎨 [Landing] Using Seedream API (submodule): %s", modelID)
 	} else if isNanobanana {
+		apiProvider = "gemini-banana"
 		log.Printf("🍌 [Landing] Using Nanobanana API (Gemini 2.5 Flash): %s", modelID)
 	} else if isRunware {
+		apiProvider = "runware-flux"
 		log.Printf("🎨 [Landing] Using Runware API: %s", modelID)
 	} else if isMultiview {
+		apiProvider = "gemini-banana"
 		log.Printf("🌐 [Landing] Using Multiview API: %s", modelID)
 	} else {
+		apiProvider = "gemini-banana"
 		log.Printf("🎨 [Landing] Using Gemini API (default)")
 	}
 
@@ -428,7 +435,7 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 				// 크레딧 차감
 				if job.ProductionID != nil && userID != "" {
-					if err := service.DeductCredits(bgCtx, userID, job.OrgID, *job.ProductionID, []int{attachID}); err != nil {
+					if err := service.DeductCredits(bgCtx, userID, job.OrgID, *job.ProductionID, []int{attachID}, apiProvider); err != nil {
 						log.Printf("⚠️ [Landing] [Background] Failed to deduct credits for attach %d: %v", attachID, err)
 					}
 				}
@@ -461,11 +468,11 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 		// 크레딧 차감
 		if job.ProductionID != nil && userID != "" {
-			go func(aID int, prodID string, orgID *string) {
-				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}); err != nil {
+			go func(aID int, prodID string, orgID *string, provider string) {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}, provider); err != nil {
 					log.Printf("⚠️ [Landing] Failed to deduct credits for attach %d: %v", aID, err)
 				}
-			}(attachID, *job.ProductionID, job.OrgID)
+			}(attachID, *job.ProductionID, job.OrgID, apiProvider)
 		}
 
 		generatedAttachIds = append(generatedAttachIds, attachID)

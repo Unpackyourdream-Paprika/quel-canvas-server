@@ -946,7 +946,7 @@ func (s *Service) AppendJobAttachId(ctx context.Context, jobID string, attachID 
 }
 
 // DeductCredits - 크레딧 차감
-func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int) error {
+func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int, apiProvider string) error {
 	cfg := config.GetConfig()
 	creditsPerImage := cfg.ImagePerPrice
 	totalCredits := len(attachIds) * creditsPerImage
@@ -996,6 +996,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 					"description":       "Landing Template Generated",
 					"attach_idx":        attachID,
 					"production_idx":    productionID,
+					"api_provider":      apiProvider,
 				}, false, "", "", "").
 				Execute()
 		}
@@ -1040,12 +1041,13 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 					"description":      "Landing Template Generated",
 					"attach_idx":       attachID,
 					"production_idx":   productionID,
+					"api_provider":     apiProvider,
 				}, false, "", "", "").
 				Execute()
 		}
 	}
 
-	log.Printf("✅ [Landing] Credits deducted: %d", totalCredits)
+	log.Printf("✅ [Landing] Credits deducted: %d (api: %s)", totalCredits, apiProvider)
 	return nil
 }
 

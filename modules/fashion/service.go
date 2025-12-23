@@ -980,7 +980,7 @@ func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID st
 }
 
 // DeductCredits - 크레딧 차감 및 트랜잭션 기록 (개인/조직 크레딧 지원)
-func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int) error {
+func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, attachIds []int, apiProvider string) error {
 	cfg := config.GetConfig()
 	creditsPerImage := cfg.ImagePerPrice
 	totalCredits := len(attachIds) * creditsPerImage
@@ -1049,6 +1049,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 				"description":        "Organization Generated With Image",
 				"attach_idx":         attachID,
 				"production_idx":     productionID,
+				"api_provider":       apiProvider,
 			}
 
 			_, _, err := s.supabase.From("quel_credits").
@@ -1111,6 +1112,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 				"description":      "Generated With Image",
 				"attach_idx":       attachID,
 				"production_idx":   productionID,
+				"api_provider":     apiProvider,
 			}
 
 			_, _, err := s.supabase.From("quel_credits").
