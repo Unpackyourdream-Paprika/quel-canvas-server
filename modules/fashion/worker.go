@@ -322,7 +322,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				// 크레딧 차감 (조직/개인 구분)
 				if job.ProductionID != nil && userID != "" {
 					go func(attachID int, prodID string, orgID *string) {
-						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 							log.Printf("Combination %d: Failed to deduct credits for attach %d: %v", idx+1, attachID, err)
 						}
 					}(attachID, *job.ProductionID, job.OrgID)
@@ -669,7 +669,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				// 크레딧 차감 (조직/개인 구분)
 				if job.ProductionID != nil && userID != "" {
 					go func(attachID int, prodID string, orgID *string) {
-						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 							log.Printf("Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
 						}
 					}(attachID, *job.ProductionID, job.OrgID)
@@ -844,7 +844,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			// 크레딧 차감 (조직/개인 구분)
 			if job.ProductionID != nil && userID != "" {
 				go func(aID int, prodID string, orgID *string) {
-					if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}); err != nil {
+					if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}, "gemini-banana"); err != nil {
 						log.Printf("Stage %d: Failed to deduct credits for retry attach %d: %v", stageIdx, aID, err)
 					}
 				}(attachID, *job.ProductionID, job.OrgID)
@@ -1111,7 +1111,7 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		// 4.5: 크레딧 차감 (조직/개인 구분)
 		if job.ProductionID != nil && userID != "" {
 			go func(attachID int, prodID string, orgID *string) {
-				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 					log.Printf("Failed to deduct credits for attach %d: %v", attachID, err)
 				}
 			}(attachID, *job.ProductionID, job.OrgID)
@@ -1259,7 +1259,7 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 		// 3.6: 크레딧 차감 (조직/개인 구분)
 		if job.ProductionID != nil && userID != "" {
 			go func(attachID int, prodID string, orgID *string) {
-				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 					log.Printf("Failed to deduct credits for attach %d: %v", attachID, err)
 				}
 			}(attachID, *job.ProductionID, job.OrgID)
