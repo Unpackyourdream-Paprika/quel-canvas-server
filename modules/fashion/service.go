@@ -1129,3 +1129,30 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 
 	return nil
 }
+
+// GetUserOrganization - 유저가 속한 조직 ID 조회
+func (s *Service) GetUserOrganization(ctx context.Context, userID string) (string, error) {
+	var members []struct {
+		OrgID string `json:"org_id"`
+	}
+
+	data, _, err := s.supabase.From("quel_organization_member").
+		Select("org_id", "", false).
+		Eq("member_id", userID).
+		Eq("status", "active").
+		Execute()
+
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(data, &members); err != nil {
+		return "", err
+	}
+
+	if len(members) > 0 {
+		return members[0].OrgID, nil
+	}
+
+	return "", nil
+}

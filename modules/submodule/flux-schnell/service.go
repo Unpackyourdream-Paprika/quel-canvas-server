@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/supabase-community/supabase-go"
 
 	"quel-canvas-server/modules/common/config"
 )
@@ -21,6 +23,7 @@ const FluxSchnellModelID = "runware:100@1"
 
 type Service struct {
 	httpClient *http.Client
+	supabase   *supabase.Client
 }
 
 func NewService() *Service {
@@ -31,9 +34,17 @@ func NewService() *Service {
 		return nil
 	}
 
-	log.Println("✅ [FluxSchnell] Service initialized")
+	// Supabase 클라이언트 초기화
+	supabaseClient, err := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceKey, &supabase.ClientOptions{})
+	if err != nil {
+		log.Printf("❌ [FluxSchnell] Failed to create Supabase client: %v", err)
+		return nil
+	}
+
+	log.Println("✅ [FluxSchnell] Service initialized with Supabase")
 	return &Service{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
+		supabase:   supabaseClient,
 	}
 }
 
@@ -353,4 +364,391 @@ func truncateString(s string, maxLen int) string {
 
 func generateUUID() string {
 	return uuid.New().String()
+}
+
+// UploadImageToStorage - Runware 이미지를 Supabase Storage에 업로드하고 attach 레코드 생성
+func (s *Service) UploadImageToStorage(ctx context.Context, imageURL string, userID string) (int, error) {
+	cfg := config.GetConfig()
+
+	// 1. Runware에서 이미지 다운로드
+	log.Printf("📥 [FluxSchnell] Downloading image from Runware: %s", truncateString(imageURL, 50))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create download request: %w", err)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to download image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("failed to download image: status %d", resp.StatusCode)
+	}
+
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read image data: %w", err)
+	}
+
+	log.Printf("📦 [FluxSchnell] Downloaded image: %d bytes", len(imageData))
+
+	// 2. 파일명 및 경로 생성
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+	randomID := rand.Intn(999999)
+	fileName := fmt.Sprintf("dream_%d_%d.png", timestamp, randomID)
+	filePath := fmt.Sprintf("%s/ai-assistant/%s", userID, fileName)
+
+	log.Printf("📤 [FluxSchnell] Uploading to Storage: attachments/%s", filePath)
+
+	// 3. Supabase Storage에 업로드
+	uploadURL := fmt.Sprintf("%s/storage/v1/object/attachments/%s", cfg.SupabaseURL, filePath)
+
+	uploadReq, err := http.NewRequestWithContext(ctx, "POST", uploadURL, bytes.NewReader(imageData))
+	if err != nil {
+		return 0, fmt.Errorf("failed to create upload request: %w", err)
+	}
+
+	uploadReq.Header.Set("Authorization", "Bearer "+cfg.SupabaseServiceKey)
+	uploadReq.Header.Set("Content-Type", "image/png")
+
+	uploadResp, err := s.httpClient.Do(uploadReq)
+	if err != nil {
+		return 0, fmt.Errorf("failed to upload image: %w", err)
+	}
+	defer uploadResp.Body.Close()
+
+	if uploadResp.StatusCode != http.StatusOK && uploadResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(uploadResp.Body)
+		return 0, fmt.Errorf("upload failed with status %d: %s", uploadResp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [FluxSchnell] Image uploaded to Storage: %s", filePath)
+
+	// 4. quel_attach 테이블에 레코드 생성
+	attachData := map[string]interface{}{
+		"attach_original_name": fileName,
+		"attach_file_name":     fileName,
+		"attach_file_path":     filePath,
+		"attach_file_size":     len(imageData),
+		"attach_file_type":     "image/png",
+		"attach_directory":     filePath,
+		"attach_storage_type":  "supabase",
+	}
+
+	data, _, err := s.supabase.From("quel_attach").
+		Insert(attachData, false, "", "", "").
+		Execute()
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to create attach record: %w", err)
+	}
+
+	// attach_idx 추출
+	var attaches []struct {
+		AttachID int `json:"attach_id"`
+	}
+	if err := json.Unmarshal(data, &attaches); err != nil {
+		return 0, fmt.Errorf("failed to parse attach response: %w", err)
+	}
+
+	if len(attaches) == 0 {
+		return 0, fmt.Errorf("no attach record returned")
+	}
+
+	attachIdx := attaches[0].AttachID
+	log.Printf("✅ [FluxSchnell] Attach record created: attach_idx=%d, path=%s", attachIdx, filePath)
+
+	return attachIdx, nil
+}
+
+// GetUserOrganization - 유저가 속한 조직 ID 조회
+func (s *Service) GetUserOrganization(ctx context.Context, userID string) (string, error) {
+	var members []struct {
+		OrgID string `json:"org_id"`
+	}
+
+	data, _, err := s.supabase.From("quel_organization_member").
+		Select("org_id", "", false).
+		Eq("member_id", userID).
+		Eq("status", "active").
+		Execute()
+
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(data, &members); err != nil {
+		return "", err
+	}
+
+	if len(members) > 0 {
+		return members[0].OrgID, nil
+	}
+
+	return "", nil
+}
+
+// DeductCredits - 크레딧 차감 (조직 또는 개인)
+func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *string, productionID string, imageCount int) error {
+	cfg := config.GetConfig()
+	creditsPerImage := cfg.ImagePerPrice
+	totalCredits := imageCount * creditsPerImage
+
+	// 조직 크레딧인지 개인 크레딧인지 구분
+	isOrgCredit := orgID != nil && *orgID != ""
+
+	if isOrgCredit {
+		log.Printf("💰 [FluxSchnell] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Images=%d, Total=%d credits", *orgID, userID, imageCount, totalCredits)
+	} else {
+		log.Printf("💰 [FluxSchnell] Deducting PERSONAL credits: User=%s, Images=%d, Total=%d credits", userID, imageCount, totalCredits)
+	}
+
+	var currentCredits int
+	var newBalance int
+
+	if isOrgCredit {
+		// 조직 크레딧 차감
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", *orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch organization credits: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &orgs); err != nil {
+			return fmt.Errorf("failed to parse organization data: %w", err)
+		}
+
+		if len(orgs) == 0 {
+			return fmt.Errorf("organization not found: %s", *orgID)
+		}
+
+		currentCredits = int(orgs[0].OrgCredit)
+		newBalance = currentCredits - totalCredits
+
+		log.Printf("💰 [FluxSchnell] Organization credit balance: %d → %d (-%d)", currentCredits, newBalance, totalCredits)
+
+		// 조직 크레딧 차감
+		_, _, err = s.supabase.From("quel_organization").
+			Update(map[string]interface{}{
+				"org_credit": newBalance,
+			}, "", "").
+			Eq("org_id", *orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct organization credits: %w", err)
+		}
+
+		// 트랜잭션 기록 - 조직 크레딧
+		for i := 0; i < imageCount; i++ {
+			transactionData := map[string]interface{}{
+				"user_id":           userID,
+				"org_id":            *orgID,
+				"used_by_member_id": userID,
+				"transaction_type":  "DEDUCT",
+				"amount":            -creditsPerImage,
+				"balance_after":     newBalance,
+				"description":       "Organization Dream Mode Image",
+				"api_provider":      "flux-schnell",
+				"production_idx":    productionID,
+			}
+
+			_, _, err := s.supabase.From("quel_credits").
+				Insert(transactionData, false, "", "", "").
+				Execute()
+
+			if err != nil {
+				log.Printf("⚠️ [FluxSchnell] Failed to record organization transaction: %v", err)
+			}
+		}
+
+		log.Printf("✅ [FluxSchnell] Organization credits deducted: %d credits from org %s (used by %s)", totalCredits, *orgID, userID)
+	} else {
+		// 개인 크레딧 차감
+		var members []struct {
+			QuelMemberCredit int `json:"quel_member_credit"`
+		}
+
+		data, _, err := s.supabase.From("quel_member").
+			Select("quel_member_credit", "", false).
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch user credits: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &members); err != nil {
+			return fmt.Errorf("failed to parse member data: %w", err)
+		}
+
+		if len(members) == 0 {
+			return fmt.Errorf("user not found: %s", userID)
+		}
+
+		currentCredits = members[0].QuelMemberCredit
+		newBalance = currentCredits - totalCredits
+
+		log.Printf("💰 [FluxSchnell] Personal credit balance: %d → %d (-%d)", currentCredits, newBalance, totalCredits)
+
+		// 개인 크레딧 차감
+		_, _, err = s.supabase.From("quel_member").
+			Update(map[string]interface{}{
+				"quel_member_credit": newBalance,
+			}, "", "").
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct credits: %w", err)
+		}
+
+		// 트랜잭션 기록 - 개인 크레딧
+		for i := 0; i < imageCount; i++ {
+			transactionData := map[string]interface{}{
+				"user_id":          userID,
+				"transaction_type": "DEDUCT",
+				"amount":           -creditsPerImage,
+				"balance_after":    newBalance,
+				"description":      "Dream Mode Image",
+				"api_provider":     "flux-schnell",
+				"production_idx":   productionID,
+			}
+
+			_, _, err := s.supabase.From("quel_credits").
+				Insert(transactionData, false, "", "", "").
+				Execute()
+
+			if err != nil {
+				log.Printf("⚠️ [FluxSchnell] Failed to record transaction: %v", err)
+			}
+		}
+
+		log.Printf("✅ [FluxSchnell] Personal credits deducted: %d credits from user %s", totalCredits, userID)
+	}
+
+	return nil
+}
+
+// UpdateProductionStatus - quel_production_photo 상태 업데이트
+func (s *Service) UpdateProductionStatus(ctx context.Context, productionID string, status string) error {
+	if productionID == "" {
+		return nil
+	}
+
+	_, _, err := s.supabase.From("quel_production_photo").
+		Update(map[string]interface{}{
+			"production_status": status,
+		}, "", "").
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to update production status: %w", err)
+	}
+
+	log.Printf("📋 [FluxSchnell] Production %s status updated to: %s", productionID, status)
+	return nil
+}
+
+// UpdateProductionImageComplete - 이미지 생성 완료 시 attach_ids에 attach_idx 추가 및 generated_image_count 증가
+func (s *Service) UpdateProductionImageComplete(ctx context.Context, productionID string, attachIdx int) error {
+	if productionID == "" {
+		return nil
+	}
+
+	// 현재 production 데이터 조회
+	var productions []struct {
+		AttachIDs           []int `json:"attach_ids"`
+		GeneratedImageCount int   `json:"generated_image_count"`
+		TotalQuantity       int   `json:"total_quantity"`
+	}
+
+	data, _, err := s.supabase.From("quel_production_photo").
+		Select("attach_ids, generated_image_count, total_quantity", "", false).
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to fetch production: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &productions); err != nil {
+		return fmt.Errorf("failed to parse production data: %w", err)
+	}
+
+	if len(productions) == 0 {
+		return fmt.Errorf("production not found: %s", productionID)
+	}
+
+	// attach_ids 배열에 attach_idx 추가
+	currentAttachIDs := productions[0].AttachIDs
+	if currentAttachIDs == nil {
+		currentAttachIDs = []int{}
+	}
+	currentAttachIDs = append(currentAttachIDs, attachIdx)
+
+	// attach_ids 배열 길이로 완료 체크
+	newCount := len(currentAttachIDs)
+	totalQuantity := productions[0].TotalQuantity
+
+	// 모든 이미지 생성 완료 체크
+	isCompleted := newCount >= totalQuantity
+
+	// 업데이트 데이터 구성
+	updateData := map[string]any{
+		"attach_ids":            currentAttachIDs,
+		"generated_image_count": newCount,
+	}
+
+	// 완료 시 상태 변경
+	if isCompleted {
+		updateData["production_status"] = "completed"
+		log.Printf("🎉 [FluxSchnell] Production %s: ALL %d images completed!", productionID, totalQuantity)
+	}
+
+	// 업데이트
+	_, _, err = s.supabase.From("quel_production_photo").
+		Update(updateData, "", "").
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to update production attach_ids: %w", err)
+	}
+
+	log.Printf("📷 [FluxSchnell] Production %s: attach_idx=%d added (%d/%d images)", productionID, attachIdx, newCount, totalQuantity)
+	return nil
+}
+
+// CompleteProduction - 모든 이미지 생성 완료 처리
+func (s *Service) CompleteProduction(ctx context.Context, productionID string, durationSeconds int) error {
+	if productionID == "" {
+		return nil
+	}
+
+	_, _, err := s.supabase.From("quel_production_photo").
+		Update(map[string]interface{}{
+			"production_status":            "completed",
+			"processing_duration_seconds": durationSeconds,
+		}, "", "").
+		Eq("production_id", productionID).
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to complete production: %w", err)
+	}
+
+	log.Printf("✅ [FluxSchnell] Production %s completed in %d seconds", productionID, durationSeconds)
+	return nil
 }
