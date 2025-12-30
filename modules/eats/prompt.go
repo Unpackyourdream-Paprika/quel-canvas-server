@@ -239,12 +239,9 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"• Looks like it was JUST PREPARED moments ago, still HOT\n\n" +
 		"3. COLOR VIBRANCY:\n" +
 		"• Colors are INTENSELY SATURATED but REALISTIC\n" +
-		"• GREEN onions/scallions: VIVID bright green, freshly cut\n" +
-		"• ORANGE carrots: BRILLIANT saturated orange\n" +
-		"• RED chili/sauce: DEEP rich red with glossy sheen\n" +
-		"• WHITE sesame seeds: CREAM colored, each seed distinct\n" +
-		"• CABBAGE: Fresh pale green with crisp appearance\n" +
-		"• MEAT: Rich brown with caramelized edges, sauce coating\n" +
+		"• Each ingredient shows its TRUE NATURAL COLOR at peak freshness\n" +
+		"• Greens are VIVID and bright, reds are DEEP and rich\n" +
+		"• Browns show natural CARAMELIZATION and depth\n" +
 		"• NOT washed out, dull, or faded - PUNCHY vibrant colors\n\n" +
 		"4. DEPTH & DIMENSION:\n" +
 		"• Food has THREE-DIMENSIONAL presence with VOLUME\n" +
@@ -258,9 +255,8 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"• You can see every detail clearly on focused area\n" +
 		"• Professional camera quality focus\n\n" +
 		"6. GARNISH DETAILS:\n" +
-		"• SESAME SEEDS: Each seed INDIVIDUALLY VISIBLE, scattered naturally\n" +
-		"• GREEN ONIONS: Freshly sliced, bright green, placed on top\n" +
-		"• HERBS: Vibrant green, fresh-looking, not wilted\n" +
+		"• Small garnishes are INDIVIDUALLY VISIBLE and distinct\n" +
+		"• Fresh herbs are VIBRANT green, not wilted\n" +
 		"• All garnishes look FRESHLY ADDED moments ago\n\n" +
 		"7. SAUCE & COATING:\n" +
 		"• Sauce GLISTENS and SHINES under light\n" +
@@ -320,22 +316,10 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"• NO borders or letterboxing\n\n"
 
 	// 최우선 지시사항 - 전체 사진 퀄리티
-	criticalHeader := "[CRITICAL - SCENE SETUP]\n\n" +
-		"⚠️ BACKGROUND: Food directly on PLAIN WHITE/CREAM SURFACE - like a seamless paper backdrop.\n" +
-		"⚠️ NO PLATES: Food is NOT on a plate, bowl, or dish. Food sits directly on the background.\n" +
-		"⚠️ NO TABLEWARE: No plates, bowls, dishes, ceramics, or any container visible.\n\n" +
-		"If food is shown ON A PLATE = WRONG.\n" +
-		"If any dish/bowl/plate is visible = WRONG.\n\n" +
-		"[CRITICAL - TEXTURE AND COLOR TEMPERATURE]\n\n" +
+	criticalHeader := "[CRITICAL - TEXTURE AND COLOR TEMPERATURE]\n\n" +
 		"⚠️ COLOR TEMPERATURE: Must be WARM - golden/cream tones, NOT cold/gray/blue.\n" +
-		"⚠️ RICE COLOR: WARM WHITE or CREAM color - like freshly cooked rice with sesame oil.\n" +
-		"⚠️ RICE TEXTURE: Each grain INDIVIDUALLY VISIBLE and SEPARATED - you can count them.\n" +
-		"⚠️ OVERALL: WARM, APPETIZING, GOLDEN tones throughout the entire image.\n\n" +
-		"If rice looks GRAY or BLUE-TINTED = WRONG.\n" +
-		"If rice grains are FUSED together = WRONG.\n" +
+		"⚠️ OVERALL: WARM, APPETIZING, GOLDEN tones throughout the entire image.\n" +
 		"If image feels COLD or LIFELESS = WRONG.\n\n" +
-		"[SCENE]\n" +
-		"Clean product photo. Plain white/cream seamless backdrop. Food directly on surface. No plates.\n\n" +
 		"[PHOTO STYLE]\n" +
 		"Professional DSLR food photography. WARM color grading. Shallow depth of field.\n" +
 		"Like a real photograph from a food magazine - NOT CGI, NOT 3D render.\n\n" +
@@ -345,30 +329,20 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 		"NOT CGI. NOT 3D render. NOT AI-looking. REAL CAMERA PHOTO.\n\n" +
 		"🚨 CRITICAL TEXTURE REQUIREMENT 🚨\n\n" +
 		"[HYPER-REALISTIC TEXTURE - MOST IMPORTANT]\n\n" +
-		"RICE/GRAIN TEXTURE (CRITICAL):\n" +
-		"• Color: WARM WHITE or CREAM - NOT gray, NOT blue-tinted\n" +
-		"• Each grain INDIVIDUALLY VISIBLE - you can COUNT them\n" +
-		"• Grains are SEPARATE, not fused together\n" +
-		"• GLOSSY SHEEN from sesame oil - light reflects off surface\n" +
-		"• Slightly TRANSLUCENT edges on each grain\n" +
-		"• Looks FRESHLY COOKED and WARM\n\n" +
-		"SEAWEED/NORI TEXTURE:\n" +
-		"• Deep BLACK-GREEN color with natural sheen\n" +
-		"• FIBROUS texture visible - not smooth plastic\n" +
-		"• Natural WRINKLES and slight CRINKLES\n" +
-		"• Matte-to-slight-sheen finish, NOT glossy plastic\n\n" +
-		"PROTEIN/MEAT/FILLING TEXTURE:\n" +
+		"PROTEIN/MEAT TEXTURE:\n" +
 		"• Individual FIBERS visible in meat\n" +
 		"• NATURAL color variation - not uniform single color\n" +
 		"• WET/MOIST appearance with sauce coating\n" +
 		"• Visible SEASONING particles\n\n" +
 		"VEGETABLE TEXTURE:\n" +
 		"• CRISP cellular structure visible\n" +
-		"• VIBRANT saturated colors - orange carrots, green pickles\n" +
+		"• VIBRANT saturated colors\n" +
 		"• Fresh-cut appearance\n\n" +
+		"BREAD/PASTRY TEXTURE:\n" +
+		"• Golden brown crust with visible texture\n" +
+		"• Soft interior with air pockets visible\n" +
+		"• Natural color variation from baking\n\n" +
 		"❌ TEXTURE FAILURES = INSTANT REJECTION:\n" +
-		"• Gray/blue/cold colored rice = REJECTED\n" +
-		"• Rice grains fused together as blob = REJECTED\n" +
 		"• Plastic/clay-like smooth surfaces = REJECTED\n" +
 		"• CGI/3D rendered appearance = REJECTED\n" +
 		"• Flat matte lifeless colors = REJECTED\n\n" +
