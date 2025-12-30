@@ -133,6 +133,15 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
 
+	// org_id가 없으면 유저의 조직 조회
+	if job.OrgID == nil && userID != "" {
+		orgID, err := service.GetUserOrganization(ctx, userID)
+		if err == nil && orgID != "" {
+			job.OrgID = &orgID
+			log.Printf("🏢 Found organization for user %s: %s", userID, orgID)
+		}
+	}
+
 	// isPreEdited 읽기 (eats 카테고리 전용, 기본값 false)
 	isPreEdited := false
 	if val, ok := job.JobInputData["isPreEdited"].(bool); ok {

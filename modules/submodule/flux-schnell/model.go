@@ -16,6 +16,8 @@ type GenerateRequest struct {
 	CFGScale       float64      `json:"cfg_scale,omitempty"` // 기본 1.0
 	Images         []InputImage `json:"images,omitempty"` // 참조 이미지 (img2img)
 	Strength       float64      `json:"strength,omitempty"` // img2img strength (0.0-1.0)
+	UserID         string       `json:"user_id,omitempty"` // 크레딧 차감용 유저 ID
+	ProductionID   string       `json:"production_id,omitempty"` // quel_production_photo 연동용
 }
 
 // GenerateResponse - 이미지 생성 응답

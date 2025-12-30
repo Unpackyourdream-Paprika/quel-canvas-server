@@ -136,6 +136,15 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
 
+	// org_id가 없으면 유저의 조직 조회
+	if job.OrgID == nil && userID != "" {
+		orgID, err := service.GetUserOrganization(ctx, userID)
+		if err == nil && orgID != "" {
+			job.OrgID = &orgID
+			log.Printf("🏢 Found organization for user %s: %s", userID, orgID)
+		}
+	}
+
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
 		len(individualImageAttachIds), basePrompt, len(combinations), userID)
 
