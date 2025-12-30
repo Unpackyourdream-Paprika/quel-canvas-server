@@ -643,6 +643,14 @@ func main() {
 		log.Println("Failed to initialize Cancel handler")
 	}
 
+	// Enqueue API 라우트 등록 (Vercel → Go Server → Redis)
+	enqueueHandler := worker.NewEnqueueHandler()
+	if enqueueHandler != nil {
+		enqueueHandler.RegisterRoutes(r)
+	} else {
+		log.Println("⚠️ Failed to initialize Enqueue handler - check Redis connection")
+	}
+
 	// Unified Prompt - Landing 라우트 등록
 	landingHandler := landing.NewHandler()
 	if landingHandler != nil {
@@ -723,6 +731,7 @@ func main() {
 	log.Printf("Modify submit: http://localhost:%s/api/modify/submit", port)
 	log.Printf("Modify status: http://localhost:%s/api/modify/status/{jobId}", port)
 	log.Printf("Job cancel: http://localhost:%s/api/jobs/{jobId}/cancel", port)
+	log.Printf("Job enqueue: http://localhost:%s/enqueue", port)
 	log.Printf("Unified Prompt Landing: http://localhost:%s/api/unified-prompt/landing/generate", port)
 	log.Printf("Unified Prompt Studio: http://localhost:%s/api/unified-prompt/studio/generate", port)
 	log.Printf("Landing Demo: http://localhost:%s/api/landing-demo/generate", port)
