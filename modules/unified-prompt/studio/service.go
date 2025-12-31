@@ -21,6 +21,7 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
+	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
 	"quel-canvas-server/modules/unified-prompt/common"
 )
@@ -360,33 +361,91 @@ func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileS
 	return attachID, nil
 }
 
-// DeductCredits - 크레딧 차감
+// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원)
 func (s *Service) DeductCredits(ctx context.Context, userID string, attachID int) error {
 	cfg := config.GetConfig()
 	creditsToDeduct := cfg.ImagePerPrice
 
-	// 현재 크레딧 조회
-	currentCredits, err := s.CheckUserCredits(ctx, userID)
+	// userID로 org_id 조회
+	orgID, err := s.GetUserOrganization(ctx, userID)
 	if err != nil {
-		return err
+		log.Printf("⚠️ [Studio] Failed to get user organization: %v", err)
 	}
 
-	newBalance := currentCredits - creditsToDeduct
-
-	log.Printf("💰 [Studio] Deducting credits: user=%s, %d → %d (-%d)",
-		userID, currentCredits, newBalance, creditsToDeduct)
-
-	// 크레딧 차감
-	_, _, err = s.supabase.From("quel_member").
-		Update(map[string]interface{}{
-			"quel_member_credit": newBalance,
-		}, "", "").
-		Eq("quel_member_id", userID).
-		Execute()
-
-	if err != nil {
-		return fmt.Errorf("failed to deduct credits: %w", err)
+	var orgIDPtr *string
+	if orgID != "" {
+		orgIDPtr = &orgID
 	}
+
+	// 조직 크레딧인지 개인 크레딧인지 구분
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
+
+	if isOrgCredit {
+		log.Printf("💰 [Studio] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, creditsToDeduct)
+	} else {
+		log.Printf("💰 [Studio] Deducting PERSONAL credits: User=%s, Amount=%d", userID, creditsToDeduct)
+	}
+
+	var currentCredits int
+	var newBalance int
+
+	if isOrgCredit {
+		// 조직 크레딧 차감
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch org credits: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &orgs); err != nil {
+			return fmt.Errorf("failed to parse org data: %w", err)
+		}
+
+		if len(orgs) == 0 {
+			return fmt.Errorf("organization not found: %s", orgID)
+		}
+
+		currentCredits = int(orgs[0].OrgCredit)
+		newBalance = currentCredits - creditsToDeduct
+
+		_, _, err = s.supabase.From("quel_organization").
+			Update(map[string]interface{}{
+				"org_credit": newBalance,
+			}, "", "").
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct org credits: %w", err)
+		}
+	} else {
+		// 개인 크레딧 차감
+		currentCredits, err = s.CheckUserCredits(ctx, userID)
+		if err != nil {
+			return err
+		}
+
+		newBalance = currentCredits - creditsToDeduct
+
+		_, _, err = s.supabase.From("quel_member").
+			Update(map[string]interface{}{
+				"quel_member_credit": newBalance,
+			}, "", "").
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct credits: %w", err)
+		}
+	}
+
+	log.Printf("💰 [Studio] Credit balance: %d → %d (-%d)", currentCredits, newBalance, creditsToDeduct)
 
 	// 트랜잭션 기록
 	transactionData := map[string]interface{}{
@@ -394,8 +453,14 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, attachID int
 		"transaction_type": "DEDUCT",
 		"amount":           -creditsToDeduct,
 		"balance_after":    newBalance,
-		"description":      "Sandbox Image Generation",
+		"description":      "Studio Image Generation",
+		"api_provider":     "gemini",
 		"attach_idx":       attachID,
+	}
+
+	if isOrgCredit {
+		transactionData["org_id"] = orgID
+		transactionData["used_by_member_id"] = userID
 	}
 
 	_, _, err = s.supabase.From("quel_credits").
@@ -408,6 +473,32 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, attachID int
 
 	log.Printf("✅ [Studio] Credits deducted: %d credits from user %s", creditsToDeduct, userID)
 	return nil
+}
+
+// GetUserOrganization - 사용자의 조직 ID 조회
+func (s *Service) GetUserOrganization(ctx context.Context, userID string) (string, error) {
+	var members []struct {
+		OrgID string `json:"org_id"`
+	}
+
+	data, _, err := s.supabase.From("quel_organization_member").
+		Select("org_id", "", false).
+		Eq("member_id", userID).
+		Execute()
+
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(data, &members); err != nil {
+		return "", err
+	}
+
+	if len(members) > 0 {
+		return members[0].OrgID, nil
+	}
+
+	return "", nil
 }
 
 // Helper functions
