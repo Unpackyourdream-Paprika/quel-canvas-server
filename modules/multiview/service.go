@@ -21,6 +21,7 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
+	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
 )
 
@@ -347,30 +348,88 @@ func (s *Service) CheckUserCredits(ctx context.Context, userID string) (int, err
 	return members[0].QuelMemberCredit, nil
 }
 
-// DeductCredits - 크레딧 차감
+// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원)
 func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) error {
-	// 현재 크레딧 조회
-	currentCredits, err := s.CheckUserCredits(ctx, userID)
+	// userID로 org_id 조회
+	orgID, err := s.GetUserOrganization(ctx, userID)
 	if err != nil {
-		return err
+		log.Printf("⚠️ [Multiview] Failed to get user organization: %v", err)
 	}
 
-	newBalance := currentCredits - amount
-
-	log.Printf("💰 [Multiview] Deducting credits: user=%s, %d → %d (-%d)",
-		userID, currentCredits, newBalance, amount)
-
-	// 크레딧 차감
-	_, _, err = s.supabase.From("quel_member").
-		Update(map[string]interface{}{
-			"quel_member_credit": newBalance,
-		}, "", "").
-		Eq("quel_member_id", userID).
-		Execute()
-
-	if err != nil {
-		return fmt.Errorf("failed to deduct credits: %w", err)
+	var orgIDPtr *string
+	if orgID != "" {
+		orgIDPtr = &orgID
 	}
+
+	// 조직 크레딧인지 개인 크레딧인지 구분
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
+
+	if isOrgCredit {
+		log.Printf("💰 [Multiview] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, amount)
+	} else {
+		log.Printf("💰 [Multiview] Deducting PERSONAL credits: User=%s, Amount=%d", userID, amount)
+	}
+
+	var currentCredits int
+	var newBalance int
+
+	if isOrgCredit {
+		// 조직 크레딧 차감
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch org credits: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &orgs); err != nil {
+			return fmt.Errorf("failed to parse org data: %w", err)
+		}
+
+		if len(orgs) == 0 {
+			return fmt.Errorf("organization not found: %s", orgID)
+		}
+
+		currentCredits = int(orgs[0].OrgCredit)
+		newBalance = currentCredits - amount
+
+		_, _, err = s.supabase.From("quel_organization").
+			Update(map[string]interface{}{
+				"org_credit": newBalance,
+			}, "", "").
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct org credits: %w", err)
+		}
+	} else {
+		// 개인 크레딧 차감
+		currentCredits, err = s.CheckUserCredits(ctx, userID)
+		if err != nil {
+			return err
+		}
+
+		newBalance = currentCredits - amount
+
+		_, _, err = s.supabase.From("quel_member").
+			Update(map[string]interface{}{
+				"quel_member_credit": newBalance,
+			}, "", "").
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct credits: %w", err)
+		}
+	}
+
+	log.Printf("💰 [Multiview] Credit balance: %d → %d (-%d)", currentCredits, newBalance, amount)
 
 	// 트랜잭션 기록
 	transactionData := map[string]interface{}{
@@ -379,6 +438,12 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 		"amount":           -amount,
 		"balance_after":    newBalance,
 		"description":      "Multiview 360 Image Generation",
+		"api_provider":     "gemini",
+	}
+
+	if isOrgCredit {
+		transactionData["org_id"] = orgID
+		transactionData["used_by_member_id"] = userID
 	}
 
 	_, _, err = s.supabase.From("quel_credits").
@@ -391,6 +456,32 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 
 	log.Printf("✅ [Multiview] Credits deducted: %d credits from user %s", amount, userID)
 	return nil
+}
+
+// GetUserOrganization - 사용자의 조직 ID 조회
+func (s *Service) GetUserOrganization(ctx context.Context, userID string) (string, error) {
+	var members []struct {
+		OrgID string `json:"org_id"`
+	}
+
+	data, _, err := s.supabase.From("quel_organization_member").
+		Select("org_id", "", false).
+		Eq("member_id", userID).
+		Execute()
+
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(data, &members); err != nil {
+		return "", err
+	}
+
+	if len(members) > 0 {
+		return members[0].OrgID, nil
+	}
+
+	return "", nil
 }
 
 // UploadImageToStorage - Supabase Storage에 이미지 업로드 (WebP 변환)

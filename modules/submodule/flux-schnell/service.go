@@ -16,6 +16,7 @@ import (
 	"github.com/supabase-community/supabase-go"
 
 	"quel-canvas-server/modules/common/config"
+	"quel-canvas-server/modules/common/org"
 )
 
 // Flux Schnell 모델 ID (Runware)
@@ -497,8 +498,8 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 	creditsPerImage := cfg.ImagePerPrice
 	totalCredits := imageCount * creditsPerImage
 
-	// 조직 크레딧인지 개인 크레딧인지 구분
-	isOrgCredit := orgID != nil && *orgID != ""
+	// 조직 크레딧인지 개인 크레딧인지 구분 (공통 함수 사용)
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgID)
 
 	if isOrgCredit {
 		log.Printf("💰 [FluxSchnell] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Images=%d, Total=%d credits", *orgID, userID, imageCount, totalCredits)

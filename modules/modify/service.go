@@ -14,6 +14,7 @@ import (
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	"quel-canvas-server/modules/common/org"
 )
 
 type Service struct {
@@ -94,50 +95,163 @@ func (s *Service) CheckUserCredits(userID string, requiredCredits int) (bool, er
 	return hasEnough, nil
 }
 
-// DeductCredits - 크레딧 차감
-func (s *Service) DeductCredits(userID string, amount int) error {
-	log.Printf("💳 Deducting %d credits from user %s", amount, userID)
+// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원)
+func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, productionID string, attachIds []int64) error {
+	// userID로 org_id 조회
+	orgID, err := s.GetUserOrganization(ctx, userID)
+	if err != nil {
+		log.Printf("⚠️ [Modify] Failed to get user organization: %v", err)
+	}
 
-	// 먼저 현재 크레딧 조회
-	var members []map[string]interface{}
-	data, _, err := s.supabase.From("quel_member").
-		Select("quel_member_credit", "exact", false).
-		Eq("quel_member_id", userID).
+	var orgIDPtr *string
+	if orgID != "" {
+		orgIDPtr = &orgID
+	}
+
+	// 조직 크레딧인지 개인 크레딧인지 구분
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
+
+	if isOrgCredit {
+		log.Printf("💰 [Modify] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, amount)
+	} else {
+		log.Printf("💰 [Modify] Deducting PERSONAL credits: User=%s, Amount=%d", userID, amount)
+	}
+
+	var currentCredits int
+	var newBalance int
+
+	if isOrgCredit {
+		// 조직 크레딧 차감
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch org credits: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &orgs); err != nil {
+			return fmt.Errorf("failed to parse org data: %w", err)
+		}
+
+		if len(orgs) == 0 {
+			return fmt.Errorf("organization not found: %s", orgID)
+		}
+
+		currentCredits = int(orgs[0].OrgCredit)
+		newBalance = currentCredits - amount
+
+		_, _, err = s.supabase.From("quel_organization").
+			Update(map[string]interface{}{
+				"org_credit": newBalance,
+			}, "", "").
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct org credits: %w", err)
+		}
+	} else {
+		// 개인 크레딧 차감
+		var members []map[string]interface{}
+		data, _, err := s.supabase.From("quel_member").
+			Select("quel_member_credit", "exact", false).
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to query user credits: %w", err)
+		}
+
+		if err := json.Unmarshal(data, &members); err != nil {
+			return fmt.Errorf("failed to parse credits response: %w", err)
+		}
+
+		if len(members) == 0 {
+			return fmt.Errorf("user not found: %s", userID)
+		}
+
+		credits, ok := members[0]["quel_member_credit"].(float64)
+		if !ok {
+			return fmt.Errorf("invalid credit value")
+		}
+
+		currentCredits = int(credits)
+		newBalance = currentCredits - amount
+
+		_, _, err = s.supabase.From("quel_member").
+			Update(map[string]interface{}{
+				"quel_member_credit": newBalance,
+			}, "", "").
+			Eq("quel_member_id", userID).
+			Execute()
+
+		if err != nil {
+			return fmt.Errorf("failed to deduct credits: %w", err)
+		}
+	}
+
+	log.Printf("💰 [Modify] Credit balance: %d → %d (-%d)", currentCredits, newBalance, amount)
+
+	// 트랜잭션 기록
+	for _, attachID := range attachIds {
+		transactionData := map[string]interface{}{
+			"user_id":          userID,
+			"transaction_type": "DEDUCT",
+			"amount":           -amount / len(attachIds),
+			"balance_after":    newBalance,
+			"description":      "Modify Image Generation",
+			"api_provider":     "gemini",
+			"attach_idx":       attachID,
+			"production_idx":   productionID,
+		}
+
+		if isOrgCredit {
+			transactionData["org_id"] = orgID
+			transactionData["used_by_member_id"] = userID
+		}
+
+		_, _, err := s.supabase.From("quel_credits").
+			Insert(transactionData, false, "", "", "").
+			Execute()
+
+		if err != nil {
+			log.Printf("⚠️ [Modify] Failed to record transaction: %v", err)
+		}
+	}
+
+	log.Printf("✅ [Modify] Deducted %d credits from user %s (new balance: %d)", amount, userID, newBalance)
+	return nil
+}
+
+// GetUserOrganization - 사용자의 조직 ID 조회
+func (s *Service) GetUserOrganization(ctx context.Context, userID string) (string, error) {
+	var members []struct {
+		OrgID string `json:"org_id"`
+	}
+
+	data, _, err := s.supabase.From("quel_organization_member").
+		Select("org_id", "", false).
+		Eq("member_id", userID).
 		Execute()
 
 	if err != nil {
-		return fmt.Errorf("failed to query user credits: %w", err)
+		return "", err
 	}
 
 	if err := json.Unmarshal(data, &members); err != nil {
-		return fmt.Errorf("failed to parse credits response: %w", err)
+		return "", err
 	}
 
-	if len(members) == 0 {
-		return fmt.Errorf("user not found: %s", userID)
+	if len(members) > 0 {
+		return members[0].OrgID, nil
 	}
 
-	currentCredits, ok := members[0]["quel_member_credit"].(float64)
-	if !ok {
-		return fmt.Errorf("invalid credit value")
-	}
-
-	newCredits := int(currentCredits) - amount
-
-	// 크레딧 업데이트
-	_, _, err = s.supabase.From("quel_member").
-		Update(map[string]interface{}{
-			"quel_member_credit": newCredits,
-		}, "", "").
-		Eq("quel_member_id", userID).
-		Execute()
-
-	if err != nil {
-		return fmt.Errorf("failed to deduct credits: %w", err)
-	}
-
-	log.Printf("✅ Deducted %d credits from user %s (new balance: %d)", amount, userID, newCredits)
-	return nil
+	return "", nil
 }
 
 // CreateModifyProduction - Modify Production 생성

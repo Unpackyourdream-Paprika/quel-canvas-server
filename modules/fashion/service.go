@@ -26,6 +26,7 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
+	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
 )
 
@@ -985,8 +986,8 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 	creditsPerImage := cfg.ImagePerPrice
 	totalCredits := len(attachIds) * creditsPerImage
 
-	// 조직 크레딧인지 개인 크레딧인지 구분
-	isOrgCredit := orgID != nil && *orgID != ""
+	// 조직 크레딧인지 개인 크레딧인지 구분 (공통 함수 사용)
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgID)
 
 	if isOrgCredit {
 		log.Printf("💰 Deducting ORGANIZATION credits: OrgID=%s, User=%s, Images=%d, Total=%d credits", *orgID, userID, len(attachIds), totalCredits)

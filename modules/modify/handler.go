@@ -1,6 +1,7 @@
 package modify
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -141,8 +142,8 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 
 	log.Printf("✅ Job created and enqueued: %s", jobID)
 
-	// 4. 크레딧 차감
-	err = h.service.DeductCredits(req.UserID, totalCost)
+	// 4. 크레딧 차감 (attachIds는 worker에서 생성되므로 빈 배열 전달)
+	err = h.service.DeductCredits(context.Background(), req.UserID, totalCost, productionID, []int64{})
 	if err != nil {
 		log.Printf("⚠️  Failed to deduct credits (job will still process): %v", err)
 	}
