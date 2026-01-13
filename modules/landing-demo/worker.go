@@ -65,13 +65,36 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	// 모델 관련 파라미터 추출
 	modelID := fallback.SafeString(job.JobInputData["modelId"], "")
 	templatePrompt := fallback.SafeString(job.JobInputData["templatePrompt"], "")
+	customPrompt := fallback.SafeString(job.JobInputData["customPrompt"], "")
 	negativePrompt := fallback.SafeString(job.JobInputData["negativePrompt"], "")
 	modelSteps := fallback.SafeInt(job.JobInputData["modelSteps"], 4)
 	modelCfgScale := fallback.SafeFloat(job.JobInputData["modelCfgScale"], 1.0)
 
+	// templatePrompt와 customPrompt 합치기
+	finalTemplatePrompt := templatePrompt
+	if customPrompt != "" {
+		if templatePrompt != "" {
+			finalTemplatePrompt = templatePrompt + ", " + customPrompt
+		} else {
+			finalTemplatePrompt = customPrompt
+		}
+	}
+
+	// org_id가 없으면 유저의 조직 조회
+	if job.OrgID == nil && userID != "" {
+		orgID, err := service.GetUserOrganization(ctx, userID)
+		if err == nil && orgID != "" {
+			job.OrgID = &orgID
+			log.Printf("🏢 [Landing] Found organization for user %s: %s", userID, orgID)
+		}
+	}
+
 	log.Printf("📦 [Landing] Input: Prompt=%s, AspectRatio=%s, Quantity=%d, UserID=%s",
 		truncateString(prompt, 50), aspectRatio, quantity, userID)
 	log.Printf("📦 [Landing] Model: ID=%s, Steps=%d, CFG=%.1f", modelID, modelSteps, modelCfgScale)
+	if finalTemplatePrompt != "" {
+		log.Printf("📦 [Landing] Template+Custom Prompt: %s", truncateString(finalTemplatePrompt, 100))
+	}
 
 	// Status 업데이트 - processing
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -93,8 +116,8 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 	// 프롬프트가 비어있을 때 기본값 설정
 	if prompt == "" {
-		if templatePrompt != "" {
-			prompt = templatePrompt
+		if finalTemplatePrompt != "" {
+			prompt = finalTemplatePrompt
 		} else if hasInputImages {
 			prompt = "Create a high quality product photo based on this image, professional studio lighting, clean background"
 		} else {
@@ -103,11 +126,11 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	}
 
 	// OpenAI로 프롬프트 정제
-	refinedPrompt, err := service.RefinePromptWithOpenAI(ctx, prompt, templatePrompt)
+	refinedPrompt, err := service.RefinePromptWithOpenAI(ctx, prompt, finalTemplatePrompt)
 	if err != nil {
 		log.Printf("⚠️ [Landing] Prompt refinement failed: %v, using original", err)
-		if templatePrompt != "" && prompt != templatePrompt {
-			refinedPrompt = templatePrompt + ", " + prompt
+		if finalTemplatePrompt != "" && prompt != finalTemplatePrompt {
+			refinedPrompt = finalTemplatePrompt + ", " + prompt
 		} else {
 			refinedPrompt = prompt
 		}
