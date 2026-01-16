@@ -416,11 +416,32 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 
 	// 생성된 이미지 데이터 추출
 	for _, candidate := range result.Candidates {
+		// FinishReason 먼저 확인 (차단 여부 체크)
+		if candidate.FinishReason != "" {
+			log.Printf("⚠️ Gemini finish reason: %s", candidate.FinishReason)
+		}
+
+		// SafetyRatings 확인
+		if len(candidate.SafetyRatings) > 0 {
+			for _, rating := range candidate.SafetyRatings {
+				if rating.Blocked {
+					log.Printf("🚫 Gemini blocked by safety: category=%s, probability=%s",
+						rating.Category, rating.Probability)
+				}
+			}
+		}
+
 		if candidate.Content == nil {
+			log.Printf("⚠️ Gemini candidate has nil content (FinishReason: %s)", candidate.FinishReason)
 			continue
 		}
 
 		for _, part := range candidate.Content.Parts {
+			// 텍스트 응답 확인 (거부 메시지일 수 있음)
+			if part.Text != "" {
+				log.Printf("📝 Gemini returned text response: %s", part.Text)
+			}
+
 			// InlineData 확인 (이미지는 InlineData로 반환됨)
 			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
 				log.Printf("✅ Gemini inpaint completed (size: %d bytes, type: %s)",

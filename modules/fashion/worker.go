@@ -307,6 +307,15 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 					continue
 				}
 
+				// 🛑 취소 체크 - 이미지 생성 후, 저장 전에 확인
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Combination %d: Job %s cancelled after generation, discarding image %d", idx+1, job.JobID, i+1)
+					progressMutex.Lock()
+					cancelled = true
+					progressMutex.Unlock()
+					return
+				}
+
 				// Base64 → []byte 변환
 				generatedImageData, err := base64DecodeString(generatedBase64)
 				if err != nil {
