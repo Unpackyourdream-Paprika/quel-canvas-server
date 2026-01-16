@@ -50,7 +50,7 @@ func ConvertPNGToWebP(pngData []byte, quality float32) ([]byte, error) {
 	return webpData, nil
 }
 
-// MergeImages - 여러 이미지를 Grid 방식으로 병합 (resize 없음, 원본 그대로)
+// MergeImages - 여러 이미지를 Grid 방식으로 병합
 func MergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 	if len(images) == 0 {
 		return nil, fmt.Errorf("no images to merge")
@@ -62,7 +62,7 @@ func MergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 		return images[0], nil
 	}
 
-	// 이미지 디코드 (WebP, PNG, JPEG 자동 감지)
+	// 이미지 디코드
 	decodedImages := []image.Image{}
 	for i, imgData := range images {
 		img, format, err := image.Decode(bytes.NewReader(imgData))
@@ -70,7 +70,7 @@ func MergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 			log.Printf("⚠️  Failed to decode image %d: %v", i, err)
 			continue
 		}
-		log.Printf("🔍 Decoded image %d format: %s", i, format)
+		log.Printf("🔍 Decoded image %d format: %s, size: %dx%d", i, format, img.Bounds().Dx(), img.Bounds().Dy())
 		decodedImages = append(decodedImages, img)
 	}
 
@@ -80,7 +80,7 @@ func MergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 
 	// Grid 방식으로 배치 (2x2, 2x3 등)
 	numImages := len(decodedImages)
-	cols := int(math.Ceil(math.Sqrt(float64(numImages)))) // 열 개수
+	cols := int(math.Ceil(math.Sqrt(float64(numImages))))      // 열 개수
 	rows := int(math.Ceil(float64(numImages) / float64(cols))) // 행 개수
 
 	// 각 셀의 최대 너비/높이 계산
@@ -123,29 +123,21 @@ func MergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 
 	log.Printf("✅ Merged %d images into %dx%d grid (%dx%d total)", len(decodedImages), rows, cols, totalWidth, totalHeight)
 
-	// 1:1 비율이 아닌 경우만 aspect-ratio에 맞게 리사이즈
-	var finalImage image.Image = merged
-	if aspectRatio != "1:1" {
-		// aspect-ratio에 따른 목표 크기 설정
-		var targetWidth, targetHeight int
-		switch aspectRatio {
-		case "16:9":
-			targetWidth, targetHeight = 1344, 768
-		case "9:16":
-			targetWidth, targetHeight = 768, 1344
-		case "4:3":
-			targetWidth, targetHeight = 1152, 896
-		case "3:4":
-			targetWidth, targetHeight = 896, 1152
-		default:
-			targetWidth, targetHeight = 1024, 1024
-		}
-
-		finalImage = ResizeImage(merged, targetWidth, targetHeight)
-		log.Printf("✅ Resized merged grid to %dx%d (aspect-ratio: %s)", targetWidth, targetHeight, aspectRatio)
-	} else {
-		log.Printf("✅ 1:1 aspect-ratio - skipping resize, keeping original grid size")
+	// aspect-ratio에 따른 목표 크기 설정
+	var targetWidth, targetHeight int
+	switch aspectRatio {
+	case "16:9":
+		targetWidth, targetHeight = 2048, 1152
+	case "9:16":
+		targetWidth, targetHeight = 1152, 2048
+	default:
+		// 1:1, 4:3, 3:4 등 나머지는 모두 2048x2048
+		targetWidth, targetHeight = 2048, 2048
 	}
+
+	// 병합된 이미지를 목표 크기로 리사이즈
+	finalImage := ResizeImage(merged, targetWidth, targetHeight)
+	log.Printf("✅ Resized merged grid to %dx%d (aspect-ratio: %s)", targetWidth, targetHeight, aspectRatio)
 
 	// PNG 인코딩
 	var buf bytes.Buffer
