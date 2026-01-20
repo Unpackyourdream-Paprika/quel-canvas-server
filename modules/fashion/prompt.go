@@ -52,12 +52,13 @@ func GenerateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 			"You are a world-class product photographer creating editorial-style still life.\n" +
 			"The PRODUCTS are the STARS - showcase them as beautiful objects with perfect details.\n" +
 			"CRITICAL: NO people or models in this shot - products only.\n\n" +
-			"Create ONE photorealistic photograph with ARTISTIC STORYTELLING:\n" +
-			"• Artistic arrangement of all items - creative composition\n" +
-			"• Dramatic lighting that highlights textures and materials\n" +
-			"• Environmental context (if location provided) or studio elegance\n" +
-			"• Directional lighting creates depth and mood\n" +
-			"• This is high-end product photography with cinematic quality\n\n"
+			"Create ONE photorealistic photograph with CLOSE-UP PRODUCT FOCUS:\n" +
+			"• CLOSE-UP SHOT - products must fill 70-80% of the frame\n" +
+			"• LARGE and DETAILED - show textures, materials, and craftsmanship clearly\n" +
+			"• DO NOT shoot from far away - this is intimate product photography\n" +
+			"• Dramatic lighting that highlights every detail and texture\n" +
+			"• Shallow depth of field focuses attention on the product\n" +
+			"• This is high-end product photography - products should dominate the frame\n\n"
 	} else {
 		// 배경만 → 환경 포토그래피
 		mainInstruction = "[CINEMATIC ENVIRONMENTAL PHOTOGRAPHER'S APPROACH]\n" +

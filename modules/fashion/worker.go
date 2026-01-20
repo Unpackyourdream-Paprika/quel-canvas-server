@@ -422,24 +422,8 @@ func normalizeFashionCategories(categories *ImageCategories, prompt *string) {
 	}
 
 	if categories.Model == nil {
-		switch {
-		case len(categories.Clothing) > 0:
-			categories.Model = categories.Clothing[0]
-			log.Printf("🔧 Using clothing image as model placeholder")
-		case len(categories.Accessories) > 0:
-			categories.Model = categories.Accessories[0]
-			log.Printf("🔧 Using accessory image as model placeholder")
-		case categories.Background != nil:
-			categories.Model = categories.Background
-			log.Printf("🔧 Using background image as model placeholder")
-		default:
-			// 🔧 더 이상 1x1 placeholder 사용 안 함 - Model nil 유지
-			log.Printf("🔧 No model image available - will use text-only generation")
-		}
-
-		if prompt != nil {
-			*prompt = strings.TrimSpace(*prompt + "\nIf no human model is present, render the look without a person.")
-		}
+		// 모델 이미지가 없으면 프로덕트 샷으로 처리 - placeholder 사용 안 함
+		log.Printf("🔧 No model image - will generate product-only shot without person")
 	}
 
 	// Clothing/Accessories가 없어도 placeholder 추가하지 않음

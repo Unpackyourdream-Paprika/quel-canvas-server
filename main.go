@@ -454,18 +454,10 @@ func (c *Client) readPump(session *Session) {
 func (c *Client) writePump() {
 	defer c.conn.Close()
 
-	for {
-		select {
-		case message, ok := <-c.send:
-			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-
-			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("WebSocket write error: %v", err)
-				return
-			}
+	for message := range c.send {
+		if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+			log.Printf("WebSocket write error: %v", err)
+			return
 		}
 	}
 }
@@ -536,11 +528,14 @@ func getSessionInfo(w http.ResponseWriter, r *http.Request) {
 // 서버 메트릭 조회 엔드포인트
 func getMetrics(w http.ResponseWriter, r *http.Request) {
 	sessionManager.metrics.mutex.RLock()
-	metrics := *sessionManager.metrics
+	totalSessions := sessionManager.metrics.TotalSessions
+	activeSessions := sessionManager.metrics.ActiveSessions
+	totalConnections := sessionManager.metrics.TotalConnections
+	startTime := sessionManager.metrics.StartTime
 	sessionManager.metrics.mutex.RUnlock()
 
 	// 추가 정보 계산
-	uptime := time.Since(metrics.StartTime)
+	uptime := time.Since(startTime)
 
 	sessionManager.mutex.RLock()
 	sessionDetails := make([]map[string]interface{}, 0, len(sessionManager.sessions))
@@ -567,10 +562,10 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"server": map[string]interface{}{
 			"uptime":           uptime.String(),
-			"startTime":        metrics.StartTime,
-			"totalSessions":    metrics.TotalSessions,
-			"activeSessions":   metrics.ActiveSessions,
-			"totalConnections": metrics.TotalConnections,
+			"startTime":        startTime,
+			"totalSessions":    totalSessions,
+			"activeSessions":   activeSessions,
+			"totalConnections": totalConnections,
 			"currentClients":   totalClients,
 		},
 		"sessions": sessionDetails,
