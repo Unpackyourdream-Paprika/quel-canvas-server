@@ -347,8 +347,7 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	}
 
 	// API 호출 (새 google.golang.org/genai 패키지 사용)
-	seed := rand.Int31()
-	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s, seed: %d", aspectRatio, seed)
+	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -357,7 +356,6 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 			ImageConfig: &genai.ImageConfig{
 				AspectRatio: aspectRatio,
 			},
-			Seed: &seed,
 		},
 	)
 	if err != nil {
@@ -637,9 +635,6 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
-	log.Printf("━━━━━━━━━━ 🎬 FINAL PROMPT TO GEMINI ━━━━━━━━━━")
-	log.Printf("%s", dynamicPrompt)
-	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	// Content 생성
 	content := &genai.Content{
@@ -647,8 +642,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	// API 호출
-	seed := rand.Int31()
-	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d", len(parts), seed)
+	log.Printf("📤 Sending request to Gemini API with %d parts", len(parts))
 	result, err := s.genaiClient.Models.GenerateContent(
 		ctx,
 		cfg.GeminiModel,
@@ -658,7 +652,6 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 				AspectRatio: aspectRatio,
 			},
 			Temperature: floatPtr(0.45),
-			Seed:        &seed,
 		},
 	)
 	if err != nil {
@@ -671,11 +664,32 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	for _, candidate := range result.Candidates {
+		// FinishReason 확인
+		if candidate.FinishReason != "" {
+			log.Printf("⚠️ [Cinema] Gemini finish reason: %s", candidate.FinishReason)
+		}
+
+		// SafetyRatings 확인
+		if len(candidate.SafetyRatings) > 0 {
+			for _, rating := range candidate.SafetyRatings {
+				if rating.Blocked {
+					log.Printf("🚫 [Cinema] Gemini blocked by safety: category=%s, probability=%s",
+						rating.Category, rating.Probability)
+				}
+			}
+		}
+
 		if candidate.Content == nil {
+			log.Printf("⚠️ [Cinema] Gemini candidate has nil content (FinishReason: %s)", candidate.FinishReason)
 			continue
 		}
 
 		for _, part := range candidate.Content.Parts {
+			// 텍스트 응답 확인
+			if part.Text != "" {
+				log.Printf("📝 [Cinema] Gemini returned text instead of image: %s", part.Text[:minInt(200, len(part.Text))])
+			}
+
 			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
 				log.Printf("✅ Received image from Gemini: %d bytes", len(part.InlineData.Data))
 				return base64.StdEncoding.EncodeToString(part.InlineData.Data), nil
