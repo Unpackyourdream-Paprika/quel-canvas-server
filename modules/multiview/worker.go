@@ -267,15 +267,10 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 							Success:    true,
 						}
 
-						// 즉시 크레딧 차감
-						if err := service.DeductCredits(ctx, userID, cfg.ImagePerPrice); err != nil {
-							log.Printf("⚠️ [Multiview] Failed to deduct credits for angle %d: %v", currentAngle, err)
-						} else {
-							mu.Lock()
-							totalCreditsUsed += cfg.ImagePerPrice
-							mu.Unlock()
-							log.Printf("✅ [Multiview] Deducted %d credits for angle %d", cfg.ImagePerPrice, currentAngle)
-						}
+						// 성공한 이미지 크레딧 누적 (마지막에 한번에 차감)
+						mu.Lock()
+						totalCreditsUsed += cfg.ImagePerPrice
+						mu.Unlock()
 					}
 				}
 			}
@@ -308,8 +303,15 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 
 	wg.Wait()
 
-	// Phase 7: 크레딧 차감은 이미 이미지 생성 시마다 완료됨
-	log.Printf("💰 [Multiview] Total credits deducted: %d", totalCreditsUsed)
+	// Phase 7: 크레딧 한번에 차감 (동시성 문제 방지)
+	if totalCreditsUsed > 0 {
+		log.Printf("💰 [Multiview] Deducting total credits: %d", totalCreditsUsed)
+		if err := service.DeductCredits(ctx, userID, totalCreditsUsed); err != nil {
+			log.Printf("⚠️ [Multiview] Failed to deduct credits: %v", err)
+		} else {
+			log.Printf("✅ [Multiview] Successfully deducted %d credits", totalCreditsUsed)
+		}
+	}
 
 	// Phase 8: Job 완료 상태 업데이트
 	successCount := 0
