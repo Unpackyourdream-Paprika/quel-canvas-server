@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"quel-canvas-server/modules/common/config"
 )
 
 type ModifyHandler struct {
@@ -82,7 +83,9 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 	log.Printf("  - Has Reference Image: %v", req.ReferenceImage != nil)
 
 	// 1. 크레딧 확인
-	totalCost := ModifyCreditCost * req.Quantity
+	cfg := config.GetConfig()
+	creditCostPerImage := cfg.ImagePerPrice
+	totalCost := creditCostPerImage * req.Quantity
 	hasCredits, err := h.service.CheckUserCredits(req.UserID, totalCost)
 	if err != nil {
 		log.Printf("❌ Failed to check credits: %v", err)
@@ -96,7 +99,7 @@ func (h *ModifyHandler) SubmitModifyJob(w http.ResponseWriter, r *http.Request) 
 	if !hasCredits {
 		w.WriteHeader(http.StatusPaymentRequired)
 		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("Insufficient credits. Required: %d, Cost per image: %d", totalCost, ModifyCreditCost),
+			"error": fmt.Sprintf("Insufficient credits. Required: %d, Cost per image: %d", totalCost, creditCostPerImage),
 		})
 		return
 	}

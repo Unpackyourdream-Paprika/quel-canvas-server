@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"quel-canvas-server/modules/common/config"
 )
 
 type Handler struct {
@@ -226,7 +227,8 @@ func (h *Handler) HandleCheckCredits(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 크레딧 당 이미지 가격 (config에서 가져오기)
-	pricePerImage := 20 // 기본값
+	cfg := config.GetConfig()
+	pricePerImage := cfg.ImagePerPrice
 
 	// 가능한 최대 각도 수 계산
 	maxAngles := creditResult.AvailableCredits / pricePerImage
