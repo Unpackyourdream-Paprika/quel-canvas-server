@@ -214,7 +214,7 @@ func (h *Handler) HandleCheckCredits(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	credits, err := h.service.CheckUserCredits(ctx, userID)
+	creditResult, err := h.service.CheckUserCreditsDetailed(ctx, userID)
 	if err != nil {
 		log.Printf("⚠️ [Multiview] Failed to check credits: %v", err)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -229,23 +229,33 @@ func (h *Handler) HandleCheckCredits(w http.ResponseWriter, r *http.Request) {
 	pricePerImage := 20 // 기본값
 
 	// 가능한 최대 각도 수 계산
-	maxAngles := credits / pricePerImage
+	maxAngles := creditResult.AvailableCredits / pricePerImage
 	if maxAngles > 360 {
 		maxAngles = 360
 	}
 
 	// 요청된 각도 수에 필요한 크레딧
 	requiredCredits := angleCount * pricePerImage
-	canGenerate := credits >= requiredCredits
+	canGenerate := creditResult.AvailableCredits >= requiredCredits
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":         true,
-		"credits":         credits,
-		"pricePerImage":   pricePerImage,
-		"maxAngles":       maxAngles,
-		"requestedAngles": angleCount,
-		"requiredCredits": requiredCredits,
-		"canGenerate":     canGenerate,
-		"defaultAngles":   DefaultAngles,
-	})
+	response := map[string]interface{}{
+		"success":           true,
+		"creditSource":      creditResult.CreditSource,
+		"availableCredits":  creditResult.AvailableCredits,
+		"personalCredits":   creditResult.PersonalCredits,
+		"canFallback":       creditResult.CanFallback,
+		"pricePerImage":     pricePerImage,
+		"maxAngles":         maxAngles,
+		"requestedAngles":   angleCount,
+		"requiredCredits":   requiredCredits,
+		"canGenerate":       canGenerate,
+		"defaultAngles":     DefaultAngles,
+	}
+
+	// org 크레딧이 있는 경우 추가
+	if creditResult.CreditSource == "organization" {
+		response["orgCredits"] = creditResult.OrgCredits
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

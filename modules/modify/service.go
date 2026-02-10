@@ -50,10 +50,35 @@ func NewService() *Service {
 	}
 }
 
-// CheckUserCredits - 사용자 크레딧 확인
+// CreditCheckResult - 크레딧 확인 결과
+type CreditCheckResult struct {
+	CreditSource     string // "organization" | "personal"
+	OrgCredits       int    // org 크레딧 (org 멤버인 경우)
+	PersonalCredits  int    // 개인 크레딧
+	AvailableCredits int    // 실제 사용 가능한 크레딧
+	CanFallback      bool   // org 부족 시 개인으로 fallback 가능 여부
+}
+
+// CheckUserCredits - 사용자 크레딧 확인 (기존 호환성 유지)
 func (s *Service) CheckUserCredits(userID string, requiredCredits int) (bool, error) {
 	log.Printf("💳 Checking credits for user %s (required: %d)", userID, requiredCredits)
 
+	result, err := s.CheckUserCreditsDetailed(context.Background(), userID)
+	if err != nil {
+		return false, err
+	}
+
+	hasEnough := result.AvailableCredits >= requiredCredits
+	log.Printf("💰 User %s credits: %d (required: %d) - OK: %v", userID, result.AvailableCredits, requiredCredits, hasEnough)
+
+	return hasEnough, nil
+}
+
+// CheckUserCreditsDetailed - 사용자 크레딧 상세 확인 (org/개인 구분)
+func (s *Service) CheckUserCreditsDetailed(ctx context.Context, userID string) (*CreditCheckResult, error) {
+	result := &CreditCheckResult{}
+
+	// 개인 크레딧 조회
 	var members []map[string]interface{}
 
 	data, _, err := s.supabase.From("quel_member").
@@ -63,39 +88,82 @@ func (s *Service) CheckUserCredits(userID string, requiredCredits int) (bool, er
 
 	if err != nil {
 		log.Printf("❌ Database query error: %v", err)
-		return false, fmt.Errorf("failed to query user credits: %w", err)
+		return nil, fmt.Errorf("failed to query user credits: %w", err)
 	}
-
-	log.Printf("📊 Raw response data length: %d bytes", len(data))
 
 	if err := json.Unmarshal(data, &members); err != nil {
 		log.Printf("❌ JSON unmarshal error: %v", err)
-		log.Printf("   Raw data: %s", string(data))
-		return false, fmt.Errorf("failed to parse credits response: %w", err)
+		return nil, fmt.Errorf("failed to parse credits response: %w", err)
 	}
-
-	log.Printf("📊 Found %d member records", len(members))
 
 	if len(members) == 0 {
 		log.Printf("❌ User not found in database: %s", userID)
-		return false, fmt.Errorf("user not found: %s", userID)
+		return nil, fmt.Errorf("user not found: %s", userID)
 	}
-
-	log.Printf("📊 Member data: %+v", members[0])
 
 	credits, ok := members[0]["quel_member_credit"].(float64)
 	if !ok {
 		log.Printf("❌ Invalid credit value type: %T, value: %v", members[0]["quel_member_credit"], members[0]["quel_member_credit"])
-		return false, fmt.Errorf("invalid credit value")
+		return nil, fmt.Errorf("invalid credit value")
 	}
 
-	hasEnough := int(credits) >= requiredCredits
-	log.Printf("💰 User %s credits: %d (required: %d) - OK: %v", userID, int(credits), requiredCredits, hasEnough)
+	result.PersonalCredits = int(credits)
 
-	return hasEnough, nil
+	// userID로 org_id 조회
+	orgID, err := s.GetUserOrganization(ctx, userID)
+	if err != nil {
+		log.Printf("⚠️ [Modify] Failed to get user organization: %v", err)
+	}
+
+	var orgIDPtr *string
+	if orgID != "" {
+		orgIDPtr = &orgID
+	}
+
+	// 조직 크레딧인지 개인 크레딧인지 구분
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
+
+	if isOrgCredit && orgID != "" {
+		// org 크레딧 조회
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			log.Printf("⚠️ [Modify] Failed to fetch org credits: %v", err)
+			// org 크레딧 조회 실패 시 개인 크레딧 사용
+			result.CreditSource = "personal"
+			result.AvailableCredits = result.PersonalCredits
+			result.CanFallback = false
+			return result, nil
+		}
+
+		if err := json.Unmarshal(data, &orgs); err == nil && len(orgs) > 0 {
+			result.OrgCredits = int(orgs[0].OrgCredit)
+			result.CreditSource = "organization"
+			result.AvailableCredits = result.OrgCredits
+			result.CanFallback = result.PersonalCredits > 0
+		} else {
+			// org 데이터 파싱 실패 시 개인 크레딧 사용
+			result.CreditSource = "personal"
+			result.AvailableCredits = result.PersonalCredits
+			result.CanFallback = false
+		}
+	} else {
+		// 개인 크레딧 사용
+		result.CreditSource = "personal"
+		result.AvailableCredits = result.PersonalCredits
+		result.CanFallback = false
+	}
+
+	return result, nil
 }
 
-// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원)
+// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원, org 부족 시 개인으로 fallback)
 func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, productionID string, attachIds []int64) error {
 	// userID로 org_id 조회
 	orgID, err := s.GetUserOrganization(ctx, userID)
@@ -111,17 +179,13 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 	// 조직 크레딧인지 개인 크레딧인지 구분
 	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
 
-	if isOrgCredit {
-		log.Printf("💰 [Modify] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, amount)
-	} else {
-		log.Printf("💰 [Modify] Deducting PERSONAL credits: User=%s, Amount=%d", userID, amount)
-	}
-
 	var currentCredits int
 	var newBalance int
+	usedOrgCredit := false
+	fallbackToPersonal := false
 
-	if isOrgCredit {
-		// 조직 크레딧 차감
+	if isOrgCredit && orgID != "" {
+		// 조직 크레딧 차감 시도
 		var orgs []struct {
 			OrgCredit int64 `json:"org_credit"`
 		}
@@ -131,32 +195,53 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 			Execute()
 
 		if err != nil {
-			return fmt.Errorf("failed to fetch org credits: %w", err)
+			log.Printf("⚠️ [Modify] Failed to fetch org credits, fallback to personal: %v", err)
+			isOrgCredit = false
+		} else if err := json.Unmarshal(data, &orgs); err != nil {
+			log.Printf("⚠️ [Modify] Failed to parse org data, fallback to personal: %v", err)
+			isOrgCredit = false
+		} else if len(orgs) == 0 {
+			log.Printf("⚠️ [Modify] Organization not found, fallback to personal: %s", orgID)
+			isOrgCredit = false
+		} else {
+			currentCredits = int(orgs[0].OrgCredit)
+
+			// org 크레딧이 부족한 경우 개인 크레딧으로 fallback
+			if currentCredits < amount {
+				log.Printf("⚠️ [Modify] Insufficient org credits (%d < %d), fallback to personal credits", currentCredits, amount)
+				isOrgCredit = false
+				fallbackToPersonal = true
+			} else {
+				// org 크레딧 차감
+				log.Printf("💰 [Modify] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, amount)
+				newBalance = currentCredits - amount
+
+				_, _, err = s.supabase.From("quel_organization").
+					Update(map[string]interface{}{
+						"org_credit": newBalance,
+					}, "", "").
+					Eq("org_id", orgID).
+					Execute()
+
+				if err != nil {
+					log.Printf("⚠️ [Modify] Failed to deduct org credits, fallback to personal: %v", err)
+					isOrgCredit = false
+					fallbackToPersonal = true
+				} else {
+					usedOrgCredit = true
+				}
+			}
 		}
+	}
 
-		if err := json.Unmarshal(data, &orgs); err != nil {
-			return fmt.Errorf("failed to parse org data: %w", err)
-		}
-
-		if len(orgs) == 0 {
-			return fmt.Errorf("organization not found: %s", orgID)
-		}
-
-		currentCredits = int(orgs[0].OrgCredit)
-		newBalance = currentCredits - amount
-
-		_, _, err = s.supabase.From("quel_organization").
-			Update(map[string]interface{}{
-				"org_credit": newBalance,
-			}, "", "").
-			Eq("org_id", orgID).
-			Execute()
-
-		if err != nil {
-			return fmt.Errorf("failed to deduct org credits: %w", err)
-		}
-	} else {
+	if !isOrgCredit {
 		// 개인 크레딧 차감
+		if fallbackToPersonal {
+			log.Printf("💰 [Modify] FALLBACK to PERSONAL credits: User=%s, Amount=%d", userID, amount)
+		} else {
+			log.Printf("💰 [Modify] Deducting PERSONAL credits: User=%s, Amount=%d", userID, amount)
+		}
+
 		var members []map[string]interface{}
 		data, _, err := s.supabase.From("quel_member").
 			Select("quel_member_credit", "exact", false).
@@ -164,7 +249,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 			Execute()
 
 		if err != nil {
-			return fmt.Errorf("failed to query user credits: %w", err)
+			return fmt.Errorf("failed to query personal credits: %w", err)
 		}
 
 		if err := json.Unmarshal(data, &members); err != nil {
@@ -181,6 +266,12 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 		}
 
 		currentCredits = int(credits)
+
+		// 개인 크레딧도 부족한 경우 에러
+		if currentCredits < amount {
+			return fmt.Errorf("insufficient credits: required=%d, available=%d", amount, currentCredits)
+		}
+
 		newBalance = currentCredits - amount
 
 		_, _, err = s.supabase.From("quel_member").
@@ -191,7 +282,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 			Execute()
 
 		if err != nil {
-			return fmt.Errorf("failed to deduct credits: %w", err)
+			return fmt.Errorf("failed to deduct personal credits: %w", err)
 		}
 	}
 
@@ -210,7 +301,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 			"production_idx":   productionID,
 		}
 
-		if isOrgCredit {
+		if usedOrgCredit {
 			transactionData["org_id"] = orgID
 			transactionData["used_by_member_id"] = userID
 		}
@@ -224,7 +315,14 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, 
 		}
 	}
 
-	log.Printf("✅ [Modify] Deducted %d credits from user %s (new balance: %d)", amount, userID, newBalance)
+	if fallbackToPersonal {
+		log.Printf("✅ [Modify] Credits deducted (FALLBACK): %d credits from user %s personal account", amount, userID)
+	} else if usedOrgCredit {
+		log.Printf("✅ [Modify] Credits deducted (ORG): %d credits from organization %s", amount, orgID)
+	} else {
+		log.Printf("✅ [Modify] Credits deducted (PERSONAL): %d credits from user %s", amount, userID)
+	}
+
 	return nil
 }
 

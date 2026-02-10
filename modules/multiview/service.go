@@ -322,8 +322,29 @@ func (s *Service) GenerateMultiview(ctx context.Context, req *MultiviewGenerateR
 	}, nil
 }
 
-// CheckUserCredits - 사용자 크레딧 확인
+// CreditCheckResult - 크레딧 확인 결과
+type CreditCheckResult struct {
+	CreditSource     string // "organization" | "personal"
+	OrgCredits       int    // org 크레딧 (org 멤버인 경우)
+	PersonalCredits  int    // 개인 크레딧
+	AvailableCredits int    // 실제 사용 가능한 크레딧
+	CanFallback      bool   // org 부족 시 개인으로 fallback 가능 여부
+}
+
+// CheckUserCredits - 사용자 크레딧 확인 (org/개인 구분)
 func (s *Service) CheckUserCredits(ctx context.Context, userID string) (int, error) {
+	result, err := s.CheckUserCreditsDetailed(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.AvailableCredits, nil
+}
+
+// CheckUserCreditsDetailed - 사용자 크레딧 상세 확인 (org/개인 구분)
+func (s *Service) CheckUserCreditsDetailed(ctx context.Context, userID string) (*CreditCheckResult, error) {
+	result := &CreditCheckResult{}
+
+	// 개인 크레딧 조회
 	var members []struct {
 		QuelMemberCredit int `json:"quel_member_credit"`
 	}
@@ -334,21 +355,74 @@ func (s *Service) CheckUserCredits(ctx context.Context, userID string) (int, err
 		Execute()
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch user credits: %w", err)
+		return nil, fmt.Errorf("failed to fetch user credits: %w", err)
 	}
 
 	if err := json.Unmarshal(data, &members); err != nil {
-		return 0, fmt.Errorf("failed to parse member data: %w", err)
+		return nil, fmt.Errorf("failed to parse member data: %w", err)
 	}
 
 	if len(members) == 0 {
-		return 0, fmt.Errorf("user not found: %s", userID)
+		return nil, fmt.Errorf("user not found: %s", userID)
 	}
 
-	return members[0].QuelMemberCredit, nil
+	result.PersonalCredits = members[0].QuelMemberCredit
+
+	// userID로 org_id 조회
+	orgID, err := s.GetUserOrganization(ctx, userID)
+	if err != nil {
+		log.Printf("⚠️ [Multiview] Failed to get user organization: %v", err)
+	}
+
+	var orgIDPtr *string
+	if orgID != "" {
+		orgIDPtr = &orgID
+	}
+
+	// 조직 크레딧인지 개인 크레딧인지 구분
+	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
+
+	if isOrgCredit && orgID != "" {
+		// org 크레딧 조회
+		var orgs []struct {
+			OrgCredit int64 `json:"org_credit"`
+		}
+		data, _, err := s.supabase.From("quel_organization").
+			Select("org_credit", "", false).
+			Eq("org_id", orgID).
+			Execute()
+
+		if err != nil {
+			log.Printf("⚠️ [Multiview] Failed to fetch org credits: %v", err)
+			// org 크레딧 조회 실패 시 개인 크레딧 사용
+			result.CreditSource = "personal"
+			result.AvailableCredits = result.PersonalCredits
+			result.CanFallback = false
+			return result, nil
+		}
+
+		if err := json.Unmarshal(data, &orgs); err == nil && len(orgs) > 0 {
+			result.OrgCredits = int(orgs[0].OrgCredit)
+			result.CreditSource = "organization"
+			result.AvailableCredits = result.OrgCredits
+			result.CanFallback = result.PersonalCredits > 0
+		} else {
+			// org 데이터 파싱 실패 시 개인 크레딧 사용
+			result.CreditSource = "personal"
+			result.AvailableCredits = result.PersonalCredits
+			result.CanFallback = false
+		}
+	} else {
+		// 개인 크레딧 사용
+		result.CreditSource = "personal"
+		result.AvailableCredits = result.PersonalCredits
+		result.CanFallback = false
+	}
+
+	return result, nil
 }
 
-// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원)
+// DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원, org 부족 시 개인으로 fallback)
 func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) error {
 	// userID로 org_id 조회
 	orgID, err := s.GetUserOrganization(ctx, userID)
@@ -364,17 +438,13 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 	// 조직 크레딧인지 개인 크레딧인지 구분
 	isOrgCredit := org.ShouldUseOrgCredit(s.supabase, orgIDPtr)
 
-	if isOrgCredit {
-		log.Printf("💰 [Multiview] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, amount)
-	} else {
-		log.Printf("💰 [Multiview] Deducting PERSONAL credits: User=%s, Amount=%d", userID, amount)
-	}
-
 	var currentCredits int
 	var newBalance int
+	usedOrgCredit := false
+	fallbackToPersonal := false
 
-	if isOrgCredit {
-		// 조직 크레딧 차감
+	if isOrgCredit && orgID != "" {
+		// 조직 크레딧 차감 시도
 		var orgs []struct {
 			OrgCredit int64 `json:"org_credit"`
 		}
@@ -384,35 +454,61 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 			Execute()
 
 		if err != nil {
-			return fmt.Errorf("failed to fetch org credits: %w", err)
+			log.Printf("⚠️ [Multiview] Failed to fetch org credits, fallback to personal: %v", err)
+			isOrgCredit = false
+		} else if err := json.Unmarshal(data, &orgs); err != nil {
+			log.Printf("⚠️ [Multiview] Failed to parse org data, fallback to personal: %v", err)
+			isOrgCredit = false
+		} else if len(orgs) == 0 {
+			log.Printf("⚠️ [Multiview] Organization not found, fallback to personal: %s", orgID)
+			isOrgCredit = false
+		} else {
+			currentCredits = int(orgs[0].OrgCredit)
+
+			// org 크레딧이 부족한 경우 개인 크레딧으로 fallback
+			if currentCredits < amount {
+				log.Printf("⚠️ [Multiview] Insufficient org credits (%d < %d), fallback to personal credits", currentCredits, amount)
+				isOrgCredit = false
+				fallbackToPersonal = true
+			} else {
+				// org 크레딧 차감
+				log.Printf("💰 [Multiview] Deducting ORGANIZATION credits: OrgID=%s, User=%s, Amount=%d", orgID, userID, amount)
+				newBalance = currentCredits - amount
+
+				_, _, err = s.supabase.From("quel_organization").
+					Update(map[string]interface{}{
+						"org_credit": newBalance,
+					}, "", "").
+					Eq("org_id", orgID).
+					Execute()
+
+				if err != nil {
+					log.Printf("⚠️ [Multiview] Failed to deduct org credits, fallback to personal: %v", err)
+					isOrgCredit = false
+					fallbackToPersonal = true
+				} else {
+					usedOrgCredit = true
+				}
+			}
 		}
+	}
 
-		if err := json.Unmarshal(data, &orgs); err != nil {
-			return fmt.Errorf("failed to parse org data: %w", err)
-		}
-
-		if len(orgs) == 0 {
-			return fmt.Errorf("organization not found: %s", orgID)
-		}
-
-		currentCredits = int(orgs[0].OrgCredit)
-		newBalance = currentCredits - amount
-
-		_, _, err = s.supabase.From("quel_organization").
-			Update(map[string]interface{}{
-				"org_credit": newBalance,
-			}, "", "").
-			Eq("org_id", orgID).
-			Execute()
-
-		if err != nil {
-			return fmt.Errorf("failed to deduct org credits: %w", err)
-		}
-	} else {
+	if !isOrgCredit {
 		// 개인 크레딧 차감
+		if fallbackToPersonal {
+			log.Printf("💰 [Multiview] FALLBACK to PERSONAL credits: User=%s, Amount=%d", userID, amount)
+		} else {
+			log.Printf("💰 [Multiview] Deducting PERSONAL credits: User=%s, Amount=%d", userID, amount)
+		}
+
 		currentCredits, err = s.CheckUserCredits(ctx, userID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to check personal credits: %w", err)
+		}
+
+		// 개인 크레딧도 부족한 경우 에러
+		if currentCredits < amount {
+			return fmt.Errorf("insufficient credits: required=%d, available=%d", amount, currentCredits)
 		}
 
 		newBalance = currentCredits - amount
@@ -425,7 +521,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 			Execute()
 
 		if err != nil {
-			return fmt.Errorf("failed to deduct credits: %w", err)
+			return fmt.Errorf("failed to deduct personal credits: %w", err)
 		}
 	}
 
@@ -441,7 +537,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 		"api_provider":     "gemini",
 	}
 
-	if isOrgCredit {
+	if usedOrgCredit {
 		transactionData["org_id"] = orgID
 		transactionData["used_by_member_id"] = userID
 	}
@@ -454,7 +550,14 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 		log.Printf("⚠️ [Multiview] Failed to record transaction: %v", err)
 	}
 
-	log.Printf("✅ [Multiview] Credits deducted: %d credits from user %s", amount, userID)
+	if fallbackToPersonal {
+		log.Printf("✅ [Multiview] Credits deducted (FALLBACK): %d credits from user %s personal account", amount, userID)
+	} else if usedOrgCredit {
+		log.Printf("✅ [Multiview] Credits deducted (ORG): %d credits from organization %s", amount, orgID)
+	} else {
+		log.Printf("✅ [Multiview] Credits deducted (PERSONAL): %d credits from user %s", amount, userID)
+	}
+
 	return nil
 }
 
