@@ -11,9 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/supabase-community/supabase-go"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
 
 	"quel-canvas-server/modules/common/config"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 	"quel-canvas-server/modules/common/org"
 )
 
@@ -32,18 +33,15 @@ func NewService() *Service {
 		return nil
 	}
 
-	// Genai 클라이언트 초기화
+	// Vertex AI 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
-		log.Printf("❌ Failed to create Genai client: %v", err)
+		log.Printf("❌ Failed to create Vertex AI client: %v", err)
 		return nil
 	}
 
-	log.Println("✅ Modify service initialized (Supabase, Genai)")
+	log.Println("✅ Modify service initialized (Supabase, Vertex AI)")
 	return &Service{
 		supabase:    supabaseClient,
 		genaiClient: genaiClient,

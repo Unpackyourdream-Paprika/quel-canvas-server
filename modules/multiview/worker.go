@@ -13,7 +13,7 @@ import (
 	redisutil "quel-canvas-server/modules/common/redis"
 
 	"github.com/redis/go-redis/v9"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
 )
 
 // ProcessJob - Multiview Job 처리 (다른 모듈과 동일한 패턴)
@@ -361,47 +361,28 @@ func (s *Service) GenerateSingleAngle(ctx context.Context, sourceImage, refImage
 	cfg := config.GetConfig()
 
 	// Gemini API 호출 준비
-	var parts []*genai.Part
+	var parts []genai.Part
 
 	// 원본 이미지 추가
-	parts = append(parts, &genai.Part{
-		InlineData: &genai.Blob{
-			MIMEType: "image/png",
-			Data:     sourceImage,
-		},
-	})
+	parts = append(parts, genai.ImageData("image/png", sourceImage))
 
 	// 레퍼런스 이미지가 있으면 추가
 	if hasReference && len(refImage) > 0 {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     refImage,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", refImage))
 	}
 
 	// 프롬프트 생성
 	prompt := BuildMultiviewPrompt(0, angle, category, originalPrompt, hasReference, rotateBackground)
-	parts = append(parts, genai.NewPartFromText(prompt))
+	parts = append(parts, genai.Text(prompt))
 
-	// Content 생성
-	content := &genai.Content{
-		Parts: parts,
-	}
+	// Parts are already prepared above
 
 	// Gemini API 호출
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-			Temperature: floatPtr(0.5),
-		},
-	)
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.5)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	result, err := model.GenerateContent(ctx, parts...)
 
 	if err != nil {
 		return nil, fmt.Errorf("Gemini API error: %w", err)
@@ -414,8 +395,8 @@ func (s *Service) GenerateSingleAngle(ctx context.Context, sourceImage, refImage
 				continue
 			}
 			for _, part := range candidate.Content.Parts {
-				if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-					return part.InlineData.Data, nil
+				if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+					return blob.Data, nil
 				}
 			}
 		}

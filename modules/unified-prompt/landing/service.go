@@ -11,7 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/supabase-community/supabase-go"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 
 	"quel-canvas-server/modules/common/config"
 	redisutil "quel-canvas-server/modules/common/redis"
@@ -36,10 +37,7 @@ func NewService() *Service {
 
 	// Genai 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
 		log.Printf("❌ [Landing] Failed to create Genai client: %v", err)
 		return nil
@@ -149,7 +147,7 @@ func (s *Service) GenerateImage(ctx context.Context, req *LandingGenerateRequest
 		truncateString(req.Prompt, 50), len(req.ReferenceImages), aspectRatio)
 
 	// Gemini API 호출 준비
-	var parts []*genai.Part
+	var parts []genai.Part
 
 	// 레퍼런스 이미지 추가
 	for i, imgBase64 := range req.ReferenceImages {
@@ -158,45 +156,31 @@ func (s *Service) GenerateImage(ctx context.Context, req *LandingGenerateRequest
 		base64Data := imgBase64
 		if idx := findBase64Start(imgBase64); idx > 0 {
 			base64Data = imgBase64[idx:]
-		}
+			}
 
 		imageData, err := base64.StdEncoding.DecodeString(base64Data)
 		if err != nil {
 			log.Printf("⚠️ [Landing] Failed to decode image %d: %v", i, err)
 			continue
-		}
+			}
 
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     imageData,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", imageData))
 		log.Printf("📎 [Landing] Added reference image %d (%d bytes)", i+1, len(imageData))
 	}
 
 	// 프롬프트 생성
 	prompt := buildLandingPrompt(req.Prompt, len(req.ReferenceImages))
-	parts = append(parts, genai.NewPartFromText(prompt))
+	parts = append(parts, genai.Text(prompt))
 
-	// Content 생성
-	content := &genai.Content{
-		Parts: parts,
-	}
+	// Parts are already prepared above
 
 	// Gemini API 호출
 	log.Printf("📤 [Landing] Calling Gemini API...")
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-			Temperature: floatPtr(0.7), // 약간 더 창의적으로
-		},
-	)
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.7)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		log.Printf("❌ [Landing] Gemini API error: %v", err)
 		return &LandingGenerateResponse{
@@ -218,12 +202,12 @@ func (s *Service) GenerateImage(ctx context.Context, req *LandingGenerateRequest
 	for _, candidate := range result.Candidates {
 		if candidate.Content == nil {
 			continue
-		}
+			}
 
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				imageBase64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-				log.Printf("✅ [Landing] Image generated: %d bytes", len(part.InlineData.Data))
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				imageBase64 := base64.StdEncoding.EncodeToString(blob.Data)
+				log.Printf("✅ [Landing] Image generated: %d bytes", len(blob.Data))
 
 				return &LandingGenerateResponse{
 					Success:     true,
@@ -288,7 +272,7 @@ func findBase64Start(s string) int {
 	for i := 0; i < len(s)-len(marker); i++ {
 		if s[i:i+len(marker)] == marker {
 			return i + len(marker)
-		}
+			}
 	}
 	return idx
 }

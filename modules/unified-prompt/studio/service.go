@@ -17,7 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/supabase-community/supabase-go"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
@@ -44,10 +45,7 @@ func NewService() *Service {
 
 	// Genai 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
 		log.Printf("❌ [Studio] Failed to create Genai client: %v", err)
 		return nil
@@ -129,7 +127,7 @@ func (s *Service) GenerateImage(ctx context.Context, req *StudioGenerateRequest)
 		req.Category, truncateString(req.Prompt, 50), len(req.ReferenceImages), aspectRatio)
 
 	// Gemini API 호출 준비
-	var parts []*genai.Part
+	var parts []genai.Part
 
 	// 레퍼런스 이미지 추가
 	for i, imgBase64 := range req.ReferenceImages {
@@ -144,37 +142,23 @@ func (s *Service) GenerateImage(ctx context.Context, req *StudioGenerateRequest)
 			continue
 		}
 
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     imageData,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", imageData))
 		log.Printf("📎 [Studio] Added reference image %d (%d bytes)", i+1, len(imageData))
 	}
 
 	// 카테고리별 프롬프트 생성
 	prompt := BuildStudioPrompt(req.Prompt, req.Category, len(req.ReferenceImages))
-	parts = append(parts, genai.NewPartFromText(prompt))
+	parts = append(parts, genai.Text(prompt))
 
-	// Content 생성
-	content := &genai.Content{
-		Parts: parts,
-	}
+	// Parts are already prepared above
 
 	// Gemini API 호출
 	log.Printf("📤 [Studio] Calling Gemini API for category: %s", req.Category)
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-			Temperature: floatPtr(0.7), // 더 창의적인 이미지 생성을 위해
-		},
-	)
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.7)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		log.Printf("❌ [Studio] Gemini API error: %v", err)
 		return &StudioGenerateResponse{
@@ -199,8 +183,8 @@ func (s *Service) GenerateImage(ctx context.Context, req *StudioGenerateRequest)
 		}
 
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				imageData := part.InlineData.Data
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				imageData := blob.Data
 				log.Printf("✅ [Studio] Image generated: %d bytes", len(imageData))
 
 				// Storage에 업로드 및 Attach 레코드 생성
@@ -529,7 +513,7 @@ func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (
 	log.Printf("🔍 [Studio] Analyzing image for recipe - category: %s", req.Category)
 
 	// 이미지 데이터 준비
-	var parts []*genai.Part
+	var parts []genai.Part
 
 	// 이미지 URL 또는 Base64 처리
 	if req.ImageURL != "" {
@@ -579,34 +563,22 @@ func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (
 			}
 		}
 
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     imageData,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", imageData))
 		log.Printf("📎 [Studio] Image loaded for analysis (%d bytes)", len(imageData))
 	}
 
 	// 분석 프롬프트 생성
 	analysisPrompt := buildAnalysisPrompt(req.Category, req.OriginalPrompt)
-	parts = append(parts, genai.NewPartFromText(analysisPrompt))
+	parts = append(parts, genai.Text(analysisPrompt))
 
-	// Content 생성
-	content := &genai.Content{
-		Parts: parts,
-	}
+	// Parts are already prepared above
 
 	// Gemini API 호출
 	log.Printf("📤 [Studio] Calling Gemini API for image analysis")
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash", // 분석용은 빠른 모델 사용
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			Temperature: floatPtr(0.3), // 분석은 일관성 있게
-		},
-	)
+	model := s.genaiClient.GenerativeModel("gemini-2.0-flash")
+	model.SetTemperature(0.3)
+	
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		log.Printf("❌ [Studio] Gemini API error: %v", err)
 		return &StudioAnalyzeResponse{
@@ -629,8 +601,8 @@ func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (
 			continue
 		}
 		for _, part := range candidate.Content.Parts {
-			if part.Text != "" {
-				analyzedPrompt = part.Text
+			if text, ok := part.(genai.Text); ok && string(text) != "" {
+				analyzedPrompt = string(text)
 				break
 			}
 		}

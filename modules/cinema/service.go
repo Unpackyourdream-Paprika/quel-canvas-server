@@ -21,7 +21,8 @@ import (
 
 	"github.com/gen2brain/webp"
 	"github.com/supabase-community/supabase-go"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
@@ -59,10 +60,7 @@ func NewService() *Service {
 
 	// Genai 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
 		log.Printf("❌ Failed to create Genai client: %v", err)
 		return nil
@@ -338,26 +336,19 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 		return "", fmt.Errorf("failed to decode base64 image: %w", err)
 	}
 
-	// Content 생성
-	content := &genai.Content{
-		Parts: []*genai.Part{
-			genai.NewPartFromText(prompt + "\n\nPlease generate 1 different variation of this image."),
-			genai.NewPartFromBytes(imageData, "image/png"),
-		},
+	// Prepare parts
+	parts := []genai.Part{
+			genai.Text(prompt + "\n\nPlease generate 1 different variation of this image."),
+			genai.Blob{MIMEType: "image/png", Data: imageData},
 	}
 
 	// API 호출 (새 google.golang.org/genai 패키지 사용)
 	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-		},
-	)
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.45)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		return "", fmt.Errorf("Gemini API call failed: %w", err)
 	}
@@ -370,16 +361,16 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	for _, candidate := range result.Candidates {
 		if candidate.Content == nil {
 			continue
-		}
+			}
 
 		for _, part := range candidate.Content.Parts {
 			// InlineData 확인 (이미지는 InlineData로 반환됨)
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				log.Printf("✅ Received image from Gemini: %d bytes", len(part.InlineData.Data))
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(blob.Data))
 				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(part.InlineData.Data), nil
+				return base64.StdEncoding.EncodeToString(blob.Data), nil
 			}
-		}
+			}
 	}
 
 	return "", fmt.Errorf("no image data in response")
@@ -404,7 +395,7 @@ func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 		if err != nil {
 			log.Printf("⚠️  Failed to decode image %d: %v", i, err)
 			continue
-		}
+			}
 		log.Printf("🔍 Decoded image %d format: %s", i, format)
 		decodedImages = append(decodedImages, img)
 	}
@@ -425,10 +416,10 @@ func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 		bounds := img.Bounds()
 		if bounds.Dx() > maxCellWidth {
 			maxCellWidth = bounds.Dx()
-		}
+			}
 		if bounds.Dy() > maxCellHeight {
 			maxCellHeight = bounds.Dy()
-		}
+			}
 	}
 
 	// 전체 그리드 크기
@@ -474,7 +465,7 @@ func mergeImages(images [][]byte, aspectRatio string) ([]byte, error) {
 			targetWidth, targetHeight = 896, 1152
 		default:
 			targetWidth, targetHeight = 1024, 1024
-		}
+			}
 
 		finalImage = resizeImage(merged, targetWidth, targetHeight)
 		log.Printf("✅ Resized merged grid to %dx%d (aspect-ratio: %s)", targetWidth, targetHeight, aspectRatio)
@@ -519,7 +510,7 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 			srcX := int(float64(x) / scale)
 			srcY := int(float64(y) / scale)
 			dst.Set(x+xOffset, y+yOffset, src.At(srcX, srcY))
-		}
+			}
 	}
 
 	return dst
@@ -548,18 +539,18 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		mergedClothing, err = mergeImages(categories.Clothing, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to merge clothing images: %w", err)
-		}
+			}
 	}
 
 	if len(categories.Prop) > 0 {
 		mergedAccessories, err = mergeImages(categories.Prop, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to merge accessory images: %w", err)
-		}
+			}
 	}
 
 	// Gemini Part 배열 구성
-	var parts []*genai.Part
+	var parts []genai.Part
 
 	// 순서: Models → Clothing → Accessories → Background
 	// 다중 모델 지원: 각 모델 이미지를 개별적으로 추가
@@ -568,37 +559,22 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		resizedModel, err := mergeImages([][]byte{modelData}, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to resize model image %d: %w", i+1, err)
-		}
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     resizedModel,
-			},
-		})
+			}
+		parts = append(parts, genai.ImageData("image/png", resizedModel))
 		if len(categories.Actor) == 1 {
 			log.Printf("📎 Added Model image (resized)")
 		} else {
 			log.Printf("📎 Added Model image %d/%d (resized)", i+1, len(categories.Actor))
-		}
+			}
 	}
 
 	if mergedClothing != nil {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     mergedClothing,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", mergedClothing))
 		log.Printf("📎 Added Clothing image (merged from %d items)", len(categories.Clothing))
 	}
 
 	if mergedAccessories != nil {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     mergedAccessories,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", mergedAccessories))
 		log.Printf("📎 Added Accessories image (merged from %d items)", len(categories.Prop))
 	}
 
@@ -607,13 +583,8 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		resizedBG, err := mergeImages([][]byte{categories.Background}, aspectRatio)
 		if err != nil {
 			return "", fmt.Errorf("failed to resize background image: %w", err)
-		}
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     resizedBG,
-			},
-		})
+			}
+		parts = append(parts, genai.ImageData("image/png", resizedBG))
 		log.Printf("📎 Added Background image (resized)")
 	}
 
@@ -632,28 +603,19 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		log.Printf("📎 [Cinema Service] Added multi-image fusion prompt (%d images)", imageCount)
 	}
 
-	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
+	parts = append(parts, genai.Text(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
 
-	// Content 생성
-	content := &genai.Content{
-		Parts: parts,
-	}
+	// Parts are already prepared above
 
 	// API 호출
 	log.Printf("📤 Sending request to Gemini API with %d parts", len(parts))
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-			Temperature: floatPtr(0.45),
-		},
-	)
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.45)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		return "", fmt.Errorf("Gemini API call failed: %w", err)
 	}
@@ -665,9 +627,9 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	for _, candidate := range result.Candidates {
 		// FinishReason 확인
-		if candidate.FinishReason != "" {
+		if candidate.FinishReason != 0 {
 			log.Printf("⚠️ [Cinema] Gemini finish reason: %s", candidate.FinishReason)
-		}
+			}
 
 		// SafetyRatings 확인
 		if len(candidate.SafetyRatings) > 0 {
@@ -677,24 +639,25 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 						rating.Category, rating.Probability)
 				}
 			}
-		}
+			}
 
 		if candidate.Content == nil {
 			log.Printf("⚠️ [Cinema] Gemini candidate has nil content (FinishReason: %s)", candidate.FinishReason)
 			continue
-		}
+			}
 
 		for _, part := range candidate.Content.Parts {
 			// 텍스트 응답 확인
-			if part.Text != "" {
-				log.Printf("📝 [Cinema] Gemini returned text instead of image: %s", part.Text[:minInt(200, len(part.Text))])
+			if text, ok := part.(genai.Text); ok && string(text) != "" {
+				textStr := string(text)
+				log.Printf("📝 [Cinema] Gemini returned text instead of image: %s", textStr[:minInt(200, len(textStr))])
 			}
 
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				log.Printf("✅ Received image from Gemini: %d bytes", len(part.InlineData.Data))
-				return base64.StdEncoding.EncodeToString(part.InlineData.Data), nil
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(blob.Data))
+				return base64.StdEncoding.EncodeToString(blob.Data), nil
 			}
-		}
+			}
 	}
 
 	return "", fmt.Errorf("no image data in response")
@@ -769,7 +732,7 @@ func (s *Service) CreateAttachRecord(ctx context.Context, filePath string, fileS
 				fileName = filePath[i+1:]
 				break
 			}
-		}
+			}
 	}
 
 	insertData := map[string]interface{}{
@@ -817,7 +780,7 @@ func (s *Service) UpdateJobProgress(ctx context.Context, jobID string, completed
 		if !seen[id] {
 			seen[id] = true
 			uniqueIds = append(uniqueIds, id)
-		}
+			}
 	}
 
 	if len(uniqueIds) != len(generatedAttachIds) {
@@ -874,7 +837,7 @@ func (s *Service) UpdateProductionAttachIds(ctx context.Context, productionID st
 			if floatID, ok := id.(float64); ok {
 				existingIds = append(existingIds, int(floatID))
 			}
-		}
+			}
 	}
 
 	// 3. 새로운 ID들 추가
@@ -921,7 +884,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 		// 조직 크레딧 차감
 		var orgs []struct {
 			OrgCredit int64 `json:"org_credit"`
-		}
+			}
 
 		data, _, err := s.supabase.From("quel_organization").
 			Select("org_credit", "", false).
@@ -930,15 +893,15 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 
 		if err != nil {
 			return fmt.Errorf("failed to fetch organization credits: %w", err)
-		}
+			}
 
 		if err := json.Unmarshal(data, &orgs); err != nil {
 			return fmt.Errorf("failed to parse organization data: %w", err)
-		}
+			}
 
 		if len(orgs) == 0 {
 			return fmt.Errorf("organization not found: %s", *orgID)
-		}
+			}
 
 		currentCredits = int(orgs[0].OrgCredit)
 		newBalance = currentCredits - totalCredits
@@ -955,7 +918,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 
 		if err != nil {
 			return fmt.Errorf("failed to deduct organization credits: %w", err)
-		}
+			}
 
 		// 트랜잭션 기록 - 조직 크레딧
 		for _, attachID := range attachIds {
@@ -979,14 +942,14 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 			if err != nil {
 				log.Printf("⚠️  Failed to record organization transaction for attach_id %d: %v", attachID, err)
 			}
-		}
+			}
 
 		log.Printf("✅ Organization credits deducted successfully: %d credits from org %s (used by %s)", totalCredits, *orgID, userID)
 	} else {
 		// 개인 크레딧 차감 (기존 로직)
 		var members []struct {
 			QuelMemberCredit int `json:"quel_member_credit"`
-		}
+			}
 
 		data, _, err := s.supabase.From("quel_member").
 			Select("quel_member_credit", "", false).
@@ -995,15 +958,15 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 
 		if err != nil {
 			return fmt.Errorf("failed to fetch user credits: %w", err)
-		}
+			}
 
 		if err := json.Unmarshal(data, &members); err != nil {
 			return fmt.Errorf("failed to parse member data: %w", err)
-		}
+			}
 
 		if len(members) == 0 {
 			return fmt.Errorf("user not found: %s", userID)
-		}
+			}
 
 		currentCredits = members[0].QuelMemberCredit
 		newBalance = currentCredits - totalCredits
@@ -1020,7 +983,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 
 		if err != nil {
 			return fmt.Errorf("failed to deduct credits: %w", err)
-		}
+			}
 
 		// 트랜잭션 기록 - 개인 크레딧
 		for _, attachID := range attachIds {
@@ -1042,7 +1005,7 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, orgID *strin
 			if err != nil {
 				log.Printf("⚠️  Failed to record transaction for attach_id %d: %v", attachID, err)
 			}
-		}
+			}
 
 		log.Printf("✅ Personal credits deducted successfully: %d credits from user %s", totalCredits, userID)
 	}

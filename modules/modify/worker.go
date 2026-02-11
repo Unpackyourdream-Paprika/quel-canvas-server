@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
 
 	"quel-canvas-server/modules/common/config"
 )
@@ -372,22 +372,18 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 	log.Printf("  - Merged image size: %d bytes", len(mergedImageData))
 
 	// Content 생성 - 합성된 이미지만 전달 (마스크 따로 안 보냄)
-	parts := []*genai.Part{
-		genai.NewPartFromText(inpaintPrompt),
-		genai.NewPartFromBytes(mergedImageData, "image/png"), // 합성된 이미지
+	parts := []genai.Part{
+		genai.Text(inpaintPrompt),
+		genai.Blob{MIMEType: "image/png", Data: mergedImageData}, // 합성된 이미지
 	}
 
 	// Reference 이미지들 추가 (전역 + 레이어별)
 	for _, refImg := range referenceImages {
 		referenceData := mustDecodeBase64(refImg.base64)
 		if len(referenceData) > 0 {
-			parts = append(parts, genai.NewPartFromBytes(referenceData, refImg.mimeType))
+			parts = append(parts, genai.Blob{MIMEType: refImg.mimeType, Data: referenceData})
 			log.Printf("  - Reference image (%s): %d bytes", refImg.desc, len(referenceData))
 		}
-	}
-
-	content := &genai.Content{
-		Parts: parts,
 	}
 
 	// Gemini API 호출 (gemini-2.5-flash-image 모델 사용)
@@ -395,16 +391,11 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 
 	log.Printf("📐 Using aspect ratio: %s", aspectRatio)
 
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel, // "gemini-2.5-flash-image"
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-		},
-	)
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.45)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
 		return "", "", fmt.Errorf("Gemini API request failed: %w", err)
 	}
@@ -417,7 +408,7 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 	// 생성된 이미지 데이터 추출
 	for _, candidate := range result.Candidates {
 		// FinishReason 먼저 확인 (차단 여부 체크)
-		if candidate.FinishReason != "" {
+		if candidate.FinishReason != 0 {
 			log.Printf("⚠️ Gemini finish reason: %s", candidate.FinishReason)
 		}
 
@@ -438,16 +429,16 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 
 		for _, part := range candidate.Content.Parts {
 			// 텍스트 응답 확인 (거부 메시지일 수 있음)
-			if part.Text != "" {
-				log.Printf("📝 Gemini returned text response: %s", part.Text)
+			if text, ok := part.(genai.Text); ok && string(text) != "" {
+				log.Printf("📝 Gemini returned text response: %s", string(text))
 			}
 
 			// InlineData 확인 (이미지는 InlineData로 반환됨)
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
 				log.Printf("✅ Gemini inpaint completed (size: %d bytes, type: %s)",
-					len(part.InlineData.Data), part.InlineData.MIMEType)
+					len(blob.Data), blob.MIMEType)
 				// Base64로 인코딩하여 반환
-				return base64.StdEncoding.EncodeToString(part.InlineData.Data), part.InlineData.MIMEType, nil
+				return base64.StdEncoding.EncodeToString(blob.Data), blob.MIMEType, nil
 			}
 		}
 	}

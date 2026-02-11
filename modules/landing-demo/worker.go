@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
@@ -270,7 +270,7 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 				req := &nanobanana.GenerateRequest{
 					Prompt: refinedPrompt,
-					Model:  "", // config.GeminiModel 사용 (gemini-2.5-flash-image)
+					Model:  "", // cfg.GeminiModel 사용 (gemini-2.5-flash-image)
 					Width:  1024,
 					Height: 1024,
 					Images: images,
@@ -557,30 +557,19 @@ func (s *Service) GenerateImageWithGeminiTextOnly(ctx context.Context, prompt st
 		aspectRatio = "1:1"
 	}
 
-	log.Printf("🎨 [Landing] Calling Gemini API (text-only) - prompt: %s, ratio: %s",
+	log.Printf("🎨 [Landing] Calling Vertex AI (text-only) - prompt: %s, ratio: %s",
 		truncateString(prompt, 50), aspectRatio)
 
-	// Content 생성 (텍스트만)
-	content := &genai.Content{
-		Parts: []*genai.Part{
-			genai.NewPartFromText(prompt),
-		},
-	}
+	// Vertex AI GenerativeModel 가져오기
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.45)
 
-	// Gemini API 호출
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-			Temperature: floatPtr(0.45),
-		},
-	)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
+	// Vertex AI 호출 (텍스트만)
+	result, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
-		return "", fmt.Errorf("Gemini API error: %w", err)
+		return "", fmt.Errorf("Vertex AI error: %w", err)
 	}
 
 	// 응답에서 이미지 추출
@@ -589,10 +578,12 @@ func (s *Service) GenerateImageWithGeminiTextOnly(ctx context.Context, prompt st
 			continue
 		}
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				imageBase64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-				log.Printf("✅ [Landing] Image generated: %d bytes", len(part.InlineData.Data))
-				return imageBase64, nil
+			if blob, ok := part.(genai.Blob); ok {
+				if len(blob.Data) > 0 {
+					imageBase64 := base64.StdEncoding.EncodeToString(blob.Data)
+					log.Printf("✅ [Landing] Image generated: %d bytes", len(blob.Data))
+					return imageBase64, nil
+				}
 			}
 		}
 	}

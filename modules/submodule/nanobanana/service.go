@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"log"
 
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 
 	"quel-canvas-server/modules/common/config"
 )
@@ -21,10 +22,7 @@ func NewService() *Service {
 
 	// Genai 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
 		log.Printf("❌ [Nanobanana] Failed to create Genai client: %v", err)
 		return nil
@@ -76,8 +74,8 @@ func (s *Service) Generate(ctx context.Context, req *GenerateRequest) (*Generate
 		model, aspectRatio, len(req.Images), truncateString(req.Prompt, 50))
 
 	// Gemini API 호출 - Parts 구성
-	parts := []*genai.Part{
-		genai.NewPartFromText(req.Prompt),
+	parts := []genai.Part{
+		genai.Text(req.Prompt),
 	}
 
 	// 입력 이미지가 있으면 추가 (최대 2개)
@@ -97,24 +95,15 @@ func (s *Service) Generate(ctx context.Context, req *GenerateRequest) (*Generate
 		}
 
 		log.Printf("📷 [Nanobanana] Adding input image %d: %s, %d bytes", i+1, img.MimeType, len(imageData))
-		parts = append(parts, genai.NewPartFromBytes(imageData, img.MimeType))
+		parts = append(parts, genai.Blob{MIMEType: img.MimeType, Data: imageData})
 	}
 
-	content := &genai.Content{
-		Parts: parts,
-	}
+	// Create and configure model
+	genModel := s.genaiClient.GenerativeModel(model)
+	genModel.SetTemperature(0.7)
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
 
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		model,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{
-				AspectRatio: aspectRatio,
-			},
-			Temperature: floatPtr(0.7),
-		},
-	)
+	result, err := genModel.GenerateContent(ctx, parts...)
 	if err != nil {
 		log.Printf("❌ [Nanobanana] Gemini API error: %v", err)
 		return &GenerateResponse{
@@ -130,9 +119,9 @@ func (s *Service) Generate(ctx context.Context, req *GenerateRequest) (*Generate
 		}
 
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				imageBase64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-				log.Printf("✅ [Nanobanana] Image generated: %d bytes", len(part.InlineData.Data))
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				imageBase64 := base64.StdEncoding.EncodeToString(blob.Data)
+				log.Printf("✅ [Nanobanana] Image generated: %d bytes", len(blob.Data))
 
 				return &GenerateResponse{
 					Success:     true,
@@ -217,23 +206,16 @@ Respond ONLY with valid JSON in this exact format:
 		model = "gemini-2.0-flash"
 	}
 
-	parts := []*genai.Part{
-		genai.NewPartFromText(analysisPrompt),
-		genai.NewPartFromBytes(imageData, mimeType),
+	parts := []genai.Part{
+		genai.Text(analysisPrompt),
+		genai.Blob{MIMEType: mimeType, Data: imageData},
 	}
 
-	content := &genai.Content{
-		Parts: parts,
-	}
-
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		model,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			Temperature: floatPtr(0.3), // 더 일관된 분석을 위해 낮은 온도
-		},
-	)
+	// Create and configure model for analysis
+	genModel := s.genaiClient.GenerativeModel(model)
+	genModel.SetTemperature(0.3)
+	
+	result, err := genModel.GenerateContent(ctx, parts...)
 	if err != nil {
 		log.Printf("❌ [Nanobanana] Gemini API error: %v", err)
 		return &AnalyzeResponse{
@@ -249,8 +231,8 @@ Respond ONLY with valid JSON in this exact format:
 			continue
 		}
 		for _, part := range candidate.Content.Parts {
-			if part.Text != "" {
-				responseText += part.Text
+			if text, ok := part.(genai.Text); ok && string(text) != "" {
+				responseText += string(text)
 			}
 		}
 	}

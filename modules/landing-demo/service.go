@@ -24,9 +24,10 @@ import (
 	webp "github.com/gen2brain/webp"
 	_ "github.com/gen2brain/webp" // WebP 디코더 등록
 	"github.com/supabase-community/supabase-go"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
 
 	"quel-canvas-server/modules/common/config"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 	"quel-canvas-server/modules/common/model"
 	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
@@ -74,14 +75,11 @@ func NewService() *Service {
 		return nil
 	}
 
-	// Genai 클라이언트 초기화
+	// Vertex AI 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
-		log.Printf("❌ [LandingDemo] Failed to create Genai client: %v", err)
+		log.Printf("❌ [LandingDemo] Failed to create Vertex AI client: %v", err)
 		return nil
 	}
 
@@ -91,7 +89,7 @@ func NewService() *Service {
 		log.Printf("⚠️ [LandingDemo] Failed to connect to Redis - cancel feature will be disabled")
 	}
 
-	log.Println("✅ [LandingDemo] Service initialized")
+	log.Println("✅ [LandingDemo] Service initialized with Vertex AI")
 	return &Service{
 		supabase:    supabaseClient,
 		genaiClient: genaiClient,
@@ -206,64 +204,46 @@ func (s *Service) GenerateImages(ctx context.Context, req *LandingDemoRequest) (
 		}
 	}
 
+	// Vertex AI GenerativeModel 가져오기
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.45)
+
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
 	// 각 이미지 생성
 	for i := 0; i < quantity; i++ {
 		// Parts 구성: 카테고리 순서대로 (Model → Clothing → Accessories → Background)
-		// 병합된 이미지 사용 (fashion 모듈과 동일)
-		var parts []*genai.Part
+		var parts []genai.Part
 
 		if resizedModel != nil {
-			parts = append(parts, &genai.Part{
-				InlineData: &genai.Blob{MIMEType: "image/png", Data: resizedModel},
-			})
+			parts = append(parts, genai.ImageData("image/png", resizedModel))
 			log.Printf("📎 [LandingDemo] Added Model image (resized)")
 		}
 
 		if mergedClothing != nil {
-			parts = append(parts, &genai.Part{
-				InlineData: &genai.Blob{MIMEType: "image/png", Data: mergedClothing},
-			})
+			parts = append(parts, genai.ImageData("image/png", mergedClothing))
 			log.Printf("📎 [LandingDemo] Added Clothing image (merged from %d items)", len(categories.Clothing))
 		}
 
 		if mergedAccessories != nil {
-			parts = append(parts, &genai.Part{
-				InlineData: &genai.Blob{MIMEType: "image/png", Data: mergedAccessories},
-			})
+			parts = append(parts, genai.ImageData("image/png", mergedAccessories))
 			log.Printf("📎 [LandingDemo] Added Accessories image (merged from %d items)", len(categories.Accessories))
 		}
 
 		if resizedBG != nil {
-			parts = append(parts, &genai.Part{
-				InlineData: &genai.Blob{MIMEType: "image/png", Data: resizedBG},
-			})
+			parts = append(parts, genai.ImageData("image/png", resizedBG))
 			log.Printf("📎 [LandingDemo] Added Background image (resized)")
 		}
 
 		// 동적 프롬프트 생성 (fashion 모듈과 동일)
 		prompt := BuildDynamicPrompt(categories, req.Prompt, aspectRatio)
-		parts = append(parts, genai.NewPartFromText(prompt))
+		parts = append(parts, genai.Text(prompt))
 
-		// Content 생성
-		content := &genai.Content{
-			Parts: parts,
-		}
-
-		// Gemini API 호출
-		log.Printf("📤 [LandingDemo] Calling Gemini API for image %d/%d with %d parts...", i+1, quantity, len(parts))
-		result, err := s.genaiClient.Models.GenerateContent(
-			ctx,
-			cfg.GeminiModel,
-			[]*genai.Content{content},
-			&genai.GenerateContentConfig{
-				ImageConfig: &genai.ImageConfig{
-					AspectRatio: aspectRatio,
-				},
-				Temperature: floatPtr(0.45),
-			},
-		)
+		// Vertex AI 호출
+		log.Printf("📤 [LandingDemo] Calling Vertex AI for image %d/%d with %d parts...", i+1, quantity, len(parts))
+		result, err := model.GenerateContent(ctx, parts...)
 		if err != nil {
-			log.Printf("❌ [LandingDemo] Gemini API error for image %d: %v", i+1, err)
+			log.Printf("❌ [LandingDemo] Vertex AI error for image %d: %v", i+1, err)
 			continue
 		}
 
@@ -274,11 +254,14 @@ func (s *Service) GenerateImages(ctx context.Context, req *LandingDemoRequest) (
 			}
 
 			for _, part := range candidate.Content.Parts {
-				if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-					imageBase64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-					generatedImages = append(generatedImages, imageBase64)
-					log.Printf("✅ [LandingDemo] Image %d generated: %d bytes", i+1, len(part.InlineData.Data))
-					break // 첫 번째 이미지만
+				// Vertex AI SDK는 Part를 Blob 타입으로 반환
+				if blob, ok := part.(genai.Blob); ok {
+					if len(blob.Data) > 0 {
+						imageBase64 := base64.StdEncoding.EncodeToString(blob.Data)
+						generatedImages = append(generatedImages, imageBase64)
+						log.Printf("✅ [LandingDemo] Image %d generated: %d bytes", i+1, len(blob.Data))
+						break // 첫 번째 이미지만
+					}
 				}
 			}
 		}
@@ -499,14 +482,11 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 func NewServiceWithDB() *Service {
 	cfg := config.GetConfig()
 
-	// Genai 클라이언트 초기화
+	// Vertex AI 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
-		log.Printf("❌ [Landing] Failed to create Genai client: %v", err)
+		log.Printf("❌ [Landing] Failed to create Vertex AI client: %v", err)
 		return nil
 	}
 
@@ -517,7 +497,7 @@ func NewServiceWithDB() *Service {
 		return nil
 	}
 
-	log.Println("✅ [Landing] Service with DB initialized")
+	log.Println("✅ [Landing] Service with DB initialized (Vertex AI)")
 	return &Service{
 		genaiClient: genaiClient,
 		supabase:    supabaseClient,
@@ -1091,14 +1071,18 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	log.Printf("🎨 [Landing] Generating with categories - Clothing:%d, Accessories:%d, Model:%v, BG:%v",
 		len(categories.Clothing), len(categories.Accessories), categories.Model != nil, categories.Background != nil)
 
+	// Vertex AI GenerativeModel 가져오기
+	model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+	model.SetTemperature(0.45)
+
+	// Note: ResponseMIMEType should NOT be set for image generation with Gemini
+
 	// Parts 구성
-	var parts []*genai.Part
+	var parts []genai.Part
 
 	// 모델 이미지
 	if categories.Model != nil {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Model},
-		})
+		parts = append(parts, genai.ImageData("image/png", categories.Model))
 	}
 
 	// Clothing 이미지 (최대 6장)
@@ -1108,9 +1092,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		clothingCount = maxImages
 	}
 	for i := 0; i < clothingCount; i++ {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Clothing[i]},
-		})
+		parts = append(parts, genai.ImageData("image/png", categories.Clothing[i]))
 	}
 
 	// Accessories 이미지 (최대 6장)
@@ -1119,38 +1101,23 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		accessoryCount = maxImages
 	}
 	for i := 0; i < accessoryCount; i++ {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Accessories[i]},
-		})
+		parts = append(parts, genai.ImageData("image/png", categories.Accessories[i]))
 	}
 
 	// 배경 이미지
 	if categories.Background != nil {
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{MIMEType: "image/png", Data: categories.Background},
-		})
+		parts = append(parts, genai.ImageData("image/png", categories.Background))
 	}
 
 	// 프롬프트
 	prompt := BuildDynamicPrompt(categories, userPrompt, aspectRatio)
-	parts = append(parts, genai.NewPartFromText(prompt))
-
-	// Content 생성
-	content := &genai.Content{Parts: parts}
+	parts = append(parts, genai.Text(prompt))
 
 	// API 호출
-	log.Printf("📤 [Landing] Calling Gemini API with %d parts...", len(parts))
-	result, err := s.genaiClient.Models.GenerateContent(
-		ctx,
-		cfg.GeminiModel,
-		[]*genai.Content{content},
-		&genai.GenerateContentConfig{
-			ImageConfig: &genai.ImageConfig{AspectRatio: aspectRatio},
-			Temperature: floatPtr(0.45),
-		},
-	)
+	log.Printf("📤 [Landing] Calling Vertex AI with %d parts...", len(parts))
+	result, err := model.GenerateContent(ctx, parts...)
 	if err != nil {
-		return "", fmt.Errorf("Gemini API error: %w", err)
+		return "", fmt.Errorf("Vertex AI error: %w", err)
 	}
 
 	// 응답에서 이미지 추출
@@ -1159,10 +1126,12 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 			continue
 		}
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-				imageBase64 := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-				log.Printf("✅ [Landing] Image generated: %d bytes", len(part.InlineData.Data))
-				return imageBase64, nil
+			if blob, ok := part.(genai.Blob); ok {
+				if len(blob.Data) > 0 {
+					imageBase64 := base64.StdEncoding.EncodeToString(blob.Data)
+					log.Printf("✅ [Landing] Image generated: %d bytes", len(blob.Data))
+					return imageBase64, nil
+				}
 			}
 		}
 	}

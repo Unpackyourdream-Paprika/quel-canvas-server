@@ -27,6 +27,10 @@ type Config struct {
 	GeminiAPIKey string
 	GeminiModel  string
 
+	// Vertex AI
+	VertexAIProject  string
+	VertexAILocation string
+
 	// Server
 	Port string
 
@@ -76,6 +80,10 @@ func LoadConfig() (*Config, error) {
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
 
+		// Vertex AI
+		VertexAIProject:  getEnv("VERTEXAI_PROJECT", ""),
+		VertexAILocation: getEnv("VERTEXAI_LOCATION", "us-central1"),
+
 		// Server
 		Port: getEnv("PORT", "8080"),
 
@@ -91,7 +99,8 @@ func LoadConfig() (*Config, error) {
 	log.Println("✅ Configuration loaded successfully")
 	log.Printf("   Redis: %s:%s (TLS: %v)", config.RedisHost, config.RedisPort, config.RedisUseTLS)
 	log.Printf("   Supabase: %s", config.SupabaseURL)
-	log.Printf("   Gemini: %s", config.GeminiModel)
+	log.Printf("   Vertex AI: %s (%s)", config.VertexAIProject, config.VertexAILocation)
+	log.Printf("   Gemini: %s (Deprecated - using Vertex AI)", config.GeminiModel)
 	log.Printf("   Credit: %d per image", config.ImagePerPrice)
 
 	return config, nil
@@ -116,8 +125,8 @@ func (c *Config) validate() error {
 	if c.SupabaseServiceKey == "" {
 		return fmt.Errorf("SUPABASE_SERVICE_KEY is required")
 	}
-	if c.GeminiAPIKey == "" {
-		return fmt.Errorf("GEMINI_API_KEY is required")
+	if c.VertexAIProject == "" {
+		return fmt.Errorf("VERTEXAI_PROJECT is required")
 	}
 	return nil
 }

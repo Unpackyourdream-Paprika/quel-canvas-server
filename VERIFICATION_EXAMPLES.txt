@@ -1,0 +1,38 @@
+=== VERIFICATION EXAMPLES ===
+
+FILE: modules/beauty/service.go (line 60)
+----------------------------------------------
+Client Initialization:
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
+
+FILE: modules/cartoon/service.go (line 342)
+----------------------------------------------
+Text Part:
+			genai.Text(prompt + "\n\nPlease generate 1 different variation of this image."),
+
+FILE: modules/cinema/service.go (line 841)
+----------------------------------------------
+Image Data Part:
+		parts = append(parts, genai.ImageData("image/png", resizedModel))
+
+FILE: modules/eats/service.go (line 931)
+----------------------------------------------
+Blob Assertion:
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				log.Printf("✅ Received image from Gemini: %d bytes", len(blob.Data))
+				return base64.StdEncoding.EncodeToString(blob.Data), nil
+
+FILE: modules/modify/worker.go (line 326)
+----------------------------------------------
+Blob with MIMEType:
+			if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+				log.Printf("✅ Gemini inpaint completed (size: %d bytes, type: %s)",
+					len(blob.Data), blob.MIMEType)
+				return base64.StdEncoding.EncodeToString(blob.Data), blob.MIMEType, nil
+
+FILE: modules/generate-image/service.go (line 54)
+----------------------------------------------
+Client with 'config' variable:
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, config.VertexAIProject, config.VertexAILocation)
+
+All patterns successfully migrated! ✓

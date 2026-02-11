@@ -27,6 +27,10 @@ type Config struct {
 	GeminiAPIKey string
 	GeminiModel  string
 
+	// Vertex AI
+	VertexAIProject  string
+	VertexAILocation string
+
 	// Runware API
 	RunwareAPIKey string
 	RunwareAPIURL string
@@ -83,6 +87,10 @@ func LoadConfig() (*Config, error) {
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
 
+		// Vertex AI
+		VertexAIProject:  getEnv("VERTEXAI_PROJECT", ""),
+		VertexAILocation: getEnv("VERTEXAI_LOCATION", "us-central1"),
+
 		// Runware API
 		RunwareAPIKey: getEnv("RUNWARE_API_KEY", ""),
 		RunwareAPIURL: getEnv("RUNWARE_API_URL", "https://api.runware.ai/v1"),
@@ -105,7 +113,8 @@ func LoadConfig() (*Config, error) {
 	log.Println("✅ Configuration loaded successfully")
 	log.Printf("   Redis: %s:%s (TLS: %v)", globalConfig.RedisHost, globalConfig.RedisPort, globalConfig.RedisUseTLS)
 	log.Printf("   Supabase: %s", globalConfig.SupabaseURL)
-	log.Printf("   Gemini: %s", globalConfig.GeminiModel)
+	log.Printf("   Vertex AI: %s (%s)", globalConfig.VertexAIProject, globalConfig.VertexAILocation)
+	log.Printf("   Gemini: %s (Deprecated - using Vertex AI)", globalConfig.GeminiModel)
 	log.Printf("   Runware: %s (key: %v)", globalConfig.RunwareAPIURL, globalConfig.RunwareAPIKey != "")
 	log.Printf("   OpenAI: %v", globalConfig.OpenAIAPIKey != "")
 	log.Printf("   Credit: %d per image", globalConfig.ImagePerPrice)
@@ -132,8 +141,8 @@ func (c *Config) validate() error {
 	if c.SupabaseServiceKey == "" {
 		return fmt.Errorf("SUPABASE_SERVICE_KEY is required")
 	}
-	if c.GeminiAPIKey == "" {
-		return fmt.Errorf("GEMINI_API_KEY is required")
+	if c.VertexAIProject == "" {
+		return fmt.Errorf("VERTEXAI_PROJECT is required")
 	}
 	return nil
 }

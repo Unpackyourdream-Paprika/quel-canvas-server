@@ -17,7 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/supabase-community/supabase-go"
-	"google.golang.org/genai"
+	"cloud.google.com/go/vertexai/genai"
+	vertexai "quel-canvas-server/modules/common/vertexai"
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/model"
@@ -43,10 +44,7 @@ func NewService() *Service {
 
 	// Genai 클라이언트 초기화
 	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
+	genaiClient, err := vertexai.NewVertexAIClient(ctx, cfg.VertexAIProject, cfg.VertexAILocation)
 	if err != nil {
 		log.Printf("❌ [Multiview] Failed to create Genai client: %v", err)
 		return nil
@@ -177,50 +175,29 @@ func (s *Service) GenerateMultiview(ctx context.Context, req *MultiviewGenerateR
 		}
 
 		// Gemini API 호출 준비
-		var parts []*genai.Part
+		var parts []genai.Part
 
 		// 원본 이미지 추가
-		parts = append(parts, &genai.Part{
-			InlineData: &genai.Blob{
-				MIMEType: "image/png",
-				Data:     sourceImageData,
-			},
-		})
+		parts = append(parts, genai.ImageData("image/png", sourceImageData))
 
 		// 해당 각도에 레퍼런스가 있으면 추가
 		hasReference := false
 		if refData, ok := referenceMap[angle]; ok {
-			parts = append(parts, &genai.Part{
-				InlineData: &genai.Blob{
-					MIMEType: "image/png",
-					Data:     refData,
-				},
-			})
+			parts = append(parts, genai.ImageData("image/png", refData))
 			hasReference = true
 			log.Printf("📎 [Multiview] Using reference image for angle %d", angle)
 		}
 
 		// 프롬프트 생성
 		prompt := BuildMultiviewPrompt(0, angle, req.Category, req.OriginalPrompt, hasReference, req.RotateBackground)
-		parts = append(parts, genai.NewPartFromText(prompt))
+		parts = append(parts, genai.Text(prompt))
 
-		// Content 생성
-		content := &genai.Content{
-			Parts: parts,
-		}
+		// Gemini API 호출 (parts already prepared above)
+		model := s.genaiClient.GenerativeModel(cfg.GeminiModel)
+		model.SetTemperature(0.5)
+		// Note: ResponseMIMEType should NOT be set for image generation with Gemini
 
-		// Gemini API 호출
-		result, err := s.genaiClient.Models.GenerateContent(
-			ctx,
-			cfg.GeminiModel,
-			[]*genai.Content{content},
-			&genai.GenerateContentConfig{
-				ImageConfig: &genai.ImageConfig{
-					AspectRatio: aspectRatio,
-				},
-				Temperature: floatPtr(0.5), // 일관성을 위해 낮은 temperature
-			},
-		)
+		result, err := model.GenerateContent(ctx, parts...)
 
 		if err != nil {
 			log.Printf("❌ [Multiview] Gemini API error for angle %d: %v", angle, err)
@@ -242,8 +219,8 @@ func (s *Service) GenerateMultiview(ctx context.Context, req *MultiviewGenerateR
 				}
 
 				for _, part := range candidate.Content.Parts {
-					if part.InlineData != nil && len(part.InlineData.Data) > 0 {
-						imageData := part.InlineData.Data
+					if blob, ok := part.(genai.Blob); ok && len(blob.Data) > 0 {
+						imageData := blob.Data
 						log.Printf("✅ [Multiview] Image generated for angle %d: %d bytes", angle, len(imageData))
 
 						// Storage에 업로드
