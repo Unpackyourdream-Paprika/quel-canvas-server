@@ -254,10 +254,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"context":    "Context shot, food shown with environmental elements (table setting, restaurant atmosphere), lifestyle food photography, tells a story",
 	}
 
-	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
+	log.Printf("🚀 Starting parallel processing for %d combinations (max 1 concurrent (sequential))", len(combinations))
 
 	// Semaphore: 최대 2개 조합만 동시 처리
-	semaphore := make(chan struct{}, 2)
+	semaphore := make(chan struct{}, 1) // 한 번에 1개 조합만 처리 (Rate Limiting)
 
 	for comboIdx, combo := range combinations {
 		wg.Add(1)
