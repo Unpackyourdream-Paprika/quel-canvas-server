@@ -209,12 +209,6 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 
 	// 병렬로 이미지 생성 시작
 	for i := 0; i < quantity; i++ {
-	// Rate limiting 방지: 첫 요청이 아니면 2초 대기
-	if i > 0 {
-		log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-		time.Sleep(2 * time.Second)
-	}
-
 		go func(idx int) {
 			// 취소 체크
 			if service.IsJobCancelled(job.JobID) {
@@ -408,12 +402,6 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	var apiError error
 
 	for i := 0; i < quantity; i++ {
-	// Rate limiting 방지: 첫 요청이 아니면 2초 대기
-	if i > 0 {
-		log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-		time.Sleep(2 * time.Second)
-	}
-
 		result := <-resultChan
 
 		if result.Error != nil {

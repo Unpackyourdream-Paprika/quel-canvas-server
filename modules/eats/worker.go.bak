@@ -12,6 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"quel-canvas-server/modules/common/cancel"
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
 	"quel-canvas-server/modules/common/model"
@@ -132,15 +133,23 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
 
-	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s",
-		len(individualImageAttachIds), basePrompt, len(combinations), userID)
-
-	// 🔍 DEBUG: 받은 이미지 데이터 상세 출력
-	for i, attachObj := range individualImageAttachIds {
-		if attachMap, ok := attachObj.(map[string]interface{}); ok {
-			log.Printf("🔍 [DEBUG] Image[%d]: attachId=%v, type=%v", i, attachMap["attachId"], attachMap["type"])
+	// org_id가 없으면 유저의 조직 조회
+	if job.OrgID == nil && userID != "" {
+		orgID, err := service.GetUserOrganization(ctx, userID)
+		if err == nil && orgID != "" {
+			job.OrgID = &orgID
+			log.Printf("🏢 Found organization for user %s: %s", userID, orgID)
 		}
 	}
+
+	// isPreEdited 읽기 (eats 카테고리 전용, 기본값 false)
+	isPreEdited := false
+	if val, ok := job.JobInputData["isPreEdited"].(bool); ok {
+		isPreEdited = val
+	}
+
+	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s, isPreEdited=%v",
+		len(individualImageAttachIds), basePrompt, len(combinations), userID, isPreEdited)
 
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -154,15 +163,14 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		}
 	}
 
-	// Phase 3: 이미지 다운로드 및 카테고리별 분류
+	// Phase 3: 이미지 다운로드 및 카테고리별 분류 (Eats 전용)
 	categories := &ImageCategories{
-		Clothing:    [][]byte{},
-		Accessories: [][]byte{},
+		Food:       [][]byte{}, // Food 배열 초기화
+		Ingredient: [][]byte{},
+		Prop:       [][]byte{},
 	}
 
-	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
-
+	// Eats 프론트 타입: none, food, ingredient, prop, background
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
 		if !ok {
@@ -179,7 +187,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		attachID := int(attachIDFloat)
 		attachType, _ := attachMap["type"].(string)
 
-		log.Printf("📥 Downloading image %d/%d: AttachID=%d, Type=%s",
+		log.Printf("📥 [Eats] Downloading image %d/%d: AttachID=%d, Type=%s",
 			i+1, len(individualImageAttachIds), attachID, attachType)
 
 		imageData, err := service.DownloadImageFromStorage(attachID)
@@ -188,31 +196,29 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 			continue
 		}
 
-		// type에 따라 카테고리별로 분류
+		// type에 따라 카테고리별로 분류 (Eats 전용)
 		switch attachType {
-		case "model", "food", "dish", "main", "product":
-			categories.Model = imageData
-			log.Printf("✅ Model/Food image added (type: %s)", attachType)
-		case "background", "bg":
+		case "food":
+			categories.Food = append(categories.Food, imageData)
+		case "ingredient":
+			categories.Ingredient = append(categories.Ingredient, imageData)
+		case "prop":
+			categories.Prop = append(categories.Prop, imageData)
+		case "background":
 			categories.Background = imageData
-			log.Printf("✅ Background image added")
+		case "none":
+			// none은 Food로 처리
+			categories.Food = append(categories.Food, imageData)
 		default:
-			if clothingTypes[attachType] {
-				categories.Clothing = append(categories.Clothing, imageData)
-				log.Printf("✅ Clothing image added (type: %s)", attachType)
-			} else if accessoryTypes[attachType] {
-				categories.Accessories = append(categories.Accessories, imageData)
-				log.Printf("✅ Accessory image added (type: %s)", attachType)
-			} else if attachType != "none" {
-				log.Printf("⚠️  Unknown type: %s, skipping", attachType)
-			}
+			// 알 수 없는 타입은 Food로 처리
+			categories.Food = append(categories.Food, imageData)
 		}
 	}
 
 	normalizeEatsCategories(categories, &basePrompt)
 
-	log.Printf("✅ Images classified - Model:%v, Clothing:%d, Accessories:%d, BG:%v",
-		categories.Model != nil, len(categories.Clothing), len(categories.Accessories), categories.Background != nil)
+	log.Printf("✅ [Eats] Images classified - Food:%d, Ingredient:%d, Prop:%d, BG:%v",
+		len(categories.Food), len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup
@@ -229,7 +235,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"back":    "Cinematic rear angle, back view composition, film photography aesthetic",
 
 		// Eats 전용 앵글
-		"overhead":  "Overhead flat lay angle, camera directly above subject looking straight down, top-down food photography composition, shows complete plate arrangement",
+		"overhead":  "Overhead flat lay angle, camera directly above subject looking straight down, top-down food photography composition, shows complete food arrangement",
 		"45-degree": "45-degree angle, camera tilted at diagonal viewpoint between overhead and eye-level, classic food photography perspective, shows depth and layers",
 		"macro":     "Macro close-up angle, extreme detail shot focusing on textures and ingredients, intimate food photography, fills frame with specific details",
 	}
@@ -242,8 +248,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
 
 		// Eats 전용 샷 타입
-		"full-plate": "Full plate shot, complete dish visible from edge to edge, shows entire meal composition, classic food photography framing",
-		"hero-shot":  "Hero shot, dramatic main dish photography with artistic composition, highlights the star ingredient or dish, editorial food styling",
+		"full-plate": "Full shot, complete food visible from edge to edge, shows entire meal composition, classic food photography framing",
+		"hero-shot":  "Hero shot, dramatic food photography with artistic composition, highlights the star ingredient, editorial food styling",
 		"detail":     "Detail shot, tight focus on specific ingredient or texture, artistic close-up food photography, emphasizes craftsmanship and quality",
 		"context":    "Context shot, food shown with environmental elements (table setting, restaurant atmosphere), lifestyle food photography, tells a story",
 	}
@@ -292,26 +298,47 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
+				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Combination %d: Job %s cancelled, stopping generation", idx+1, job.JobID)
+					// 상태 업데이트
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
+				}
+
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio, isPreEdited)
 				if err != nil {
 					log.Printf("❌ Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
-					if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
 						log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
 							log.Printf("❌ Failed to update job status to error: %v", err)
 						}
 						if job.ProductionID != nil {
-							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
 								log.Printf("❌ Failed to update production status to error: %v", err)
 							}
 						}
 						return
 					}
 					continue
+				}
+
+				// 🛑 Gemini 응답 후 취소 체크 - 취소됐으면 저장/차감 안 함
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Combination %d: Job %s cancelled after generation, discarding image %d", idx+1, job.JobID, i+1)
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
 				}
 
 				// Base64 → []byte 변환
@@ -338,7 +365,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				// 크레딧 차감 (조직/개인 구분)
 				if job.ProductionID != nil && userID != "" {
 					go func(attachID int, prodID string, orgID *string) {
-						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 							log.Printf("⚠️  Combination %d: Failed to deduct credits for attach %d: %v", idx+1, attachID, err)
 						}
 					}(attachID, *job.ProductionID, job.OrgID)
@@ -373,6 +400,19 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	log.Printf("✅ All combinations completed in parallel")
 
 	// Phase 5: 최종 완료 처리
+	// 🛑 취소된 Job은 user_cancelled 상태 유지 (completed로 덮어쓰지 않음)
+	if service.IsJobCancelled(job.JobID) {
+		log.Printf("🛑 Job %s was cancelled, keeping user_cancelled status", job.JobID)
+		// attach_ids만 업데이트 (이미 생성된 이미지들)
+		if job.ProductionID != nil && len(generatedAttachIds) > 0 {
+			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, generatedAttachIds); err != nil {
+				log.Printf("Failed to update production attach_ids: %v", err)
+			}
+		}
+		log.Printf("Single Batch processing completed for job: %s (cancelled with %d images)", job.JobID, len(generatedAttachIds))
+		return
+	}
+
 	finalStatus := model.StatusCompleted
 	if completedCount == 0 {
 		log.Printf("⚠️ No images generated; marking job as completed with fallbacks")
@@ -406,41 +446,28 @@ func normalizeEatsCategories(categories *ImageCategories, prompt *string) {
 		return
 	}
 
-	// 이미지가 전혀 없는 경우 (텍스트만으로 생성) - placeholder 사용 안 함
-	hasAnyImage := categories.Model != nil || len(categories.Clothing) > 0 || len(categories.Accessories) > 0 || categories.Background != nil
+	// 이미지가 전혀 없는 경우 (텍스트만으로 생성)
+	hasAnyImage := len(categories.Food) > 0 || len(categories.Ingredient) > 0 || len(categories.Prop) > 0 || categories.Background != nil
 	if !hasAnyImage {
-		log.Printf("🔧 [Eats] No images provided - will generate with text prompt only")
 		if prompt != nil {
 			*prompt = strings.TrimSpace(*prompt + "\nGenerate a completely new image based on the text description only.")
 		}
 		return
 	}
 
-	if categories.Model == nil {
+	if len(categories.Food) == 0 {
 		switch {
-		case len(categories.Clothing) > 0:
-			categories.Model = categories.Clothing[0]
-			log.Printf("🔧 Using side/ingredient image as main dish placeholder")
-		case len(categories.Accessories) > 0:
-			categories.Model = categories.Accessories[0]
-			log.Printf("🔧 Using accessory/garnish image as main dish placeholder")
+		case len(categories.Ingredient) > 0:
+			categories.Food = append(categories.Food, categories.Ingredient[0])
+		case len(categories.Prop) > 0:
+			categories.Food = append(categories.Food, categories.Prop[0])
 		case categories.Background != nil:
-			categories.Model = categories.Background
-			log.Printf("🔧 Using background image as main dish placeholder")
-		default:
-			// 🔧 더 이상 1x1 placeholder 사용 안 함
-			log.Printf("🔧 [Eats] No main dish image available - will use text-only generation")
+			categories.Food = append(categories.Food, categories.Background)
 		}
 
 		if prompt != nil {
-			*prompt = strings.TrimSpace(*prompt + "\nIf no main dish is supplied, still present a complete plated dish.")
+			*prompt = strings.TrimSpace(*prompt + "\nIf no main food is supplied, still present the complete food item.")
 		}
-	}
-
-	// Model이 있을 때만 Clothing 채우기
-	if len(categories.Clothing) == 0 && categories.Model != nil {
-		categories.Clothing = append(categories.Clothing, categories.Model)
-		log.Printf("🔧 No ingredient/side images provided; reusing main reference")
 	}
 }
 
@@ -485,7 +512,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
-	log.Printf("📦 Pipeline has %d stages, UserID=%s", len(stages), userID)
+
+	// isPreEdited 읽기 (eats 카테고리 전용, 기본값 false)
+	isPreEdited := false
+	if val, ok := job.JobInputData["isPreEdited"].(bool); ok {
+		isPreEdited = val
+	}
+
+	log.Printf("📦 Pipeline has %d stages, UserID=%s, isPreEdited=%v", len(stages), userID, isPreEdited)
 
 	// Phase 2: Job 상태 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -500,13 +534,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// Phase 3: 모든 Stage 병렬 처리 (최종 배열은 순서 보장)
-	type StageResult struct {
-		StageIndex int
-		AttachIDs  []int
-		Success    int
-	}
-
-	results := make([]StageResult, len(stages))
+	results := make([]cancel.StageResult, len(stages))
 	var wg sync.WaitGroup
 	var progressMutex sync.Mutex
 	totalCompleted := 0
@@ -532,23 +560,31 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			// aspect-ratio 추출 (기본값: "16:9")
 			aspectRatio := fallback.SafeAspectRatio(stage["aspect-ratio"])
 
-			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s (parallel)", stageIndex+1, len(stages), quantity, aspectRatio)
+			// isPreEdited 읽기 (stage별로 설정 가능, 기본값 false)
+			isPreEdited := false
+			if val, ok := stage["isPreEdited"].(bool); ok {
+				isPreEdited = val
+			}
+
+			log.Printf("🎬 Stage %d/%d: Processing %d images with aspect-ratio %s, isPreEdited=%v (parallel)", stageIndex+1, len(stages), quantity, aspectRatio, isPreEdited)
 
 			// individualImageAttachIds 또는 mergedImageAttachId 지원
 			stageCategories := &ImageCategories{
-				Clothing:    [][]byte{},
-				Accessories: [][]byte{},
+				Food:       [][]byte{}, // Food 배열 초기화
+				Ingredient: [][]byte{},
+				Prop:       [][]byte{},
 			}
 			backgrounds := [][]byte{} // 여러 배경 지원
-			models := [][]byte{}      // 여러 모델(음식) 지원
+			foods := [][]byte{}       // 여러 음식 이미지 지원
 
 			if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 				// 새 방식: individualImageAttachIds로 카테고리별 분류
 				log.Printf("🔍 Stage %d: Using individualImageAttachIds (%d images)", stageIndex, len(individualIds))
 
 				stageCategories = &ImageCategories{
-					Clothing:    [][]byte{},
-					Accessories: [][]byte{},
+					Food:       [][]byte{}, // Food 배열 초기화
+					Ingredient: [][]byte{},
+					Prop:       [][]byte{},
 				}
 
 				// Eats 전용 타입 정의
@@ -580,29 +616,24 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					// type에 따라 카테고리별로 분류 (Eats 전용)
 					switch attachType {
 					case "model", "food", "dish", "main":
-						models = append(models, imageData)
-						log.Printf("✅ [Eats Pipeline] Stage %d: Food/Main image added (Total: %d)", stageIndex, len(models))
+						foods = append(foods, imageData)
 					case "bg", "background":
 						backgrounds = append(backgrounds, imageData)
-						log.Printf("✅ [Eats Pipeline] Stage %d: Background image added (Total: %d)", stageIndex, len(backgrounds))
 					default:
 						if ingredientTypes[attachType] {
-							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
-							log.Printf("✅ [Eats Pipeline] Stage %d: Ingredient/Side image added (type: %s)", stageIndex, attachType)
+							stageCategories.Ingredient = append(stageCategories.Ingredient, imageData)
 						} else if toppingTypes[attachType] {
-							stageCategories.Accessories = append(stageCategories.Accessories, imageData)
-							log.Printf("✅ [Eats Pipeline] Stage %d: Topping/Garnish image added (type: %s)", stageIndex, attachType)
+							stageCategories.Prop = append(stageCategories.Prop, imageData)
 						} else {
 							// 알 수 없는 타입은 부재료로 처리
-							stageCategories.Clothing = append(stageCategories.Clothing, imageData)
-							log.Printf("⚠️  [Eats Pipeline] Stage %d: Unknown type '%s' treated as ingredient", stageIndex, attachType)
+							stageCategories.Ingredient = append(stageCategories.Ingredient, imageData)
 						}
 					}
 				}
 
-				log.Printf("✅ [Eats Pipeline] Stage %d: Images classified - Food:%d, Ingredients:%d, Toppings:%d, BG:%d",
-					stageIndex, len(models), len(stageCategories.Clothing),
-					len(stageCategories.Accessories), len(backgrounds))
+				log.Printf("✅ [Eats Pipeline] Stage %d: Images classified - Food:%d, Ingredients:%d, Props:%d, BG:%d",
+					stageIndex, len(foods), len(stageCategories.Ingredient),
+					len(stageCategories.Prop), len(backgrounds))
 
 			} else if mergedID, ok := stage["mergedImageAttachId"].(float64); ok {
 				// 레거시 방식: mergedImageAttachId
@@ -615,14 +646,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 					imageData = fallback.PlaceholderBytes()
 				}
 
-				// 레거시 이미지를 Clothing 카테고리로 처리
+				// 레거시 이미지를 Ingredient 카테고리로 처리
 				stageCategories = &ImageCategories{
-					Clothing:    [][]byte{imageData},
-					Accessories: [][]byte{},
+					Ingredient: [][]byte{imageData},
+					Prop:       [][]byte{},
 				}
 			} else {
 				log.Printf("❌ Stage %d: No individualImageAttachIds or mergedImageAttachId found - using placeholder", stageIndex)
-				stageCategories.Clothing = append(stageCategories.Clothing, fallback.PlaceholderBytes())
+				stageCategories.Ingredient = append(stageCategories.Ingredient, fallback.PlaceholderBytes())
 			}
 
 			normalizeEatsCategories(stageCategories, &prompt)
@@ -631,37 +662,67 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
-				// 여러 모델(음식) 이미지가 있으면 rotate
-				if len(models) > 0 {
-					stageCategories.Model = models[i%len(models)]
-					log.Printf("🔄 [Eats Pipeline] Stage %d: Using model %d/%d for image %d", stageIndex, (i%len(models))+1, len(models), i+1)
+				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Stage %d: Job %s cancelled, stopping generation", stageIndex, job.JobID)
+					// 지금까지 생성된 이미지는 results에 저장
+					results[stageIndex] = cancel.StageResult{
+						StageIndex: stageIndex,
+						AttachIDs:  stageGeneratedIds,
+						Success:    len(stageGeneratedIds),
+					}
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
+				}
+
+				// 여러 음식 이미지가 있으면 모두 배열에 넣기 (병합을 위해)
+				if len(foods) > 0 {
+					stageCategories.Food = foods
 				}
 
 				// 여러 배경이 있으면 rotate
 				if len(backgrounds) > 0 {
 					stageCategories.Background = backgrounds[i%len(backgrounds)]
-					log.Printf("🔄 [Eats Pipeline] Stage %d: Using background %d/%d for image %d", stageIndex, (i%len(backgrounds))+1, len(backgrounds), i+1)
 				}
 
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, prompt, aspectRatio, isPreEdited)
 				if err != nil {
 					log.Printf("❌ Stage %d: Gemini API failed for image %d: %v", stageIndex, i+1, err)
-					if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+					if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
 						log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+						if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
 							log.Printf("❌ Failed to update job status to error: %v", err)
 						}
 						if job.ProductionID != nil {
-							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+							if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
 								log.Printf("❌ Failed to update production status to error: %v", err)
 							}
 						}
 						return
 					}
 					continue
+				}
+
+				// 🛑 Gemini 응답 후 취소 체크 - 취소됐으면 저장/차감 안 함
+				if service.IsJobCancelled(job.JobID) {
+					log.Printf("🛑 Stage %d: Job %s cancelled after generation, discarding image %d", stageIndex, job.JobID, i+1)
+					// 지금까지 생성된 이미지는 results에 저장
+					results[stageIndex] = cancel.StageResult{
+						StageIndex: stageIndex,
+						AttachIDs:  stageGeneratedIds,
+						Success:    len(stageGeneratedIds),
+					}
+					service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+					if job.ProductionID != nil {
+						service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+					}
+					return
 				}
 
 				// Base64 → []byte 변환
@@ -688,7 +749,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				// 크레딧 차감 (조직/개인 구분)
 				if job.ProductionID != nil && userID != "" {
 					go func(attachID int, prodID string, orgID *string) {
-						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+						if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 							log.Printf("⚠️  Stage %d: Failed to deduct credits for attach %d: %v", stageIndex, attachID, err)
 						}
 					}(attachID, *job.ProductionID, job.OrgID)
@@ -721,7 +782,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			}
 
 			// Stage 결과 저장 (stage_index 기반으로 올바른 위치에 저장)
-			results[stageIndex] = StageResult{
+			results[stageIndex] = cancel.StageResult{
 				StageIndex: stageIndex,
 				AttachIDs:  stageGeneratedIds,
 				Success:    len(stageGeneratedIds),
@@ -757,6 +818,12 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 	// Step 2: 부족한 Stage만 재시도
 	for stageIdx, stageData := range stages {
+		// 🛑 재시도 전에 취소 체크
+		if service.IsJobCancelled(job.JobID) {
+			log.Printf("🛑 Job %s cancelled, skipping retry phase", job.JobID)
+			break
+		}
+
 		stage := stageData.(map[string]interface{})
 		expectedQuantity := getIntFromInterface(stage["quantity"], 1)
 		actualQuantity := len(results[stageIdx].AttachIDs)
@@ -774,14 +841,15 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 		// individualImageAttachIds 또는 mergedImageAttachId 지원
 		retryCategories := &ImageCategories{
-			Clothing:    [][]byte{},
-			Accessories: [][]byte{},
+			Food:       [][]byte{}, // Food 배열 초기화
+			Ingredient: [][]byte{},
+			Prop:       [][]byte{},
 		}
 
 		if individualIds, ok := stage["individualImageAttachIds"].([]interface{}); ok && len(individualIds) > 0 {
 			// 새 방식: individualImageAttachIds로 카테고리별 분류
-			clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true, "ingredient": true, "side": true}
-			accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true, "topping": true, "garnish": true, "prop": true}
+			ingredientTypes := map[string]bool{"ingredient": true, "side": true}
+			propTypes := map[string]bool{"topping": true, "garnish": true, "prop": true}
 
 			for _, attachObj := range individualIds {
 				attachMap := attachObj.(map[string]interface{})
@@ -797,14 +865,14 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 
 				switch attachType {
 				case "model", "food", "dish", "main":
-					retryCategories.Model = imageData
-				case "bg":
+					retryCategories.Food = append(retryCategories.Food, imageData)
+				case "bg", "background":
 					retryCategories.Background = imageData
 				default:
-					if clothingTypes[attachType] {
-						retryCategories.Clothing = append(retryCategories.Clothing, imageData)
-					} else if accessoryTypes[attachType] {
-						retryCategories.Accessories = append(retryCategories.Accessories, imageData)
+					if ingredientTypes[attachType] {
+						retryCategories.Ingredient = append(retryCategories.Ingredient, imageData)
+					} else if propTypes[attachType] {
+						retryCategories.Prop = append(retryCategories.Prop, imageData)
 					}
 				}
 			}
@@ -817,12 +885,12 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 				imageData = fallback.PlaceholderBytes()
 			}
 			retryCategories = &ImageCategories{
-				Clothing:    [][]byte{imageData},
-				Accessories: [][]byte{},
+				Ingredient: [][]byte{imageData},
+				Prop:       [][]byte{},
 			}
 		} else {
 			log.Printf("❌ Stage %d: No image data for retry - using placeholder", stageIdx)
-			retryCategories.Clothing = append(retryCategories.Clothing, fallback.PlaceholderBytes())
+			retryCategories.Ingredient = append(retryCategories.Ingredient, fallback.PlaceholderBytes())
 		}
 
 		normalizeEatsCategories(retryCategories, &prompt)
@@ -830,19 +898,29 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 		// 재시도 루프
 		retrySuccess := 0
 		for i := 0; i < missing; i++ {
+			// 🛑 취소 체크
+			if service.IsJobCancelled(job.JobID) {
+				log.Printf("🛑 Stage %d: Job %s cancelled during retry", stageIdx, job.JobID)
+				service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+				if job.ProductionID != nil {
+					service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+				}
+				return
+			}
+
 			log.Printf("🔄 Stage %d: Retry generating image %d/%d...", stageIdx, i+1, missing)
 
 			// Gemini API 호출 (카테고리별 이미지 전달)
-			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio)
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, retryCategories, prompt, aspectRatio, isPreEdited)
 			if err != nil {
 				log.Printf("❌ Stage %d: Retry %d failed: %v", stageIdx, i+1, err)
-				if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+				if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
 					log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping retry.")
-					if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+					if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
 						log.Printf("❌ Failed to update job status to error: %v", err)
 					}
 					if job.ProductionID != nil {
-						if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+						if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
 							log.Printf("❌ Failed to update production status to error: %v", err)
 						}
 					}
@@ -875,7 +953,7 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 			// 크레딧 차감 (조직/개인 구분)
 			if job.ProductionID != nil && userID != "" {
 				go func(aID int, prodID string, orgID *string) {
-					if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}); err != nil {
+					if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}, "gemini-banana"); err != nil {
 						log.Printf("⚠️  Stage %d: Failed to deduct credits for retry attach %d: %v", stageIdx, aID, err)
 					}
 				}(attachID, *job.ProductionID, job.OrgID)
@@ -940,6 +1018,19 @@ func processPipelineStage(ctx context.Context, service *Service, job *model.Prod
 	}
 
 	// Phase 4: 최종 완료 처리
+	// 🛑 Cancel된 job은 상태를 덮어쓰지 않음
+	if service.IsJobCancelled(job.JobID) {
+		log.Printf("🛑 Job %s was cancelled, keeping user_cancelled status", job.JobID)
+		// attach_ids만 업데이트 (이미 생성된 이미지들)
+		if job.ProductionID != nil && len(allGeneratedAttachIds) > 0 {
+			if err := service.UpdateProductionAttachIds(ctx, *job.ProductionID, allGeneratedAttachIds); err != nil {
+				log.Printf("⚠️  Failed to update production attach_ids: %v", err)
+			}
+		}
+		log.Printf("✅ Pipeline Stage processing completed for job: %s (cancelled with %d images)", job.JobID, len(allGeneratedAttachIds))
+		return
+	}
+
 	finalStatus := model.StatusCompleted
 	if len(allGeneratedAttachIds) == 0 {
 		log.Printf("⚠️ No images generated in pipeline; marking job as completed with fallbacks")
@@ -1091,6 +1182,16 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 	completedCount := 0
 
 	for i := 0; i < quantity; i++ {
+		// 🛑 취소 체크
+		if service.IsJobCancelled(job.JobID) {
+			log.Printf("🛑 Job %s cancelled, stopping generation", job.JobID)
+			service.UpdateJobStatus(ctx, job.JobID, model.StatusUserCancelled)
+			if job.ProductionID != nil {
+				service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusUserCancelled)
+			}
+			return
+		}
+
 		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)
 
 		// 4.1: Gemini API 호출 (단일 이미지 전달, aspect-ratio 포함)
@@ -1102,13 +1203,13 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Images[0], prompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
-			if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+			if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
 				log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
 					log.Printf("❌ Failed to update job status to error: %v", err)
 				}
 				if job.ProductionID != nil {
-					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
 						log.Printf("❌ Failed to update production status to error: %v", err)
 					}
 				}
@@ -1141,7 +1242,7 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 		// 4.5: 크레딧 차감 (조직/개인 구분)
 		if job.ProductionID != nil && userID != "" {
 			go func(attachID int, prodID string, orgID *string) {
-				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
 				}
 			}(attachID, *job.ProductionID, job.OrgID)
@@ -1262,13 +1363,13 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 		generatedBase64, err := service.GenerateImageWithGemini(ctx, base64Image, wrappingPrompt, aspectRatio)
 		if err != nil {
 			log.Printf("❌ Gemini API failed for image %d: %v", i+1, err)
-			if strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED") {
+			if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) || (strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
 				log.Printf("🚨 403 PERMISSION_DENIED detected - API key issue. Stopping job.")
-				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusError); err != nil {
+				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
 					log.Printf("❌ Failed to update job status to error: %v", err)
 				}
 				if job.ProductionID != nil {
-					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusError); err != nil {
+					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
 						log.Printf("❌ Failed to update production status to error: %v", err)
 					}
 				}
@@ -1301,7 +1402,7 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 		// 3.6: 크레딧 차감 (조직/개인 구분)
 		if job.ProductionID != nil && userID != "" {
 			go func(attachID int, prodID string, orgID *string) {
-				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}); err != nil {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
 					log.Printf("⚠️  Failed to deduct credits for attach %d: %v", attachID, err)
 				}
 			}(attachID, *job.ProductionID, job.OrgID)

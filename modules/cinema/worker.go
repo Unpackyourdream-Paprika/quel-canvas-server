@@ -313,6 +313,12 @@ MANDATORY TECHNICAL SPECS:
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
+			// Rate limiting 방지: 첫 요청이 아니면 2초 대기
+			if i > 0 {
+				log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
+				time.Sleep(2 * time.Second)
+			}
+
 				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
 				if service.IsJobCancelled(job.JobID) {
 					log.Printf("🛑 Combination %d: Job %s cancelled, stopping generation", idx+1, job.JobID)
@@ -727,6 +733,12 @@ MANDATORY TECHNICAL SPECS:
 			stageGeneratedIds := []int{}
 
 			for i := 0; i < quantity; i++ {
+			// Rate limiting 방지: 첫 요청이 아니면 2초 대기
+			if i > 0 {
+				log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
+				time.Sleep(2 * time.Second)
+			}
+
 				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
 				if service.IsJobCancelled(job.JobID) {
 					log.Printf("🛑 Stage %d: Job %s cancelled, stopping generation", stageIndex, job.JobID)
@@ -1238,6 +1250,12 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *model.Prod
 	completedCount := 0
 
 	for i := 0; i < quantity; i++ {
+			// Rate limiting 방지: 첫 요청이 아니면 2초 대기
+			if i > 0 {
+				log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
+				time.Sleep(2 * time.Second)
+			}
+
 		// 🛑 취소 체크
 		if service.IsJobCancelled(job.JobID) {
 			log.Printf("🛑 Job %s cancelled, stopping generation", job.JobID)
