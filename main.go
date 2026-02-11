@@ -31,24 +31,33 @@ var upgrader = websocket.Upgrader{
 		// 프로덕션에서는 특정 도메인만 허용하도록 수정
 		return true
 	},
+	EnableCompression: true, // WebSocket 압축 활성화
 }
 
 // 연결된 클라이언트 정보
 type Client struct {
-	conn      *websocket.Conn
-	sessionId string
-	userId    string
-	userInfo  map[string]interface{}
-	send      chan []byte
+	conn        *websocket.Conn
+	orgId       string
+	workspaceId string
+	userId      string
+	userName    string
+	userInfo    map[string]interface{}
+	send        chan []byte
 }
 
-// 세션 관리
+// 세션 관리 (Room으로 사용)
 type Session struct {
 	id           string
 	clients      map[string]*Client
 	mutex        sync.RWMutex
 	createdAt    time.Time
 	lastActivity time.Time
+
+	// Visual Editor 상태 저장 (협업용)
+	nodes        []interface{}          // React Flow nodes
+	edges        []interface{}          // React Flow edges
+	lastSyncBy   string                 // 마지막으로 상태를 동기화한 사용자 ID
+	lastSyncAt   time.Time              // 마지막 동기화 시간
 }
 
 // 세션 매니저
@@ -77,7 +86,7 @@ var sessionManager = &SessionManager{
 // 메시지 타입
 type Message struct {
 	Type           string                 `json:"type"`
-	SessionId      string                 `json:"sessionId"`
+	SessionId      string                 `json:"sessionId"` // 기존 호환성 유지
 	UserId         string                 `json:"userId"`
 	UserInfo       map[string]interface{} `json:"userInfo"`
 	ItemIds        []string               `json:"itemIds,omitempty"`
@@ -89,7 +98,7 @@ type Message struct {
 	Label          string                 `json:"label,omitempty"`
 	Title          string                 `json:"title,omitempty"`
 
-	// 새로운 필드들
+	// 캔버스 관련 필드들
 	CanvasItems []interface{} `json:"canvasItems,omitempty"` // 캔버스 아이템들
 	Sections    []interface{} `json:"sections,omitempty"`    // 섹션들
 	CursorX     float64       `json:"cursorX,omitempty"`     // 마우스 커서 X
@@ -99,6 +108,12 @@ type Message struct {
 	// Creation History 관련 필드들
 	ShowCreationHistory bool          `json:"showCreationHistory,omitempty"` // 히스토리 표시 여부
 	HostProductions     []interface{} `json:"hostProductions,omitempty"`     // 호스트의 프로덕션 데이터
+
+	// Visual Editor 협업 관련 필드들 (신규)
+	OrgId       string                 `json:"org_id,omitempty"`       // 조직 ID
+	WorkspaceId string                 `json:"workspace_id,omitempty"` // 워크스페이스 ID
+	UserName    string                 `json:"user_name,omitempty"`    // 사용자 이름
+	Data        map[string]interface{} `json:"data,omitempty"`         // 범용 데이터 (nodes, edges 등)
 }
 
 // 세션 가져오기 또는 생성
@@ -150,13 +165,16 @@ func (s *Session) addClient(client *Client) {
 
 	// user_joined 메시지를 모든 클라이언트에게 브로드캐스트 (mutex 해제 후)
 	joinMessage := Message{
-		Type:      "user_joined",
-		UserId:    client.userId,
-		UserInfo:  client.userInfo,
-		SessionId: s.id,
+		Type:        "user_joined",
+		UserId:      client.userId,
+		UserName:    client.userName,
+		UserInfo:    client.userInfo,
+		SessionId:   s.id,
+		OrgId:       client.orgId,
+		WorkspaceId: client.workspaceId,
 	}
 	s.broadcastToAll(joinMessage)
-	log.Printf("📢 Broadcasted user_joined for %s to all clients in session %s", client.userId, s.id)
+	log.Printf("📢 Broadcasted user_joined for %s (%s) to all clients in room %s", client.userName, client.userId, s.id)
 }
 
 // 클라이언트를 세션에서 제거
@@ -172,8 +190,11 @@ func (s *Session) removeClient(userId string) {
 
 		// 다른 클라이언트들에게 사용자 퇴장 알림
 		userLeftMsg := Message{
-			Type:   "user_left",
-			UserId: userId,
+			Type:        "user_left",
+			UserId:      userId,
+			UserName:    client.userName,
+			OrgId:       client.orgId,
+			WorkspaceId: client.workspaceId,
 		}
 		s.broadcastToOthers(userId, userLeftMsg)
 
@@ -344,35 +365,46 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// URL 파라미터에서 세션 ID와 사용자 ID 추출
-	sessionId := r.URL.Query().Get("session")
-	userId := r.URL.Query().Get("user")
+	// URL 파라미터 추출
+	orgId := r.URL.Query().Get("org_id")
+	workspaceId := r.URL.Query().Get("workspace_id")
+	userId := r.URL.Query().Get("user_id")
+	userName := r.URL.Query().Get("user_name")
 
-	if sessionId == "" || userId == "" {
-		log.Printf("Missing session or user parameter")
+	if orgId == "" || workspaceId == "" || userId == "" {
+		log.Printf("❌ Missing required parameters (org_id, workspace_id, user_id)")
 		conn.Close()
 		return
 	}
 
-	// 클라이언트 생성
-	client := &Client{
-		conn:      conn,
-		sessionId: sessionId,
-		userId:    userId,
-		send:      make(chan []byte, 256),
+	if userName == "" {
+		userName = "Unknown User"
 	}
 
-	log.Printf("New WebSocket connection - Session: %s, User: %s", sessionId, userId)
+	// Room 키 생성 (org_id:workspace_id)
+	roomKey := orgId + ":" + workspaceId
 
-	// 세션에 클라이언트 추가
-	session := sessionManager.getOrCreateSession(sessionId)
+	// 클라이언트 생성
+	client := &Client{
+		conn:        conn,
+		orgId:       orgId,
+		workspaceId: workspaceId,
+		userId:      userId,
+		userName:    userName,
+		send:        make(chan []byte, 1024), // 버퍼 크기 증가 (256 → 1024)
+	}
 
-	// 현재 세션의 사용자 수 확인
+	log.Printf("✅ [WebSocket] New connection - Org: %s, Workspace: %s, User: %s (%s)", orgId, workspaceId, userName, userId)
+
+	// Room에 클라이언트 추가
+	session := sessionManager.getOrCreateSession(roomKey)
+
+	// 현재 Room의 사용자 수 확인
 	session.mutex.RLock()
 	existingUsers := len(session.clients)
 	session.mutex.RUnlock()
 
-	log.Printf("Session %s has %d existing users before adding new user", sessionId, existingUsers)
+	log.Printf("📊 [WebSocket] Room %s has %d existing users", roomKey, existingUsers)
 
 	session.addClient(client)
 
@@ -381,12 +413,26 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go client.readPump(session)
 }
 
+// Ping/Pong 설정
+const (
+	pongWait   = 60 * time.Second    // Pong 대기 시간
+	pingPeriod = (pongWait * 9) / 10 // Ping 전송 주기 (54초)
+	writeWait  = 10 * time.Second    // Write 타임아웃
+)
+
 // 클라이언트로부터 메시지 읽기
 func (c *Client) readPump(session *Session) {
 	defer func() {
 		session.removeClient(c.userId)
 		c.conn.Close()
 	}()
+
+	// Pong 핸들러 설정
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 
 	for {
 		var message Message
@@ -436,6 +482,101 @@ func (c *Client) readPump(session *Session) {
 
 		case "user_joined":
 			log.Printf("User %s joined session %s", c.userId, message.SessionId)
+
+		// Visual Editor 협업 메시지 타입 (신규)
+		case "request-state":
+			log.Printf("📥 [WebSocket] User %s (%s) requested initial state", c.userName, c.userId)
+
+			// Room에 저장된 상태 읽기
+			session.mutex.RLock()
+			nodes := session.nodes
+			edges := session.edges
+			lastSyncBy := session.lastSyncBy
+			lastSyncAt := session.lastSyncAt
+			session.mutex.RUnlock()
+
+			// 초기 상태 응답
+			initialState := Message{
+				Type: "initial-state",
+				Data: map[string]interface{}{
+					"nodes":      nodes,
+					"edges":      edges,
+					"lastSyncBy": lastSyncBy,
+					"lastSyncAt": lastSyncAt,
+				},
+				OrgId:       c.orgId,
+				WorkspaceId: c.workspaceId,
+			}
+
+			// 요청한 사용자에게만 전송
+			if stateBytes, err := json.Marshal(initialState); err == nil {
+				select {
+				case c.send <- stateBytes:
+					log.Printf("✅ [WebSocket] Sent initial state to %s (%d nodes, %d edges)",
+						c.userName, len(nodes), len(edges))
+				default:
+					log.Printf("⚠️ [WebSocket] Failed to send initial state to %s (channel full)", c.userName)
+				}
+			}
+
+			// 이 메시지는 브로드캐스트하지 않음 (continue로 건너뜀)
+			continue
+
+		case "sync-nodes":
+			// Room 상태 업데이트
+			if message.Data != nil {
+				session.mutex.Lock()
+				if nodes, ok := message.Data["nodes"].([]interface{}); ok {
+					session.nodes = nodes
+				}
+				if edges, ok := message.Data["edges"].([]interface{}); ok {
+					session.edges = edges
+				}
+				session.lastSyncBy = c.userId
+				session.lastSyncAt = time.Now()
+				nodeCount := len(session.nodes)
+				edgeCount := len(session.edges)
+				session.mutex.Unlock()
+
+				log.Printf("📤 [WebSocket] User %s (%s) synced state (%d nodes, %d edges)",
+					c.userName, c.userId, nodeCount, edgeCount)
+			}
+
+			// 메시지에 발신자 정보 추가
+			message.OrgId = c.orgId
+			message.WorkspaceId = c.workspaceId
+			message.UserName = c.userName
+			message.Type = "nodes-updated" // 브로드캐스트용 타입 변경
+
+		case "cursor-update":
+			// 커서 업데이트는 로깅하지 않음 (성능)
+			message.OrgId = c.orgId
+			message.WorkspaceId = c.workspaceId
+			message.UserName = c.userName
+
+		case "selection-update":
+			// 선택 업데이트는 로깅하지 않음 (성능)
+			message.OrgId = c.orgId
+			message.WorkspaceId = c.workspaceId
+			message.UserName = c.userName
+
+		case "user-leave":
+			log.Printf("👋 [WebSocket] User %s (%s) is leaving gracefully", c.userName, c.userId)
+
+			// user-left 브로드캐스트 (다른 사용자들에게 알림)
+			leaveMessage := Message{
+				Type:        "user-left",
+				UserId:      c.userId,
+				UserName:    c.userName,
+				OrgId:       c.orgId,
+				WorkspaceId: c.workspaceId,
+			}
+			session.broadcastToOthers(c.userId, leaveMessage)
+
+			// 클라이언트 제거 및 연결 종료
+			session.removeClient(c.userId)
+			c.conn.Close()
+			return // readPump 종료
 		}
 
 		// 메시지 타입에 따라 브로드캐스트 방식 결정
@@ -443,6 +584,9 @@ func (c *Client) readPump(session *Session) {
 		case "user_joined", "request_canvas_state", "user_left":
 			// 이 메시지들은 모든 사용자에게 전송 (호스트 포함)
 			session.broadcastToAll(message)
+		case "nodes-updated", "cursor-update", "selection-update":
+			// Visual Editor 협업 메시지는 자신을 제외한 다른 사용자에게만 전송
+			session.broadcastToOthers(c.userId, message)
 		default:
 			// 나머지는 자신을 제외한 다른 사용자에게만 전송
 			session.broadcastToOthers(c.userId, message)
@@ -452,12 +596,33 @@ func (c *Client) readPump(session *Session) {
 
 // 클라이언트로 메시지 쓰기
 func (c *Client) writePump() {
-	defer c.conn.Close()
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
 
-	for message := range c.send {
-		if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-			log.Printf("WebSocket write error: %v", err)
-			return
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				// 채널이 닫혔으면 연결 종료
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				log.Printf("WebSocket write error: %v", err)
+				return
+			}
+
+		case <-ticker.C:
+			// 주기적으로 Ping 전송
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
