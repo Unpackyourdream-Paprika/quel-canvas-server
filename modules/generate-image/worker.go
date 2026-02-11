@@ -246,10 +246,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
 	}
 
-	log.Printf("🚀 Starting parallel processing for %d combinations (max 1 concurrent (sequential))", len(combinationsRaw))
+	log.Printf("🚀 Starting parallel processing for %d combinations (max 2 concurrent)", len(combinationsRaw))
 
 	// Semaphore: 최대 2개 조합만 동시 처리
-	semaphore := make(chan struct{}, 1) // 한 번에 1개 조합만 처리 (Rate Limiting)
+	semaphore := make(chan struct{}, 2)
 
 	for comboIdx, comboRaw := range combinationsRaw {
 		wg.Add(1)
@@ -291,12 +291,6 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
-				// Rate limiting 방지: 첫 요청이 아니면 2초 대기
-				if i > 0 {
-					log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
-					time.Sleep(5 * time.Second)
-				}
-
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 

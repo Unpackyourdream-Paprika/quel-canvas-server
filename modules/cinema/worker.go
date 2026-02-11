@@ -256,10 +256,10 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		"full":   "Full body shot, head to toe",
 	}
 
-	log.Printf("Starting parallel processing for %d combinations (max 1 concurrent (sequential))", len(combinations))
+	log.Printf("Starting parallel processing for %d combinations (max 2 concurrent)", len(combinations))
 
 	// Semaphore: 최대 2개 조합만 동시 처리
-	semaphore := make(chan struct{}, 1) // 한 번에 1개 조합만 처리 (Rate Limiting)
+	semaphore := make(chan struct{}, 2)
 
 	for comboIdx, combo := range combinations {
 		wg.Add(1)
@@ -313,12 +313,6 @@ MANDATORY TECHNICAL SPECS:
 
 			// 해당 조합의 quantity만큼 생성
 			for i := 0; i < quantity; i++ {
-			// Rate limiting 방지: 첫 요청이 아니면 2초 대기
-			if i > 0 {
-				log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
-				time.Sleep(5 * time.Second)
-			}
-
 				// 🛑 취소 체크 - 새 이미지 생성 전에 확인
 				if service.IsJobCancelled(job.JobID) {
 					log.Printf("🛑 Combination %d: Job %s cancelled, stopping generation", idx+1, job.JobID)

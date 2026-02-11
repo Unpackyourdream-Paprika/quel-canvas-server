@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/database"
@@ -184,15 +183,9 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 	var wg sync.WaitGroup
 
 	// Semaphore로 동시 처리 수 제한 (최대 2개)
-	semaphore := make(chan struct{}, 1) // 한 번에 1개 조합만 처리 (Rate Limiting)
+	semaphore := make(chan struct{}, 2)
 
-	for idx, angle := range angles {
-		// Rate limiting 방지: 첫 요청이 아니면 2초 대기
-		if idx > 0 {
-			log.Printf("⏳ [Multiview] Waiting 5 seconds to avoid rate limiting...")
-			time.Sleep(5 * time.Second)
-		}
-
+	for _, angle := range angles {
 		wg.Add(1)
 		go func(currentAngle int) {
 			defer wg.Done()
