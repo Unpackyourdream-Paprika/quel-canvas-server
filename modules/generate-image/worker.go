@@ -293,8 +293,8 @@ func processSingleBatch(ctx context.Context, service *Service, job *ProductionJo
 			for i := 0; i < quantity; i++ {
 				// Rate limiting 방지: 첫 요청이 아니면 2초 대기
 				if i > 0 {
-					log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-					time.Sleep(2 * time.Second)
+					log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
+					time.Sleep(5 * time.Second)
 				}
 
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
@@ -561,8 +561,8 @@ func processPipelineStage(ctx context.Context, service *Service, job *Production
 			for i := 0; i < quantity; i++ {
 				// Rate limiting 방지: 첫 요청이 아니면 2초 대기
 				if i > 0 {
-					log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-					time.Sleep(2 * time.Second)
+					log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
+					time.Sleep(5 * time.Second)
 				}
 
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
@@ -1001,8 +1001,8 @@ func processSimpleGeneral(ctx context.Context, service *Service, job *Production
 	for i := 0; i < quantity; i++ {
 		// Rate limiting 방지: 첫 요청이 아니면 2초 대기
 		if i > 0 {
-			log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-			time.Sleep(2 * time.Second)
+			log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
+			time.Sleep(5 * time.Second)
 		}
 
 		log.Printf("🎨 Generating image %d/%d...", i+1, quantity)

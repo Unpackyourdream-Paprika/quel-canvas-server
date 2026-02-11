@@ -212,8 +212,8 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	for i := 0; i < quantity; i++ {
 	// Rate limiting 방지: 첫 요청이 아니면 2초 대기
 	if i > 0 {
-		log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-		time.Sleep(2 * time.Second)
+		log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
+		time.Sleep(5 * time.Second)
 	}
 
 		go func(idx int) {
@@ -411,8 +411,8 @@ func processLandingSimpleGeneral(ctx context.Context, service *Service, job *mod
 	for i := 0; i < quantity; i++ {
 	// Rate limiting 방지: 첫 요청이 아니면 2초 대기
 	if i > 0 {
-		log.Printf("⏳ Waiting 2 seconds to avoid rate limiting...")
-		time.Sleep(2 * time.Second)
+		log.Printf("⏳ Waiting 5 seconds to avoid rate limiting...")
+		time.Sleep(5 * time.Second)
 	}
 
 		result := <-resultChan

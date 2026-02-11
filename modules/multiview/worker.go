@@ -189,8 +189,8 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 	for idx, angle := range angles {
 		// Rate limiting 방지: 첫 요청이 아니면 2초 대기
 		if idx > 0 {
-			log.Printf("⏳ [Multiview] Waiting 2 seconds to avoid rate limiting...")
-			time.Sleep(2 * time.Second)
+			log.Printf("⏳ [Multiview] Waiting 5 seconds to avoid rate limiting...")
+			time.Sleep(5 * time.Second)
 		}
 
 		wg.Add(1)
