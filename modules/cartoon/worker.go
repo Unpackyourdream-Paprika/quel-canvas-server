@@ -379,6 +379,135 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	wg.Wait()
 	log.Printf("✅ All combinations completed in parallel")
 
+	// ✅ Retry logic: TotalImages와 completedCount 비교 및 재시도
+	maxRetries := 10
+	retryAttempt := 0
+	cancelled := service.IsJobCancelled(job.JobID)
+
+	for completedCount < job.TotalImages && retryAttempt < maxRetries && !cancelled {
+		retryAttempt++
+		remaining := job.TotalImages - completedCount
+
+		log.Printf("🔄 Retry %d/%d: Attempting to generate %d more images (current: %d/%d)",
+			retryAttempt, maxRetries, remaining, completedCount, job.TotalImages)
+
+		// Use last combination settings for retry
+		lastCombo := combinations[len(combinations)-1]
+		angle := fallback.SafeString(lastCombo["angle"], "front")
+		shot := fallback.SafeString(lastCombo["shot"], "full")
+		fx := fallback.SafeString(lastCombo["fx"], "none")
+
+		// Build enhanced prompt with angle/shot/fx descriptions
+		angleDesc := GetAngleDescription(angle)
+		shotDesc := GetShotDescription(shot)
+		fxDesc := GetFXDescription(fx)
+
+		var enhancedPrompt string
+		if fxDesc != "" {
+			enhancedPrompt = fmt.Sprintf("⚠️ MANDATORY CAMERA ANGLE: %s\n\n[FRAMING]: %s\n[VISUAL FX]: %s\n\n%s\n\n⚠️ REMINDER - CAMERA ANGLE: %s", angleDesc, shotDesc, fxDesc, basePrompt, angleDesc)
+		} else {
+			enhancedPrompt = fmt.Sprintf("⚠️ MANDATORY CAMERA ANGLE: %s\n\n[FRAMING]: %s\n\n%s\n\n⚠️ REMINDER - CAMERA ANGLE: %s", angleDesc, shotDesc, basePrompt, angleDesc)
+		}
+
+		// 🛑 Check cancellation before retry generation
+		if service.IsJobCancelled(job.JobID) {
+			log.Printf("🛑 Job %s cancelled during retry", job.JobID)
+			cancelled = true
+			break
+		}
+
+		// Gemini API 호출
+		generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+		if err != nil {
+			log.Printf("❌ Retry %d failed: Gemini API error: %v", retryAttempt, err)
+			// 403 PERMISSION_DENIED 또는 429 RESOURCE_EXHAUSTED 에러 체크
+			if (strings.Contains(err.Error(), "403") && strings.Contains(err.Error(), "PERMISSION_DENIED")) ||
+				(strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "RESOURCE_EXHAUSTED")) {
+				log.Printf("🚨 API Error detected (403 PERMISSION_DENIED or 429 RESOURCE_EXHAUSTED) - Stopping retry.")
+				if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusFailed); err != nil {
+					log.Printf("❌ Failed to update job status to error: %v", err)
+				}
+				if job.ProductionID != nil {
+					if err := service.UpdateProductionPhotoStatus(ctx, *job.ProductionID, model.StatusFailed); err != nil {
+						log.Printf("❌ Failed to update production status to error: %v", err)
+					}
+				}
+				return
+			}
+			continue
+		}
+
+		// 🛑 Check cancellation after generation
+		if service.IsJobCancelled(job.JobID) {
+			log.Printf("🛑 Job %s cancelled after retry generation, discarding image", job.JobID)
+			cancelled = true
+			break
+		}
+
+		// Base64 → []byte 변환
+		generatedImageData, err := base64DecodeString(generatedBase64)
+		if err != nil {
+			log.Printf("❌ Retry %d: Failed to decode image: %v", retryAttempt, err)
+			continue
+		}
+
+		// Storage 업로드
+		filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+		if err != nil {
+			log.Printf("❌ Retry %d: Failed to upload image: %v", retryAttempt, err)
+			continue
+		}
+
+		// Attach 레코드 생성
+		attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+		if err != nil {
+			log.Printf("❌ Retry %d: Failed to create attach record: %v", retryAttempt, err)
+			continue
+		}
+
+		// 크레딧 차감 (조직/개인 구분)
+		if job.ProductionID != nil && userID != "" {
+			go func(aID int, prodID string, orgID *string) {
+				if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{aID}, "gemini-banana"); err != nil {
+					log.Printf("⚠️  Retry: Failed to deduct credits for attach %d: %v", aID, err)
+				}
+			}(attachID, *job.ProductionID, job.OrgID)
+		}
+
+		// 성공 카운트 및 ID 수집 (thread-safe)
+		progressMutex.Lock()
+		generatedAttachIds = append(generatedAttachIds, attachID)
+		completedCount++
+		currentProgress := completedCount
+		currentAttachIds := make([]int, len(generatedAttachIds))
+		copy(currentAttachIds, generatedAttachIds)
+		progressMutex.Unlock()
+
+		log.Printf("✅ Retry %d: Image completed: AttachID=%d (progress: %d/%d)",
+			retryAttempt, attachID, completedCount, job.TotalImages)
+
+		// 진행 상황 업데이트
+		if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentAttachIds); err != nil {
+			log.Printf("⚠️  Failed to update progress: %v", err)
+		}
+
+		// Check if we've reached the target
+		if completedCount >= job.TotalImages {
+			break
+		}
+
+		// Update cancelled status
+		cancelled = service.IsJobCancelled(job.JobID)
+	}
+
+	// Final check and logging
+	if completedCount < job.TotalImages && !cancelled {
+		log.Printf("⚠️  Could not reach target after %d retries: %d/%d images completed",
+			maxRetries, completedCount, job.TotalImages)
+	} else if completedCount >= job.TotalImages {
+		log.Printf("✅ Target reached: %d/%d images completed", completedCount, job.TotalImages)
+	}
+
 	// Phase 5: 최종 완료 처리
 	// 🛑 취소된 Job은 user_cancelled 상태 유지 (completed로 덮어쓰지 않음)
 	if service.IsJobCancelled(job.JobID) {

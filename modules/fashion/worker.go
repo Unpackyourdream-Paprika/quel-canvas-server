@@ -374,6 +374,118 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	wg.Wait()
 	log.Printf("All combinations completed in parallel")
 
+	// ✅ Retry logic: TotalImages와 completedCount 비교 및 재시도
+	maxRetries := 10
+	retryAttempt := 0
+
+	for completedCount < job.TotalImages && retryAttempt < maxRetries && !cancelled {
+		retryAttempt++
+		remaining := job.TotalImages - completedCount
+
+		log.Printf("🔄 Retry %d/%d: Attempting to generate %d more images (current: %d/%d)",
+			retryAttempt, maxRetries, remaining, completedCount, job.TotalImages)
+
+		// 마지막 combination 설정 사용
+		lastCombo := combinations[len(combinations)-1]
+		angle := fallback.SafeString(lastCombo["angle"], "front")
+		shot := fallback.SafeString(lastCombo["shot"], "full")
+
+		cameraAngleText := cameraAngleTextMap[angle]
+		if cameraAngleText == "" {
+			cameraAngleText = "Front view"
+		}
+		shotTypeText := shotTypeTextMap[shot]
+		if shotTypeText == "" {
+			shotTypeText = "full body shot"
+		}
+
+		enhancedPrompt := fmt.Sprintf(
+			"%s, %s. %s. Create a single unified photorealistic cinematic composition that uses every provided reference together in one scene (no split screens or collage). Film photography aesthetic with natural storytelling composition.",
+			cameraAngleText,
+			shotTypeText,
+			basePrompt,
+		)
+
+		// 부족한 개수만큼 생성
+		for i := 0; i < remaining; i++ {
+			// 취소 체크
+			if service.IsJobCancelled(job.JobID) {
+				log.Printf("🛑 Job %s cancelled during retry", job.JobID)
+				progressMutex.Lock()
+				cancelled = true
+				progressMutex.Unlock()
+				break
+			}
+
+			log.Printf("Retry %d: Generating image %d/%d...", retryAttempt, i+1, remaining)
+
+			// Gemini API 호출
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+			if err != nil {
+				log.Printf("Retry %d: Failed to generate image %d: %v", retryAttempt, i+1, err)
+				continue
+			}
+
+			// Base64 디코딩
+			generatedImageData, err := base64DecodeString(generatedBase64)
+			if err != nil {
+				log.Printf("Retry %d: Failed to decode image %d: %v", retryAttempt, i+1, err)
+				continue
+			}
+
+			// Storage 업로드
+			filePath, webpSize, err := service.UploadImageToStorage(ctx, generatedImageData, userID)
+			if err != nil {
+				log.Printf("Retry %d: Failed to upload image %d: %v", retryAttempt, i+1, err)
+				continue
+			}
+
+			// Attach 레코드 생성
+			attachID, err := service.CreateAttachRecord(ctx, filePath, webpSize)
+			if err != nil {
+				log.Printf("Retry %d: Failed to create attach record %d: %v", retryAttempt, i+1, err)
+				continue
+			}
+
+			// 크레딧 차감
+			if job.ProductionID != nil && userID != "" {
+				go func(attachID int, prodID string, orgID *string) {
+					if err := service.DeductCredits(context.Background(), userID, orgID, prodID, []int{attachID}, "gemini-banana"); err != nil {
+						log.Printf("Retry %d: Failed to deduct credits for attach %d: %v", retryAttempt, attachID, err)
+					}
+				}(attachID, *job.ProductionID, job.OrgID)
+			}
+
+			// 진행 상황 업데이트
+			progressMutex.Lock()
+			generatedAttachIds = append(generatedAttachIds, attachID)
+			completedCount++
+			currentProgress := completedCount
+			currentAttachIds := make([]int, len(generatedAttachIds))
+			copy(currentAttachIds, generatedAttachIds)
+			progressMutex.Unlock()
+
+			log.Printf("Retry %d: Image %d/%d completed: AttachID=%d (total: %d/%d)",
+				retryAttempt, i+1, remaining, attachID, completedCount, job.TotalImages)
+
+			if err := service.UpdateJobProgress(ctx, job.JobID, currentProgress, currentAttachIds); err != nil {
+				log.Printf("Failed to update progress: %v", err)
+			}
+		}
+
+		if cancelled {
+			break
+		}
+	}
+
+	// 최종 체크
+	if completedCount < job.TotalImages && !cancelled {
+		log.Printf("⚠️ Could not reach target after %d retries: %d/%d images completed",
+			maxRetries, completedCount, job.TotalImages)
+	} else if completedCount >= job.TotalImages {
+		log.Printf("✅ Target reached: %d/%d images completed", completedCount, job.TotalImages)
+	}
+
 	// Phase 5: 최종 완료 처리
 	finalStatus := model.StatusCompleted
 	if cancelled {
