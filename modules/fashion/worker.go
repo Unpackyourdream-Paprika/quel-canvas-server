@@ -127,8 +127,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 	}
 
 	basePrompt := fallback.SafeString(job.JobInputData["basePrompt"], "best quality, masterpiece")
-	combinations := fallback.NormalizeCombinations(job.JobInputData["combinations"], fallback.DefaultQuantity(job.TotalImages), "front", "full")
+	topLevelShot := fallback.SafeString(job.JobInputData["shotType"], "full")
+	topLevelAngle := fallback.SafeString(job.JobInputData["angle"], "front")
+	combinations := fallback.NormalizeCombinations(job.JobInputData["combinations"], fallback.DefaultQuantity(job.TotalImages), topLevelAngle, topLevelShot)
 	aspectRatio := fallback.SafeAspectRatio(job.JobInputData["aspect-ratio"])
+	log.Printf("📐 Top-level shot=%s, angle=%s", topLevelShot, topLevelAngle)
 	userID := fallback.SafeString(job.JobInputData["userId"], "")
 
 	// org_id가 없으면 유저의 조직 조회
@@ -163,6 +166,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	clothingTypes := map[string]bool{"top": true, "pants": true, "outer": true}
 	accessoryTypes := map[string]bool{"shoes": true, "bag": true, "accessory": true, "acce": true}
+
+	var clothingItemTypes []string
+	var accessoryItemTypes []string
 
 	for i, attachObj := range individualImageAttachIds {
 		attachMap, ok := attachObj.(map[string]interface{})
@@ -200,9 +206,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 		default:
 			if clothingTypes[attachType] {
 				categories.Clothing = append(categories.Clothing, imageData)
+				clothingItemTypes = append(clothingItemTypes, attachType)
 				log.Printf("Clothing image added (type: %s)", attachType)
 			} else if accessoryTypes[attachType] {
 				categories.Accessories = append(categories.Accessories, imageData)
+				accessoryItemTypes = append(accessoryItemTypes, attachType)
 				log.Printf("Accessory image added (type: %s)", attachType)
 			} else if attachType == "none" || attachType == "product" {
 				// "none" 또는 "product" 타입도 악세서리로 처리 (기본 처리)
@@ -239,7 +247,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Shot Type 매핑 (시네마틱 톤)
 	shotTypeTextMap := map[string]string{
-		"tight":  "Cinematic tight shot, film camera close-up framing from shoulders up, fill frame naturally with subject's face and upper body, intimate cinematic composition",
+		"tight":  "Editorial CLOSE-UP PORTRAIT cropped at mid-torso, showing face and complete upper garment",
 		"middle": "Cinematic medium shot, film camera framing from waist up, balanced composition showing upper body and outfit details, editorial fashion film style",
 		"full":   "Cinematic full body shot, film camera capturing head to toe, complete outfit visible with environmental context, wide fashion film composition",
 	}
@@ -300,8 +308,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				log.Printf("Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
-				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
-				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+				// shot에 따라 에셋 필터링 (tight → pants, shoes 제거)
+				filteredCategories := filterCategoriesByShot(categories, shot, clothingItemTypes, accessoryItemTypes)
+
+				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함, shot 전달)
+				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, filteredCategories, enhancedPrompt, aspectRatio, shot)
 				if err != nil {
 					log.Printf("Combination %d: Gemini API failed for image %d: %v", idx+1, i+1, err)
 					continue
@@ -419,8 +430,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 			log.Printf("Retry %d: Generating image %d/%d...", retryAttempt, i+1, remaining)
 
-			// Gemini API 호출
-			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
+			// shot에 따라 에셋 필터링
+			filteredCategories := filterCategoriesByShot(categories, shot, clothingItemTypes, accessoryItemTypes)
+
+			// Gemini API 호출 (shot 전달)
+			generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, filteredCategories, enhancedPrompt, aspectRatio, shot)
 			if err != nil {
 				log.Printf("Retry %d: Failed to generate image %d: %v", retryAttempt, i+1, err)
 				continue
@@ -1420,4 +1434,42 @@ func processSimplePortrait(ctx context.Context, service *Service, job *model.Pro
 	}
 
 	log.Printf("Simple Portrait processing completed for job: %s", job.JobID)
+}
+
+// filterCategoriesByShot - tight 샷일 때 하반신 에셋(pants, shoes) 제거
+func filterCategoriesByShot(categories *ImageCategories, shot string, clothingItemTypes []string, accessoryItemTypes []string) *ImageCategories {
+	if shot != "tight" {
+		return categories
+	}
+
+	filtered := &ImageCategories{
+		Model:      categories.Model,
+		Background: categories.Background,
+		Clothing:   [][]byte{},
+		Accessories: [][]byte{},
+	}
+
+	// Clothing 필터링: pants 제외
+	for i, itemType := range clothingItemTypes {
+		if i < len(categories.Clothing) && itemType != "pants" {
+			filtered.Clothing = append(filtered.Clothing, categories.Clothing[i])
+		} else if itemType == "pants" {
+			log.Printf("🔍 filterCategoriesByShot: Removing pants from tight shot")
+		}
+	}
+
+	// Accessories 필터링: shoes 제외
+	for i, itemType := range accessoryItemTypes {
+		if i < len(categories.Accessories) && itemType != "shoes" {
+			filtered.Accessories = append(filtered.Accessories, categories.Accessories[i])
+		} else if itemType == "shoes" {
+			log.Printf("🔍 filterCategoriesByShot: Removing shoes from tight shot")
+		}
+	}
+
+	log.Printf("🔍 filterCategoriesByShot: Clothing %d→%d, Accessories %d→%d",
+		len(categories.Clothing), len(filtered.Clothing),
+		len(categories.Accessories), len(filtered.Accessories))
+
+	return filtered
 }

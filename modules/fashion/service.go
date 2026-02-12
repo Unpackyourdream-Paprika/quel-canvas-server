@@ -520,13 +520,25 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 }
 
 // generateDynamicPrompt - 상황별 동적 프롬프트 생성
-func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string) string {
+func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspectRatio string, shotType string) string {
 	// 케이스 분석을 위한 변수 정의
 	hasModel := categories.Model != nil
 	hasClothing := len(categories.Clothing) > 0
 	hasAccessories := len(categories.Accessories) > 0
 	hasProducts := hasClothing || hasAccessories
 	hasBackground := categories.Background != nil
+
+	// shotType에 따른 프레이밍 지시
+	framingLine := "ONE photograph, full body head to toe"
+	integrationLine := "Natural ground contact and shadows"
+	switch shotType {
+	case "tight":
+		framingLine = "ONE photograph, CLOSE-UP PORTRAIT cropped at mid-torso. Show the model's face and complete upper garment clearly"
+		integrationLine = "Close-up portrait framing, crop at mid-torso level"
+	case "middle":
+		framingLine = "ONE photograph, frame from head to waist. Show upper body and outfit details. CROP below waist — absolutely NO hips, NO thighs, NO legs visible"
+		integrationLine = "Waist-up framing, no ground contact needed"
+	}
 
 	// 배경이 있는 경우 - 배경 재해석 + 시네마틱 프롬프트
 	if hasBackground {
@@ -553,11 +565,11 @@ FILM LOOK:
 SEAMLESS INTEGRATION:
 • Model naturally exists in this newly generated environment
 • Consistent lighting direction and color temperature
-• Natural ground contact and shadows
+• %s
 • One unified photograph, not a composite
 
 OUTPUT:
-• ONE photograph, full body head to toe
+• %s
 • Serious editorial expression
 • No collage, no split, no distortion`,
 				func() string {
@@ -575,7 +587,9 @@ OUTPUT:
 						return fmt.Sprintf("IMAGE %d = ACCESSORIES\n", idx)
 					}
 					return ""
-				}())
+				}(),
+				integrationLine,
+				framingLine)
 		} else if hasProducts {
 			prompt = `TASK: Product photography at this location.
 
@@ -604,10 +618,15 @@ REQUIREMENT:
 		return prompt
 	}
 
-	// 배경 없는 경우 - 기존 로직 유지
+	// 배경 없는 경우 - shotType에 따라 분기
 	var mainInstruction string
 	if hasModel {
-		mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
+		switch shotType {
+		case "tight":
+			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait cropped at mid-torso, showing face and complete upper garment in studio setting.\n"
+		default:
+			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
+		}
 	} else if hasProducts {
 		mainInstruction = "Create ONE product photo: show ONLY the referenced items, NO people.\n"
 	} else {
@@ -647,7 +666,7 @@ REQUIREMENT:
 }
 
 // GenerateImageWithGeminiMultiple - 카테고리별 이미지로 Gemini API 호출
-func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string) (string, error) {
+func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categories *ImageCategories, userPrompt string, aspectRatio string, shotType ...string) (string, error) {
 	cfg := config.GetConfig()
 
 	// aspect-ratio 기본값 처리
@@ -733,7 +752,11 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	}
 
 	// 동적 프롬프트 생성
-	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio)
+	shot := ""
+	if len(shotType) > 0 {
+		shot = shotType[0]
+	}
+	dynamicPrompt := generateDynamicPrompt(categories, userPrompt, aspectRatio, shot)
 	parts = append(parts, genai.NewPartFromText(dynamicPrompt))
 
 	log.Printf("📝 Generated dynamic prompt (%d chars)", len(dynamicPrompt))
