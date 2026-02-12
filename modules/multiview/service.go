@@ -295,7 +295,7 @@ func (s *Service) GenerateMultiview(ctx context.Context, req *MultiviewGenerateR
 
 	// 크레딧 차감
 	if totalCreditsUsed > 0 {
-		if err := s.DeductCredits(ctx, req.UserID, totalCreditsUsed); err != nil {
+		if err := s.DeductCredits(ctx, req.UserID, totalCreditsUsed, ""); err != nil {
 			log.Printf("⚠️ [Multiview] Failed to deduct credits: %v", err)
 		}
 	}
@@ -423,7 +423,7 @@ func (s *Service) CheckUserCreditsDetailed(ctx context.Context, userID string) (
 }
 
 // DeductCredits - 크레딧 차감 (개인/조직 크레딧 지원, org 부족 시 개인으로 fallback)
-func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) error {
+func (s *Service) DeductCredits(ctx context.Context, userID string, amount int, productionID string) error {
 	// userID로 org_id 조회
 	orgID, err := s.GetUserOrganization(ctx, userID)
 	if err != nil {
@@ -535,6 +535,11 @@ func (s *Service) DeductCredits(ctx context.Context, userID string, amount int) 
 		"balance_after":    newBalance,
 		"description":      "Multiview 360 Image Generation",
 		"api_provider":     "gemini",
+	}
+
+	// production_idx 추가 (있는 경우)
+	if productionID != "" {
+		transactionData["production_idx"] = productionID
 	}
 
 	if usedOrgCredit {
