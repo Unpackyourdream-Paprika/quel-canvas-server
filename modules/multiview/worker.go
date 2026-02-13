@@ -306,7 +306,11 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 	// Phase 7: 크레딧 한번에 차감 (동시성 문제 방지)
 	if totalCreditsUsed > 0 {
 		log.Printf("💰 [Multiview] Deducting total credits: %d", totalCreditsUsed)
-		if err := service.DeductCredits(ctx, userID, totalCreditsUsed); err != nil {
+		productionID := ""
+		if job.ProductionID != nil {
+			productionID = *job.ProductionID
+		}
+		if err := service.DeductCredits(ctx, userID, totalCreditsUsed, productionID); err != nil {
 			log.Printf("⚠️ [Multiview] Failed to deduct credits: %v", err)
 		} else {
 			log.Printf("✅ [Multiview] Successfully deducted %d credits", totalCreditsUsed)

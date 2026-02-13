@@ -273,12 +273,39 @@ func (s *Service) performInpaint(
 	var inpaintPrompt string
 
 	// 강화된 공통 지시사항: 마스킹된 영역만 수정하고 나머지는 절대 건드리지 않도록
-	strictInpaintInstruction := `CRITICAL RULES YOU MUST FOLLOW:
+	strictInpaintInstruction := `⚠️ ABSOLUTE PRIORITY - PRESERVE ORIGINAL IMAGE QUALITY:
+
+1. COLOR PRESERVATION (CRITICAL):
+   - Maintain EXACT color tone, saturation, vibrancy, and richness of the original image
+   - DO NOT wash out, desaturate, fade, or flatten colors in ANY part of the image
+   - Preserve the original color contrast, brightness, and visual impact
+   - Keep the same color temperature and color grading
+
+2. DEPTH & PERSPECTIVE PRESERVATION (CRITICAL):
+   - Maintain the original 3D depth, dimensional quality, and spatial relationships
+   - Preserve perspective, distance, and sense of space exactly as in the original
+   - DO NOT flatten or make the image look more 2D or less realistic
+   - Keep the same foreground/background separation and depth cues
+
+3. LIGHTING & ATMOSPHERE PRESERVATION (CRITICAL):
+   - Maintain EXACT same lighting conditions, light direction, and intensity
+   - Preserve all shadows, highlights, reflections, and light interactions
+   - Keep the original atmosphere, mood, and photographic quality
+   - DO NOT change the overall lighting balance or create new light sources
+
+4. FRAMING & COMPOSITION PRESERVATION (CRITICAL):
+   - Maintain the EXACT same framing, composition, and zoom level as the original image
+   - DO NOT zoom in, zoom out, crop, or reframe the image in any way
+   - Keep the exact same subject positioning, size, and placement within the frame
+   - Preserve the original camera angle, distance, and field of view
+   - The overall composition and layout must remain identical to the original
+
+CRITICAL INPAINTING RULES:
 1. ONLY modify the areas marked with colored paint strokes. These colored areas are the ONLY parts you should change.
 2. DO NOT modify, alter, change, or regenerate ANY other part of the image outside the painted areas.
 3. The unpainted areas must remain PIXEL-PERFECT identical to the original - same colors, same textures, same lighting, same everything.
 4. Remove all paint stroke markings from the final output - no trace of the colored markers should remain.
-5. The modification should blend naturally with the surrounding unchanged areas.
+5. The modification should blend naturally with the surrounding unchanged areas while preserving all qualities above.
 6. Even if other parts of the image look similar to the marked area, DO NOT change them.`
 
 	if len(layers) > 0 {
