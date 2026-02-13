@@ -9,6 +9,7 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/database"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 	"quel-canvas-server/modules/common/model"
 	redisutil "quel-canvas-server/modules/common/redis"
 
@@ -395,8 +396,9 @@ func (s *Service) GenerateSingleAngle(ctx context.Context, sourceImage, refImage
 	}
 
 	// Gemini API 호출
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

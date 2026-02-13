@@ -25,15 +25,15 @@ import (
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 	"quel-canvas-server/modules/common/model"
 	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
 )
 
 type Service struct {
-	supabase    *supabase.Client
-	genaiClient *genai.Client
-	redis       *redis.Client
+	supabase *supabase.Client
+	redis    *redis.Client
 }
 
 // ImageCategories - Eats 모듈 전용 이미지 분류 구조체
@@ -55,28 +55,16 @@ func NewService() *Service {
 		return nil
 	}
 
-	// Genai 클라이언트 초기화
-	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		log.Printf("❌ Failed to create Genai client: %v", err)
-		return nil
-	}
-
 	// Redis 클라이언트 초기화
 	redisClient := redisutil.Connect(cfg)
 	if redisClient == nil {
 		log.Printf("⚠️ Failed to connect to Redis - cancel feature will be disabled")
 	}
 
-	log.Println("✅ Supabase and Genai clients initialized")
+	log.Println("✅ Supabase client initialized")
 	return &Service{
-		supabase:    supabaseClient,
-		genaiClient: genaiClient,
-		redis:       redisClient,
+		supabase: supabaseClient,
+		redis:    redisClient,
 	}
 }
 
@@ -344,10 +332,11 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 		},
 	}
 
-	// API 호출 (새 google.golang.org/genai 패키지 사용)
+	// API 호출 (Retry 로직 적용)
 	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
@@ -704,11 +693,12 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 		Parts: parts,
 	}
 
-	// API 호출
+	// API 호출 (Retry 로직 적용)
 	seed := rand.Int31()
 	log.Printf("📤 Sending request to Gemini API with %d parts, seed: %d, model: %s", len(parts), seed, cfg.GeminiModel)
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

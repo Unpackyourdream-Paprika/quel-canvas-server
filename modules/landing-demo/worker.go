@@ -11,6 +11,7 @@ import (
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/fallback"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 	"quel-canvas-server/modules/common/model"
 	"quel-canvas-server/modules/submodule/nanobanana"
 	"quel-canvas-server/modules/submodule/seedream"
@@ -568,8 +569,9 @@ func (s *Service) GenerateImageWithGeminiTextOnly(ctx context.Context, prompt st
 	}
 
 	// Gemini API 호출
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
