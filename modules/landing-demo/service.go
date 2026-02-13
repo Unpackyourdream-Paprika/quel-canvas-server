@@ -27,6 +27,7 @@ import (
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 	"quel-canvas-server/modules/common/model"
 	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
@@ -59,9 +60,8 @@ func getJobMutex(jobID string) *sync.Mutex {
 }
 
 type Service struct {
-	genaiClient *genai.Client
-	supabase    *supabase.Client
-	redis       *redis.Client
+	supabase *supabase.Client
+	redis    *redis.Client
 }
 
 func NewService() *Service {
@@ -74,17 +74,6 @@ func NewService() *Service {
 		return nil
 	}
 
-	// Genai 클라이언트 초기화
-	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		log.Printf("❌ [LandingDemo] Failed to create Genai client: %v", err)
-		return nil
-	}
-
 	// Redis 클라이언트 초기화
 	redisClient := redisutil.Connect(cfg)
 	if redisClient == nil {
@@ -93,9 +82,8 @@ func NewService() *Service {
 
 	log.Println("✅ [LandingDemo] Service initialized")
 	return &Service{
-		supabase:    supabaseClient,
-		genaiClient: genaiClient,
-		redis:       redisClient,
+		supabase: supabaseClient,
+		redis:    redisClient,
 	}
 }
 
@@ -251,8 +239,9 @@ func (s *Service) GenerateImages(ctx context.Context, req *LandingDemoRequest) (
 
 		// Gemini API 호출
 		log.Printf("📤 [LandingDemo] Calling Gemini API for image %d/%d with %d parts...", i+1, quantity, len(parts))
-		result, err := s.genaiClient.Models.GenerateContent(
+		result, err := geminiretry.GenerateContentWithRetry(
 			ctx,
+			cfg.GeminiAPIKeys,
 			cfg.GeminiModel,
 			[]*genai.Content{content},
 			&genai.GenerateContentConfig{
@@ -499,17 +488,6 @@ func resizeImage(src image.Image, targetWidth, targetHeight int) image.Image {
 func NewServiceWithDB() *Service {
 	cfg := config.GetConfig()
 
-	// Genai 클라이언트 초기화
-	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		log.Printf("❌ [Landing] Failed to create Genai client: %v", err)
-		return nil
-	}
-
 	// Supabase 클라이언트 초기화
 	supabaseClient, err := supabase.NewClient(cfg.SupabaseURL, cfg.SupabaseServiceKey, nil)
 	if err != nil {
@@ -519,8 +497,7 @@ func NewServiceWithDB() *Service {
 
 	log.Println("✅ [Landing] Service with DB initialized")
 	return &Service{
-		genaiClient: genaiClient,
-		supabase:    supabaseClient,
+		supabase: supabaseClient,
 	}
 }
 
@@ -1140,8 +1117,9 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 
 	// API 호출
 	log.Printf("📤 [Landing] Calling Gemini API with %d parts...", len(parts))
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

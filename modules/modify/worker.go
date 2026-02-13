@@ -18,6 +18,7 @@ import (
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 )
 
 // ProcessModifyJob - Modify Job 처리 메인 로직
@@ -422,8 +423,9 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 
 	log.Printf("📐 Using aspect ratio: %s", aspectRatio)
 
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel, // "gemini-2.5-flash-image"
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

@@ -24,8 +24,9 @@ type Config struct {
 	SupabaseStorageBaseURL string
 
 	// Gemini API
-	GeminiAPIKey string
-	GeminiModel  string
+	GeminiAPIKey  string   // 기존 단일 키 (하위 호환)
+	GeminiAPIKeys []string // 로테이션용 키 배열
+	GeminiModel   string
 
 	// Runware API
 	RunwareAPIKey string
@@ -66,6 +67,21 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	// Gemini API 키 배열 로드 (GEMINI_API_KEY_1 ~ GEMINI_API_KEY_9)
+	geminiKeys := []string{}
+	for i := 1; i <= 9; i++ {
+		key := os.Getenv(fmt.Sprintf("GEMINI_API_KEY_%d", i))
+		if key != "" {
+			geminiKeys = append(geminiKeys, key)
+		}
+	}
+	// 키가 하나도 없으면 기본 GEMINI_API_KEY 사용
+	if len(geminiKeys) == 0 {
+		if defaultKey := os.Getenv("GEMINI_API_KEY"); defaultKey != "" {
+			geminiKeys = append(geminiKeys, defaultKey)
+		}
+	}
+
 	globalConfig = &Config{
 		// Redis
 		RedisHost:     getEnv("REDIS_HOST", "localhost"),
@@ -80,8 +96,9 @@ func LoadConfig() (*Config, error) {
 		SupabaseStorageBaseURL: getEnv("SUPABASE_STORAGE_BASE_URL", ""),
 
 		// Gemini API
-		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
-		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
+		GeminiAPIKey:  getEnv("GEMINI_API_KEY", ""),
+		GeminiAPIKeys: geminiKeys,
+		GeminiModel:   getEnv("GEMINI_MODEL", "gemini-2.5-flash-image"),
 
 		// Runware API
 		RunwareAPIKey: getEnv("RUNWARE_API_KEY", ""),
@@ -105,7 +122,7 @@ func LoadConfig() (*Config, error) {
 	log.Println("✅ Configuration loaded successfully")
 	log.Printf("   Redis: %s:%s (TLS: %v)", globalConfig.RedisHost, globalConfig.RedisPort, globalConfig.RedisUseTLS)
 	log.Printf("   Supabase: %s", globalConfig.SupabaseURL)
-	log.Printf("   Gemini: %s", globalConfig.GeminiModel)
+	log.Printf("   Gemini: %s (API Keys: %d)", globalConfig.GeminiModel, len(globalConfig.GeminiAPIKeys))
 	log.Printf("   Runware: %s (key: %v)", globalConfig.RunwareAPIURL, globalConfig.RunwareAPIKey != "")
 	log.Printf("   OpenAI: %v", globalConfig.OpenAIAPIKey != "")
 	log.Printf("   Credit: %d per image", globalConfig.ImagePerPrice)
@@ -132,8 +149,8 @@ func (c *Config) validate() error {
 	if c.SupabaseServiceKey == "" {
 		return fmt.Errorf("SUPABASE_SERVICE_KEY is required")
 	}
-	if c.GeminiAPIKey == "" {
-		return fmt.Errorf("GEMINI_API_KEY is required")
+	if len(c.GeminiAPIKeys) == 0 && c.GeminiAPIKey == "" {
+		return fmt.Errorf("At least one GEMINI_API_KEY is required")
 	}
 	return nil
 }
