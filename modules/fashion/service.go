@@ -533,7 +533,7 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	integrationLine := "Natural ground contact and shadows"
 	switch shotType {
 	case "tight":
-		framingLine = "ONE photograph, CLOSE-UP PORTRAIT cropped at mid-torso. Show the model's face and complete upper garment clearly"
+		framingLine = "ONE photograph, CLOSE-UP PORTRAIT tightly cropped at mid-torso level. Upper garment clearly visible, nothing below mid-torso"
 		integrationLine = "Close-up portrait framing, crop at mid-torso level"
 	case "middle":
 		framingLine = "ONE photograph, frame from head to waist. Show upper body and outfit details. CROP below waist — absolutely NO hips, NO thighs, NO legs visible"
@@ -623,7 +623,7 @@ REQUIREMENT:
 	if hasModel {
 		switch shotType {
 		case "tight":
-			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait cropped at mid-torso, showing face and complete upper garment in studio setting.\n"
+			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait tightly cropped at mid-torso level, upper garment visible in studio setting.\n"
 		default:
 			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
 		}
