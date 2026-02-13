@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	// "encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -89,7 +90,12 @@ func processJob(ctx context.Context, service *Service, jobID string) {
 		log.Printf("   ProductionID: null")
 	}
 
-	log.Printf("   JobInputData: %+v", job.JobInputData)
+	// JobInputData를 JSON으로 예쁘게 출력
+	// if jobInputJSON, err := json.MarshalIndent(job.JobInputData, "   ", "  "); err == nil {
+	// 	log.Printf("   JobInputData (JSON):\n%s", string(jobInputJSON))
+	// } else {
+	// 	log.Printf("   JobInputData: %+v", job.JobInputData)
+	// }
 
 	// Job Type 확인 및 분기 처리
 	log.Printf("🔍 Processing job_type: %s", job.JobType)
@@ -150,6 +156,11 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	log.Printf("📦 Input Data: IndividualImages=%d, BasePrompt=%s, Combinations=%d, UserID=%s, isPreEdited=%v",
 		len(individualImageAttachIds), basePrompt, len(combinations), userID, isPreEdited)
+
+	// Combinations를 JSON으로 출력
+	// if combinationsJSON, err := json.MarshalIndent(combinations, "   ", "  "); err == nil {
+	// 	log.Printf("📦 Combinations (JSON):\n%s", string(combinationsJSON))
+	// }
 
 	// Phase 2: Status 업데이트
 	if err := service.UpdateJobStatus(ctx, job.JobID, model.StatusProcessing); err != nil {
@@ -219,6 +230,52 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	log.Printf("✅ [Eats] Images classified - Food:%d, Ingredient:%d, Prop:%d, BG:%v",
 		len(categories.Food), len(categories.Ingredient), len(categories.Prop), categories.Background != nil)
+
+	// 카테고리별 상세 정보 출력
+	// categorySummary := map[string]interface{}{
+	// 	"Food": map[string]interface{}{
+	// 		"count": len(categories.Food),
+	// 		"sizes": func() []int {
+	// 			sizes := []int{}
+	// 			for _, img := range categories.Food {
+	// 				sizes = append(sizes, len(img))
+	// 			}
+	// 			return sizes
+	// 		}(),
+	// 	},
+	// 	"Ingredient": map[string]interface{}{
+	// 		"count": len(categories.Ingredient),
+	// 		"sizes": func() []int {
+	// 			sizes := []int{}
+	// 			for _, img := range categories.Ingredient {
+	// 				sizes = append(sizes, len(img))
+	// 			}
+	// 			return sizes
+	// 		}(),
+	// 	},
+	// 	"Prop": map[string]interface{}{
+	// 		"count": len(categories.Prop),
+	// 		"sizes": func() []int {
+	// 			sizes := []int{}
+	// 			for _, img := range categories.Prop {
+	// 				sizes = append(sizes, len(img))
+	// 			}
+	// 			return sizes
+	// 		}(),
+	// 	},
+	// 	"Background": map[string]interface{}{
+	// 		"exists": categories.Background != nil,
+	// 		"size": func() int {
+	// 			if categories.Background != nil {
+	// 				return len(categories.Background)
+	// 			}
+	// 			return 0
+	// 		}(),
+	// 	},
+	// }
+	// if categorySummaryJSON, err := json.MarshalIndent(categorySummary, "   ", "  "); err == nil {
+	// 	log.Printf("📊 [Eats] Category Details (JSON):\n%s", string(categorySummaryJSON))
+	// }
 
 	// Phase 4: Combinations 병렬 처리
 	var wg sync.WaitGroup

@@ -11,15 +11,23 @@ func generateSimplifiedPrompt(categories *ImageCategories, userPrompt string, as
 	var instructions []string
 	imageIndex := 1
 
-	// Food 이미지 설명
+	// Food 이미지 설명 - 정확한 재현 강조
 	foodCount := len(categories.Food)
 	if foodCount > 0 {
 		if foodCount == 1 {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Image %d: Food item", imageIndex))
+				fmt.Sprintf("Reference Image %d: EXACT FOOD ITEM TO RECREATE\n"+
+					"⚠️ CRITICAL: Recreate THIS EXACT food item as shown\n"+
+					"DO NOT substitute with different food\n"+
+					"Match the exact appearance, ingredients, and presentation", imageIndex))
 		} else {
 			instructions = append(instructions,
-				fmt.Sprintf("Reference Images %d-%d: %d food items", imageIndex, imageIndex+foodCount-1, foodCount))
+				fmt.Sprintf("Reference Images %d-%d: EXACT FOOD ITEMS TO RECREATE (%d items)\n"+
+					"⚠️ CRITICAL: Recreate THESE EXACT %d food items as shown\n"+
+					"DO NOT substitute with different foods\n"+
+					"DO NOT add extra food items not shown in references\n"+
+					"Match exact appearance, ingredients, and presentation of each item",
+					imageIndex, imageIndex+foodCount-1, foodCount, foodCount))
 		}
 		imageIndex += foodCount
 	}
@@ -56,37 +64,130 @@ func generateSimplifiedPrompt(categories *ImageCategories, userPrompt string, as
 			fmt.Sprintf("Reference Image %d: Background environment", imageIndex))
 	}
 
-	// 기본 금지사항 + 과장된 품질 요구
-	basicProhibitions := "🔥🔥🔥 EXTREME PREMIUM QUALITY REQUIREMENTS 🔥🔥🔥\n\n" +
-		"⚠️ ABSOLUTELY CRITICAL - NO SPLIT COMPOSITION:\n" +
-		"❌ NO vertical dividing lines or center splits\n" +
-		"❌ NO left-right duplicate layouts or comparison views\n" +
-		"❌ NO grid, collage, or side-by-side arrangements\n" +
-		"❌ NO white/gray borders or letterboxing\n\n" +
-		"✅ MANDATORY ULTRA-PREMIUM EXECUTION:\n" +
-		"✓ ONE BREATHTAKINGLY STUNNING unified photograph\n" +
-		"✓ ONE FLAWLESSLY COMPOSED continuous scene from ONE camera shot\n" +
-		"✓ PERFECTLY fill entire frame edge-to-edge with ZERO wasted space\n" +
-		"✓ ULTRA-REALISTIC, MIND-BLOWINGLY photorealistic food photography\n" +
-		"✓ EXCEPTIONAL artistic quality that COMMANDS attention\n" +
-		"✓ PREMIUM editorial-grade execution - REFUSE mediocrity\n\n" +
-		"💎 QUALITY MANDATE:\n" +
-		"This must be EXTRAORDINARY. This must be UNFORGETTABLE. This must be MAGNIFICENT.\n" +
-		"Push EVERY element to MAXIMUM creative excellence. NO compromises. NO shortcuts.\n" +
-		"Create something that makes viewers STOP and STARE in AWE.\n\n"
+	// 합성 및 품질 요구사항 - 실용적이고 명확하게
+	compositionRules := "🎯 CRITICAL COMPOSITION RULES 🎯\n\n" +
+		"🍽️ FOOD-FIRST PRIORITY:\n" +
+		"✓ FOOD is the HERO - the main subject that dominates the frame\n" +
+		"✓ Food should be LARGE, SHARP, and PROMINENT\n" +
+		"✓ Background (if present) is BLURRED and SECONDARY - only for context\n" +
+		"✓ Viewer's eye goes IMMEDIATELY to the food\n\n" +
+		"⚠️ NO SPLIT LAYOUTS:\n" +
+		"❌ NO grid layouts or side-by-side arrangements\n" +
+		"❌ NO vertical/horizontal dividing lines\n" +
+		"❌ NO comparison views or duplicate layouts\n" +
+		"❌ NO borders or letterboxing\n\n" +
+		"✅ UNIFIED COMPOSITION:\n" +
+		"✓ ONE cohesive, continuous food photograph\n" +
+		"✓ Fill entire frame edge-to-edge\n" +
+		"✓ Professional food photography quality\n" +
+		"✓ Photorealistic rendering\n\n"
 
-	// 창의성 극대화 지시
-	creativityBoost := "🎨 UNLEASH BOUNDLESS CREATIVITY 🎨\n\n" +
-		"BREAK FREE from conventional food photography constraints!\n" +
-		"EXPERIMENT FEARLESSLY with radical new perspectives!\n" +
-		"INNOVATE with unexpected color palettes and lighting setups!\n" +
-		"SURPRISE with unconventional compositions that challenge norms!\n" +
-		"EXPLORE the absolute LIMITS of creative food photography!\n\n" +
-		"💡 CREATIVE FREEDOM MANDATE:\n" +
-		"You are NOT bound by traditional rules. You are an ARTIST with INFINITE creative license.\n" +
-		"Take BOLD risks. Make DARING choices. Create something NEVER SEEN BEFORE.\n" +
-		"Each frame should be a WORK OF ART - a creative MASTERPIECE that pushes boundaries.\n" +
-		"Be WILDLY imaginative. Be OUTRAGEOUSLY creative. Be MAGNIFICENTLY original.\n\n"
+	// 합성 지시사항 - 핵심 강화
+	compositionInstructions := "🔧 IMAGE COMPOSITION INSTRUCTIONS 🔧\n\n"
+
+	// Overhead 각도 특별 처리
+	if strings.Contains(strings.ToLower(userPrompt), "overhead") {
+		compositionInstructions += "🔝 OVERHEAD ANGLE SPECIFIC RULES 🔝\n\n" +
+			"⚠️ OVERHEAD PHOTOGRAPHY REQUIREMENTS:\n" +
+			"Camera is DIRECTLY ABOVE looking straight down at table surface.\n\n" +
+			"1. FLAT LAY ARRANGEMENT:\n" +
+			"   • ALL items are on the SAME PLANE (table surface)\n" +
+			"   • NO items floating or elevated\n" +
+			"   • View is bird's eye - straight down from above\n" +
+			"   • All items arranged flat on table, visible from top\n\n" +
+			"2. UNIFIED SHADOWS (CRITICAL FOR OVERHEAD):\n" +
+			"   • Light source is ABOVE and SLIGHTLY to one side\n" +
+			"   • ALL shadows point in EXACTLY THE SAME DIRECTION\n" +
+			"   • Shadows are SHORT (light from above)\n" +
+			"   • Shadow angle is CONSISTENT across all items\n" +
+			"   • NO random shadow directions - UNIFIED lighting\n\n" +
+			"3. PERSPECTIVE:\n" +
+			"   • NO perspective distortion - flat overhead view\n" +
+			"   • Items appear at their TRUE SHAPE from above\n" +
+			"   • Circular items look circular, not elliptical\n" +
+			"   • Parallel lines stay parallel\n\n" +
+			"4. SPATIAL RELATIONSHIPS:\n" +
+			"   • Items arranged ON table surface, not floating\n" +
+			"   • Clear separation between items or intentional overlap\n" +
+			"   • Natural spacing - not perfectly spaced grid\n\n" +
+			"❌ OVERHEAD MISTAKES TO AVOID:\n" +
+			"   • Different shadow angles per item (looks like stickers!)\n" +
+			"   • Items appearing to float above surface\n" +
+			"   • Perspective distortion or angled view\n" +
+			"   • Inconsistent lighting across items\n\n"
+	}
+
+	if len(categories.Food) > 0 && categories.Background != nil {
+		// Food + Background 합성
+		compositionInstructions += "COMPOSITING FOOD WITH BACKGROUND:\n\n" +
+			"🚨 CRITICAL: NOT STICKERS - REALISTIC PHOTOGRAPHY! 🚨\n" +
+			"This must look like ONE REAL PHOTOGRAPH taken with a camera.\n" +
+			"NOT Photoshop composites. NOT pasted stickers. REAL integrated scene.\n\n" +
+			"1. REALISTIC INTEGRATION (MOST IMPORTANT):\n" +
+			"   • Food items must be PHYSICALLY SITTING on the surface/table\n" +
+			"   • Each item CASTS SHADOWS on the surface underneath\n" +
+			"   • Shadows ALL point in the SAME DIRECTION (same light source)\n" +
+			"   • Contact shadows where items TOUCH the surface are DARKER\n" +
+			"   • NO floating items - everything must rest naturally on surface\n" +
+			"   • Items appear WEIGHTED and GROUNDED, not pasted on\n\n" +
+			"2. UNIFIED LIGHTING (CRITICAL):\n" +
+			"   • ONE SINGLE LIGHT SOURCE for entire scene\n" +
+			"   • ALL shadows point in SAME DIRECTION\n" +
+			"   • ALL items have SAME color temperature\n" +
+			"   • Lighting direction matches background environment\n" +
+			"   • NO separate lighting per item - unified scene lighting\n\n" +
+			"3. NATURAL PLACEMENT:\n" +
+			"   • Arrange food items naturally on the table surface\n" +
+			"   • Items can overlap and cluster organically\n" +
+			"   • Some items closer to camera, some further back\n" +
+			"   • Spontaneous, appetizing layout - NOT grid arrangement\n\n" +
+			"4. FOOD DOMINANCE:\n" +
+			"   • Food occupies 60-80% of frame\n" +
+			"   • Food items are LARGE and PROMINENT\n" +
+			"   • Background provides atmosphere but doesn't compete\n\n" +
+			"5. DEPTH OF FIELD:\n" +
+			"   • Food is TACK SHARP with every detail visible\n" +
+			"   • Background is SOFTLY BLURRED (bokeh effect)\n" +
+			"   • Shallow depth of field look\n\n" +
+			"6. SURFACE INTERACTION:\n" +
+			"   • Items make CONTACT with table surface\n" +
+			"   • Visible contact shadows\n" +
+			"   • Reflections on glossy surfaces if applicable\n" +
+			"   • Items appear to have WEIGHT and presence\n\n" +
+			"❌ ABSOLUTELY FORBIDDEN:\n" +
+			"   • Sticker-like pasted appearance\n" +
+			"   • Floating items without shadows\n" +
+			"   • Different shadow directions per item\n" +
+			"   • Cut-out PNG look\n" +
+			"   • Photoshop composite appearance\n\n"
+	} else if len(categories.Food) > 0 {
+		// Food만 있을 때
+		compositionInstructions += "COMPOSITING MULTIPLE FOOD ITEMS:\n\n" +
+			"1. NATURAL ARRANGEMENT:\n" +
+			"   • Arrange food items in an appetizing, organic layout\n" +
+			"   • Items can overlap and cluster naturally\n" +
+			"   • Create visual interest with varied positioning\n" +
+			"   • DO NOT arrange in a grid pattern\n\n" +
+			"2. UNIFIED LIGHTING:\n" +
+			"   • ALL items share the same light source and direction\n" +
+			"   • Consistent shadows across all items\n" +
+			"   • Uniform color temperature\n\n" +
+			"3. DEPTH & DIMENSION:\n" +
+			"   • Some items in foreground (sharp), some in background (slightly softer)\n" +
+			"   • Creates three-dimensional scene\n\n"
+	}
+
+	// 다양성 유도 - 과장 없이 자연스럽게
+	varietyGuidance := "🎨 VISUAL VARIETY GUIDANCE 🎨\n\n" +
+		"CREATE UNIQUE VARIATIONS by adjusting:\n" +
+		"• Food placement and arrangement patterns\n" +
+		"• Camera angle slightly (while maintaining requested shot type)\n" +
+		"• Lighting intensity and shadow depth\n" +
+		"• Color grading and warmth\n" +
+		"• Depth of field and focus point\n" +
+		"• Garnish positioning and decoration style\n\n" +
+		"EACH IMAGE should feel FRESH and UNIQUE while maintaining professional quality.\n" +
+		"Avoid generating identical compositions - explore natural variations.\n\n"
 
 	// Aspect ratio 정보 간단히
 	var formatInfo string
@@ -101,16 +202,19 @@ func generateSimplifiedPrompt(categories *ImageCategories, userPrompt string, as
 		formatInfo = "[FORMAT: " + aspectRatio + " - Use this unique format CREATIVELY]\n"
 	}
 
-	// 최종 조합 - 창의성 극대화 버전
-	finalPrompt := basicProhibitions +
-		creativityBoost +
+	// 최종 조합 - 합성 강화 버전
+	finalPrompt := compositionRules +
+		compositionInstructions +
 		formatInfo +
 		"\n[REFERENCE IMAGES]\n" +
-		strings.Join(instructions, "\n") +
-		"\n\n[USER CREATIVE DIRECTION]\n" +
-		userPrompt +
-		"\n\n" +
-		"🚀 FINAL REMINDER: This is your chance to create something LEGENDARY. Make it COUNT!\n"
+		strings.Join(instructions, "\n")
+
+	if userPrompt != "" {
+		finalPrompt += "\n\n[ADDITIONAL REQUIREMENTS]\n" + userPrompt
+	}
+
+	finalPrompt += "\n\n" + varietyGuidance +
+		"🎯 CREATE a professional, cohesive food photograph that seamlessly integrates all elements.\n"
 
 	return finalPrompt
 }
