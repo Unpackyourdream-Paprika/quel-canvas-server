@@ -10,30 +10,15 @@ import (
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 )
 
 type Service struct {
-	genaiClient *genai.Client
 }
 
 func NewService() *Service {
-	cfg := config.GetConfig()
-
-	// Genai 클라이언트 초기화
-	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		log.Printf("❌ [Nanobanana] Failed to create Genai client: %v", err)
-		return nil
-	}
-
 	log.Println("✅ [Nanobanana] Service initialized")
-	return &Service{
-		genaiClient: genaiClient,
-	}
+	return &Service{}
 }
 
 // Generate - 단순 프롬프트 기반 이미지 생성
@@ -104,8 +89,9 @@ func (s *Service) Generate(ctx context.Context, req *GenerateRequest) (*Generate
 		Parts: parts,
 	}
 
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		model,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
@@ -226,8 +212,9 @@ Respond ONLY with valid JSON in this exact format:
 		Parts: parts,
 	}
 
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		model,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

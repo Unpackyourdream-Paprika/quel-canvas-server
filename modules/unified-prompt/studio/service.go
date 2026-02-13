@@ -20,6 +20,7 @@ import (
 	"google.golang.org/genai"
 
 	"quel-canvas-server/modules/common/config"
+	geminiretry "quel-canvas-server/modules/common/gemini"
 	"quel-canvas-server/modules/common/model"
 	"quel-canvas-server/modules/common/org"
 	redisutil "quel-canvas-server/modules/common/redis"
@@ -27,9 +28,8 @@ import (
 )
 
 type Service struct {
-	supabase    *supabase.Client
-	genaiClient *genai.Client
-	redis       *redis.Client
+	supabase *supabase.Client
+	redis    *redis.Client
 }
 
 func NewService() *Service {
@@ -42,17 +42,6 @@ func NewService() *Service {
 		return nil
 	}
 
-	// Genai 클라이언트 초기화
-	ctx := context.Background()
-	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  cfg.GeminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		log.Printf("❌ [Studio] Failed to create Genai client: %v", err)
-		return nil
-	}
-
 	// Redis 클라이언트 초기화
 	redisClient := redisutil.Connect(cfg)
 	if redisClient == nil {
@@ -61,9 +50,8 @@ func NewService() *Service {
 
 	log.Println("✅ [Studio] Service initialized")
 	return &Service{
-		supabase:    supabaseClient,
-		genaiClient: genaiClient,
-		redis:       redisClient,
+		supabase: supabaseClient,
+		redis:    redisClient,
 	}
 }
 
@@ -164,8 +152,9 @@ func (s *Service) GenerateImage(ctx context.Context, req *StudioGenerateRequest)
 
 	// Gemini API 호출
 	log.Printf("📤 [Studio] Calling Gemini API for category: %s", req.Category)
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
@@ -526,6 +515,7 @@ func floatPtr(f float64) *float32 {
 
 // AnalyzeImage - 이미지 분석하여 상세 프롬프트 추출 (레시피 생성용)
 func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (*StudioAnalyzeResponse, error) {
+	cfg := config.GetConfig()
 	log.Printf("🔍 [Studio] Analyzing image for recipe - category: %s", req.Category)
 
 	// 이미지 데이터 준비
@@ -599,8 +589,9 @@ func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (
 
 	// Gemini API 호출
 	log.Printf("📤 [Studio] Calling Gemini API for image analysis")
-	result, err := s.genaiClient.Models.GenerateContent(
+	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
+		cfg.GeminiAPIKeys,
 		"gemini-2.0-flash", // 분석용은 빠른 모델 사용
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
