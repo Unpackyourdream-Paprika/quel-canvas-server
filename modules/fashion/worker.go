@@ -247,7 +247,7 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 
 	// Shot Type 매핑 (시네마틱 톤)
 	shotTypeTextMap := map[string]string{
-		"tight":  "Editorial CLOSE-UP PORTRAIT tightly cropped at mid-torso level, upper garment clearly visible",
+		"tight":  "Editorial CLOSE-UP PORTRAIT, crop frame at chest level, show head and upper chest ONLY, absolutely nothing below the chest visible",
 		"middle": "Cinematic medium shot, film camera framing from head to mid-thigh, balanced composition showing upper body and hip area, editorial fashion film style",
 		"full":   "Cinematic full body shot head to toe, tight framing with very little headroom and footroom, model occupies at least 85 percent of the frame height, complete outfit visible",
 	}
