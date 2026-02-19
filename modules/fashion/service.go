@@ -613,6 +613,8 @@ REQUIREMENT:
 		switch shotType {
 		case "tight":
 			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait cropped at chest level, head and upper chest only, studio setting.\n"
+		case "middle":
+			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting. CRITICAL FRAMING: shoot from head to mid-thigh — show upper body, waist, hips, and upper thighs clearly. Crop just below mid-thigh. NO knees, NO lower legs, NO feet visible.\n"
 		default:
 			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
 		}
