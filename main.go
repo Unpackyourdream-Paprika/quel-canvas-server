@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"quel-canvas-server/modules/common/config"
+	klingmigration "quel-canvas-server/modules/kling-migration"
 	landingdemo "quel-canvas-server/modules/landing-demo"
 	"quel-canvas-server/modules/modify"
 	"quel-canvas-server/modules/multiview"
@@ -763,6 +764,15 @@ func main() {
 	// Redis Queue Worker 시작 (백그라운드)
 	go worker.StartWorker()
 
+	// Kling Video Worker 시작 (백그라운드)
+	klingWorker := klingmigration.NewWorker()
+	if klingWorker != nil {
+		go klingWorker.StartWorker()
+		log.Println("✅ Kling Video Worker started")
+	} else {
+		log.Println("⚠️ Kling Video Worker not started - check KLING_AI keys")
+	}
+
 	// Worker 모듈 초기화 완료
 
 	// 라우터 설정
@@ -877,6 +887,14 @@ func main() {
 		log.Println("⚠️ Failed to initialize Seedream handler - check RUNWARE_API_KEY")
 	}
 
+	// Kling Migration 라우트 등록 - Image to Video (Kling AI)
+	klingHandler := klingmigration.NewHandler()
+	if klingHandler != nil {
+		klingHandler.RegisterRoutes(r)
+	} else {
+		log.Println("⚠️ Failed to initialize Kling handler - check KLING_AI keys")
+	}
+
 	// 포트 설정 (Render.com은 PORT 환경변수 사용)
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -898,6 +916,7 @@ func main() {
 	log.Printf("Multiview 360: http://localhost:%s/api/multiview/generate", port)
 	log.Printf("Nanobanana: http://localhost:%s/api/nanobanana/generate", port)
 	log.Printf("Nanobanana Analyze: http://localhost:%s/api/nanobanana/analyze", port)
+	log.Printf("Kling Video Enqueue: http://localhost:%s/enqueue-video", port)
 
 	// 서버 시작
 	if err := http.ListenAndServe(":"+port, r); err != nil {
