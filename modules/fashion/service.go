@@ -518,15 +518,15 @@ func generateDynamicPrompt(categories *ImageCategories, userPrompt string, aspec
 	hasBackground := categories.Background != nil
 
 	// shotType에 따른 프레이밍 지시
-	framingLine := "ONE photograph, full body head to toe"
+	framingLine := "ONE photograph, full body head to toe, tight framing — model occupies at least 85 percent of the frame, very little headroom and footroom"
 	integrationLine := "Natural ground contact and shadows"
 	switch shotType {
 	case "tight":
-		framingLine = "ONE photograph, CLOSE-UP PORTRAIT tightly cropped at mid-torso level. Upper garment clearly visible, nothing below mid-torso"
-		integrationLine = "Close-up portrait framing, crop at mid-torso level"
+		framingLine = "ONE photograph, CLOSE-UP PORTRAIT cropped at chest level. Show head and upper chest ONLY, absolutely nothing below the chest visible"
+		integrationLine = "Close-up portrait framing, crop at chest level"
 	case "middle":
-		framingLine = "ONE photograph, frame from head to waist. Show upper body and outfit details. CROP below waist — absolutely NO hips, NO thighs, NO legs visible"
-		integrationLine = "Waist-up framing, no ground contact needed"
+		framingLine = "ONE photograph, frame from head to mid-thigh. Show upper body, hips, and top of thighs. CROP at mid-thigh — absolutely NO knees, NO calves, NO feet visible"
+		integrationLine = "Mid-thigh framing, no ground contact needed"
 	}
 
 	// 배경이 있는 경우 - 배경 재해석 + 시네마틱 프롬프트
@@ -612,7 +612,9 @@ REQUIREMENT:
 	if hasModel {
 		switch shotType {
 		case "tight":
-			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait tightly cropped at mid-torso level, upper garment visible in studio setting.\n"
+			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait cropped at chest level, head and upper chest only, studio setting.\n"
+		case "middle":
+			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting. MANDATORY FRAMING — 3/4 shot: the bottom edge of the image MUST be at mid-thigh level. Both thighs must be clearly visible. Hips and pelvis must be fully in frame. DO NOT crop at waist or hip — this is a 3/4 body shot, not a waist-up shot.\n"
 		default:
 			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
 		}
@@ -644,6 +646,9 @@ REQUIREMENT:
 	}
 
 	criticalRules := "\nRules: Natural body proportions. No distortion. One cohesive photo.\n"
+	if shotType == "middle" {
+		criticalRules += "FRAMING REMINDER: This is a 3/4 shot — bottom of frame at mid-thigh. Thighs must be visible. Do not cut at waist or hip.\n"
+	}
 
 	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + criticalRules
 
