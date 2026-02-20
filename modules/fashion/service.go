@@ -614,7 +614,7 @@ REQUIREMENT:
 		case "tight":
 			mainInstruction = "Create ONE CLOSE-UP PORTRAIT photo: editorial portrait cropped at chest level, head and upper chest only, studio setting.\n"
 		case "middle":
-			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting. CRITICAL FRAMING: shoot from head to mid-thigh — show upper body, waist, hips, and upper thighs clearly. Crop just below mid-thigh. NO knees, NO lower legs, NO feet visible.\n"
+			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting. MANDATORY FRAMING — 3/4 shot: the bottom edge of the image MUST be at mid-thigh level. Both thighs must be clearly visible. Hips and pelvis must be fully in frame. DO NOT crop at waist or hip — this is a 3/4 body shot, not a waist-up shot.\n"
 		default:
 			mainInstruction = "Create ONE fashion photo: model wearing all clothes/accessories in studio setting.\n"
 		}
@@ -646,6 +646,9 @@ REQUIREMENT:
 	}
 
 	criticalRules := "\nRules: Natural body proportions. No distortion. One cohesive photo.\n"
+	if shotType == "middle" {
+		criticalRules += "FRAMING REMINDER: This is a 3/4 shot — bottom of frame at mid-thigh. Thighs must be visible. Do not cut at waist or hip.\n"
+	}
 
 	finalPrompt := mainInstruction + strings.Join(instructions, "\n") + criticalRules
 

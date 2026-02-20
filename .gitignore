@@ -39,3 +39,4 @@ tmp/
 .claude/settings.local.json
 app
 public/vertexai-credentials.json
+docker-compose.yml
