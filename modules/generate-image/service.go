@@ -311,7 +311,7 @@ func (s *Service) GenerateImageWithGemini(ctx context.Context, base64Image strin
 	log.Printf("📤 Sending request to Gemini API with aspect-ratio: %s", aspectRatio)
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		config.GeminiAPIKeys,
+		config.GeminiAPIKey,
 		config.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
@@ -857,7 +857,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	log.Printf("📤 Sending request to Gemini API with %d parts...", len(parts))
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		config.GeminiAPIKeys,
+		config.GeminiAPIKey,
 		config.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

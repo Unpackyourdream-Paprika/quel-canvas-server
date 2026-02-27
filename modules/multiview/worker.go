@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"quel-canvas-server/modules/common/config"
 	"quel-canvas-server/modules/common/database"
@@ -236,6 +237,9 @@ func processMultiview360(ctx context.Context, service *Service, job *model.Produ
 					hasReference = true
 				}
 
+				// 병렬 처리 레이트 리밋 방지: 3초 딜레이
+				time.Sleep(3 * time.Second)
+
 				imageData, err := service.GenerateSingleAngle(ctx, sourceImageData, refData, currentAngle, aspectRatio, category, originalPrompt, hasReference, rotateBackground)
 				if err != nil {
 					log.Printf("❌ [Multiview] Failed to generate angle %d: %v", currentAngle, err)
@@ -398,7 +402,7 @@ func (s *Service) GenerateSingleAngle(ctx context.Context, sourceImage, refImage
 	// Gemini API 호출
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

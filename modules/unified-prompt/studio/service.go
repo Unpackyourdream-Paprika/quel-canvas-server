@@ -154,7 +154,7 @@ func (s *Service) GenerateImage(ctx context.Context, req *StudioGenerateRequest)
 	log.Printf("📤 [Studio] Calling Gemini API for category: %s", req.Category)
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
@@ -591,7 +591,7 @@ func (s *Service) AnalyzeImage(ctx context.Context, req *StudioAnalyzeRequest) (
 	log.Printf("📤 [Studio] Calling Gemini API for image analysis")
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		"gemini-2.0-flash", // 분석용은 빠른 모델 사용
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

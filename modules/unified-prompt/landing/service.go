@@ -176,7 +176,7 @@ func (s *Service) GenerateImage(ctx context.Context, req *LandingGenerateRequest
 	log.Printf("📤 [Landing] Calling Gemini API...")
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
