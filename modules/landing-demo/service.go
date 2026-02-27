@@ -241,7 +241,7 @@ func (s *Service) GenerateImages(ctx context.Context, req *LandingDemoRequest) (
 		log.Printf("📤 [LandingDemo] Calling Gemini API for image %d/%d with %d parts...", i+1, quantity, len(parts))
 		result, err := geminiretry.GenerateContentWithRetry(
 			ctx,
-			cfg.GeminiAPIKeys,
+			cfg.GeminiAPIKey,
 			cfg.GeminiModel,
 			[]*genai.Content{content},
 			&genai.GenerateContentConfig{
@@ -1119,7 +1119,7 @@ func (s *Service) GenerateImageWithGeminiMultiple(ctx context.Context, categorie
 	log.Printf("📤 [Landing] Calling Gemini API with %d parts...", len(parts))
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

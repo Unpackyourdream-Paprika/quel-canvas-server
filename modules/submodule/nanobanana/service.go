@@ -91,7 +91,7 @@ func (s *Service) Generate(ctx context.Context, req *GenerateRequest) (*Generate
 
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		model,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{
@@ -214,7 +214,7 @@ Respond ONLY with valid JSON in this exact format:
 
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		model,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

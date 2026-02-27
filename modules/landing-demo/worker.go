@@ -571,7 +571,7 @@ func (s *Service) GenerateImageWithGeminiTextOnly(ctx context.Context, prompt st
 	// Gemini API 호출
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		cfg.GeminiModel,
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

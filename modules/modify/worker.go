@@ -425,7 +425,7 @@ Remember: Areas WITHOUT paint strokes must stay EXACTLY as they are in the origi
 
 	result, err := geminiretry.GenerateContentWithRetry(
 		ctx,
-		cfg.GeminiAPIKeys,
+		cfg.GeminiAPIKey,
 		cfg.GeminiModel, // "gemini-2.5-flash-image"
 		[]*genai.Content{content},
 		&genai.GenerateContentConfig{

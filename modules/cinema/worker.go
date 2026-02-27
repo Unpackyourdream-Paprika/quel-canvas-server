@@ -326,6 +326,9 @@ MANDATORY TECHNICAL SPECS:
 				log.Printf("🎨 Combination %d: Generating image %d/%d for [%s + %s]...",
 					idx+1, i+1, quantity, angle, shot)
 
+				// 병렬 처리 레이트 리밋 방지: 3초 딜레이
+				time.Sleep(3 * time.Second)
+
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
 				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, categories, enhancedPrompt, aspectRatio)
 				if err != nil {
@@ -854,6 +857,9 @@ MANDATORY TECHNICAL SPECS:
 				}
 
 				log.Printf("🎨 Stage %d: Generating image %d/%d...", stageIndex, i+1, quantity)
+
+				// 병렬 처리 레이트 리밋 방지: 3초 딜레이
+				time.Sleep(3 * time.Second)
 
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함)
 				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, stageCategories, enhancedPrompt, aspectRatio)

@@ -200,7 +200,7 @@ func (s *Service) GenerateMultiview(ctx context.Context, req *MultiviewGenerateR
 		// Gemini API 호출
 		result, err := geminiretry.GenerateContentWithRetry(
 			ctx,
-			cfg.GeminiAPIKeys,
+			cfg.GeminiAPIKey,
 			cfg.GeminiModel,
 			[]*genai.Content{content},
 			&genai.GenerateContentConfig{

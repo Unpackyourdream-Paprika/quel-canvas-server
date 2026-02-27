@@ -319,6 +319,9 @@ func processSingleBatch(ctx context.Context, service *Service, job *model.Produc
 				// shot에 따라 에셋 필터링 (tight → pants, shoes 제거)
 				filteredCategories := filterCategoriesByShot(categories, shot, clothingItemTypes, accessoryItemTypes)
 
+				// 병렬 처리 레이트 리밋 방지: 3초 딜레이
+				time.Sleep(3 * time.Second)
+
 				// Gemini API 호출 (카테고리별 이미지 전달, aspect-ratio 포함, shot 전달)
 				generatedBase64, err := service.GenerateImageWithGeminiMultiple(ctx, filteredCategories, enhancedPrompt, aspectRatio, shot)
 				if err != nil {
